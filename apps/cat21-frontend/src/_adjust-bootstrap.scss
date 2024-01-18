@@ -8,7 +8,7 @@ $white: #fff;
 // $dark: #343a40;
 $dark: #282828;
 $light: #aaa;
-$primary: $bitcoin;
+$primary: #4d4d4d;
 $secondary: #6c757d;
 $success: #28a745;
 $info: #17a2b8;
@@ -18,8 +18,8 @@ $light-gray: #e9ecef;
 $dark-gray: #6c757d;
 
 // Customize Bootstrap colors for dark mode
-$body-bg: #0000ad;
-$body-color: $light;
+$body-bg: $bitcoin;
+$body-color: white;
 
 $theme-colors: (
   "primary": $primary,
