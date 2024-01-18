@@ -1,0 +1,20 @@
+<ng-container *ngIf="inscription">
+  <a [routerLink]="['/inscription', inscription.inscriptionId]"
+    role="navigation"
+    attr.aria-label="Details for Inscription {{ inscription.inscriptionId }}">
+
+    <div class="iframe-container">
+      <iframe
+        class="responsive-iframe"
+        appToggleIframe
+        [toggleSrc]="environment.ordinalsExplorerIframe + inscription.inscriptionId + '?cache-buster'"
+        sandbox="allow-scripts"
+      ></iframe>
+    </div>
+
+    <div class="one-line fs-6 lh-sm mt-2 ps-1 pb-4 one-line">
+      {{ inscription.meta.name }}
+    </div>
+
+  </a>
+</ng-container>

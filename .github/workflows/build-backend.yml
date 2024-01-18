@@ -1,0 +1,32 @@
+name: Build Backend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/backend/**'
+      - '*.json'
+      - '.github/workflows/build-backend.yml'
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 20
+
+    - run: npm install --force
+    - run: npm install @nrwl/nx-linux-x64-gnu --force #bugfix broken build! 😕
+    - run: npm run test:backend
+    - run: npm run build:backend:production
+    - name: Deploy Backend to `haushoppe/cat21-backend-build` repo
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        npx angular-cli-ghpages --message="Auto-generated commit" --repo=https://github.com/haushoppe/cat21-backend-build.git --branch=main --dir=dist/apps/backend --name="The Buildbot" --email=noreply@haushoppe.art
+

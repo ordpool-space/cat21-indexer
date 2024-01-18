@@ -1,0 +1,32 @@
+name: Build Cat21 Frontend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/cat21-frontend/**'
+      - 'libs/**'
+      - '*.json'
+      - '.github/workflows/build-cat21-frontend.yml'
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 20
+
+    - run: npm install --force
+    - run: npm install @nrwl/nx-linux-x64-gnu  --force #bugfix broken build! 😕
+    - run: npm run test:cat21-frontend
+    - run: npm run build:cat21-frontend:production
+    - name: Deploy Frontend to `haushoppe/cat21-frontend-build` repo
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        npx angular-cli-ghpages --message="Auto-generated commit" --repo=https://github.com/haushoppe/cat21-frontend-build.git --branch=main --dir=dist/apps/cat21-frontend --name="The Buildbot" --email=noreply@haushoppe.art --no-silent

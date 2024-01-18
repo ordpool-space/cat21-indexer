@@ -1,0 +1,32 @@
+<ng-container *ngIf="state">
+  <ng-container *ngIf="state.submitStatus === SubmitStatus.Submitting">
+
+    <button class="btn btn-labeled btn-primary" type="button" [disabled]="disabled"
+      (click)="buttonClick.emit($event)">
+      <span class="btn-label"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span></span>
+      <span class="btn-label-text">{{ buttonText }}</span>
+    </button>
+
+  </ng-container>
+
+  <ng-container *ngIf="state.submitStatus !== SubmitStatus.Submitting">
+
+    <button class="btn btn-labeled btn-primary" type="button" [disabled]="disabled"
+      [ngClass]="{ 'btn-success': state.submitStatus === SubmitStatus.Successful }"
+      (click)="buttonClick.emit($event)"
+      [title]="state.submitErrorText">
+      <span class="btn-label">
+        <i *ngIf="state.submitStatus === SubmitStatus.NotSubmitted" [ngClass]="defaultIconClass"></i>
+        <i *ngIf="state.submitStatus === SubmitStatus.Failure" class="bi bi-exclamation-triangle"></i>
+        <i *ngIf="state.submitStatus === SubmitStatus.Successful" class="bi bi-check-circle"></i>
+      </span>
+      <span class="btn-label-text">{{ buttonText }}</span>
+    </button>
+
+  </ng-container>
+
+  <app-alert *ngIf="state.submitStatus === SubmitStatus.Failure && showAlertOnError" type="danger" class="pt-4 d-block">
+    {{ state.submitErrorText }}
+  </app-alert>
+
+</ng-container>

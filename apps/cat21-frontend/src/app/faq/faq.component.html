@@ -1,0 +1,18 @@
+<h1 class="mt-5 mb-4">Frequently Asked Questions</h1>
+
+<div class="card bg-dark text-white m-1" *ngFor="let faq of faqs; let i = index">
+  <div class="card-header" id="heading{{i}}" (click)="toggle(i)">
+    <h2 class="mb-0">
+      <button class="btn btn-link btn-block text-left" type="button">
+        {{faq.question}}
+      </button>
+    </h2>
+  </div>
+  <div [ngClass]="{'show': activeIndex === i}" class="collapse p-1" [attr.aria-labelledby]="'heading' + i">
+    <div class="card-body p-4 pt-2 pb-2" [innerHTML]="faq.answer | parseMarkdown">
+    </div>
+  </div>
+</div>
+
+
+<a routerLink="/" class="btn btn btn-primary fw-bold mt-4 mb-4 ms-2">« Back</a>

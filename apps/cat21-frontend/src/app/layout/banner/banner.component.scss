@@ -1,0 +1,53 @@
+// https://www.w3schools.com/howto/howto_css_cutout_text.asp
+.image-container {
+  position: relative;
+  height: 13vw;
+}
+
+// X-Small devices (portrait phones, less than 576px)
+@media (min-width: 0) {
+  .image-container {
+    height: 46vw;
+    // border: 1px solid white;
+  }
+}
+
+// Small devices (landscape phones, 576px and up)
+@media (min-width: 576px) {
+  .image-container {
+    height: 38vw;
+    // border: 1px solid pink;
+  }
+}
+
+// Medium devices (tablets, 768px and up)
+@media (min-width: 768px) {
+  .image-container {
+    height: 32vw;
+    // border: 1px solid blue;
+  }
+}
+
+// Large devices (desktops, 992px and up)
+@media (min-width: 992px) {
+  .image-container {
+    height: 28vw;
+    // border: 1px solid yellow;
+  }
+}
+
+// X-Large devices (large desktops, 1200px and up)
+@media (min-width: 1200px) {
+  .image-container {
+    height: 24vw;
+    // border: 1px solid green;
+  }
+}
+
+// XX-Large devices (larger desktops, 1400px and up)
+@media (min-width: 1400px) {
+  .image-container {
+    height: 24vw;
+    // border: 1px solid red;
+  }
+}

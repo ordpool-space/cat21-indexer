@@ -1,0 +1,44 @@
+@import "bootstrap/scss/functions";
+
+$bitcoin: #FF9900;
+
+// Define your custom colors here
+$black: #000;
+$white: #fff;
+// $dark: #343a40;
+$dark: #282828;
+$light: #f8f9fa;
+$primary: $bitcoin;
+$secondary: #6c757d;
+$success: #28a745;
+$info: #17a2b8;
+$warning: #ffc107;
+$danger: #dc3545;
+$light-gray: #e9ecef;
+$dark-gray: #6c757d;
+
+// Customize Bootstrap colors for dark mode
+$body-bg: #1f1f1f;
+$body-color: $light;
+
+$theme-colors: (
+  "primary": $primary,
+  "secondary": $dark-gray,
+  "success": $success,
+  "info": $info,
+  "warning": $warning,
+  "danger": $danger,
+  "light": $light,
+  "dark": $black
+);
+
+$enable-rounded: false;
+$enable-negative-margins: true;
+
+$my-h1-font-size-base: 1.5rem;
+$h1-font-size: $my-h1-font-size-base * 2.5 !default;
+$h2-font-size: $my-h1-font-size-base * 2 !default;
+
+
+$pagination-border-width: 0;
+$pagination-disabled-bg: $dark;

@@ -1,0 +1,27 @@
+.one-line {
+  // width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+a {
+  text-decoration: none;
+}
+
+
+.iframe-container {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* for aspect ratio 1:1 */
+  overflow: hidden;
+}
+
+.responsive-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

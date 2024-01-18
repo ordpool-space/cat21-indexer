@@ -1,0 +1,17 @@
+{
+  "name": "openapi-generator",
+  "version": "0.0.0",
+  "license": "None",
+  "scripts": {
+    "start": "npm run clean-before && npm run generate && npm run clean-after",
+    "version": "openapi-generator-cli version",
+    "generate": "openapi-generator-cli generate -i http://localhost:3333/open-api-json -g typescript-angular -c config.json -o ../../../libs/openapi-client",
+    "clean-before": "rimraf ../../../libs/openapi-client",
+    "clean-after": "cd ../../../libs/openapi-client/ && rimraf git_push.sh README.md .openapi-generator-ignore"
+  },
+  "private": true,
+  "dependencies": {
+    "@openapitools/openapi-generator-cli": "^2.5.2",
+    "rimraf": "^4.1.1"
+  }
+}

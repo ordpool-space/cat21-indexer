@@ -1,0 +1,16 @@
+<ng-container *ngIf="state">
+  <div *ngIf="state.submitStatus === SubmitStatus.Submitting">
+
+    <span
+      class="spinner-border"
+      role="status"
+      style="margin-bottom: -6px;"
+    ></span>
+    <span *ngIf="sendDataText" class="inline-block ms-3" style="font-size: 1.2em;">{{ sendDataText }}</span>
+
+  </div>
+
+  <app-alert *ngIf="state.submitStatus === SubmitStatus.Failure" type="danger">
+    {{ state.submitErrorText }}
+  </app-alert>
+</ng-container>

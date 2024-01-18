@@ -1,0 +1,11 @@
+{
+  "name": "🐱 CAT-21 - Don't eat cats!",
+  "short_name": "🟧 Cubes",
+  "icons": [{
+      "src": "/assets/logo-google-touch-icon.png",
+      "sizes": "512x512"
+  }],
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "display": "fullscreen"
+}
