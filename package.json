@@ -29,7 +29,6 @@
     "@angular/platform-browser": "16.2.4",
     "@angular/platform-browser-dynamic": "16.2.4",
     "@angular/router": "16.2.4",
-    "@fontsource/inter": "^5.0.8",
     "@fontsource/yantramanav": "^4.5.9",
     "@nestjs/common": "10.2.4",
     "@nestjs/config": "^3.0.1",
