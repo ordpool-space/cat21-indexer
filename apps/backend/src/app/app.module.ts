@@ -7,6 +7,8 @@ import { ApiController } from './api/api.controller';
 import { configuration, validationSchema } from './app.configuration';
 import { AppController } from './app.controller';
 import { CacheService } from './model/cache.service';
+import { CatService } from './model/cat.service';
+import { BlockchairApiService } from './model/blockchair-api.service';
 import { ScheduleModule } from '@nestjs/schedule';
 
 
@@ -31,7 +33,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     ApiController
   ],
   providers: [
-    CacheService
+    CacheService,
+    CatService,
+    BlockchairApiService
   ]
 })
 export class AppModule { }

@@ -41,7 +41,7 @@
     "@nx/angular": "^16.8.0",
     "@nx/devkit": "16.8.0",
     "@swc/helpers": "~0.5.0",
-    "axios": "^0.27.2",
+    "axios": "^1.6.5",
     "bitcoin-address-validation": "^2.2.1",
     "bootstrap": "^5.3.1",
     "bootstrap-icons": "^1.10.5",
