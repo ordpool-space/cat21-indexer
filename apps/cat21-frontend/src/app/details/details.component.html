@@ -1,6 +1,6 @@
 <ng-container *rxLet="mintFacade.singleInscription$; let i">
 
-  <h3 class="mt-2 mb-2">{{ i?.inscription?.meta?.name || 'Ordinal Cube'}}</h3>
+  <h3 class="mt-2 mb-2">{{ i?.inscription?.meta?.name || 'Ordinal Cat'}}</h3>
 
   <!-- <div class="mt-1 mb-4">
     <small class="text-muted">
@@ -20,10 +20,10 @@
 
   <div class="clearfix">
     <a *ngIf="i?.previousInscriptionId" [routerLink]="['/inscription', i?.previousInscriptionId]"
-      class="fw-bold mt-4 mb-4 float-start" >« Previous Cube</a>
+      class="fw-bold mt-4 mb-4 float-start" >« Previous Cat</a>
 
     <a *ngIf="i?.nextInscriptionId" [routerLink]="['/inscription', i?.nextInscriptionId]"
-      class="fw-bold mt-4 mb-4 float-end" >» Next Cube</a>
+      class="fw-bold mt-4 mb-4 float-end" >» Next Cat</a>
   </div>
 
   <app-loading-indicator

@@ -1,4 +1,4 @@
-<h1 class="mt-4">CAT-21</h1>
+<h1 class="mt-2">CAT-21</h1>
 
 <p class="mt-2">
   Did you know? There's a cat hidden in every Bitcoin transaction. Rescue it now, so that no one can eat it!
@@ -7,42 +7,58 @@
 
 <h2 class="mt-5" id="mint">Mint a cat</h2>
 
+<ul>
+  <li><a href="https://ordpool.space/" target="_blank">with ordpool.space</a></li>
+  <li><a href="https://ordimint.com/" target="_blank">with Ordimint</a></li>
+  <li><a href="https://github.com/haushoppe/cat-21/blob/main/HOWTO.md" target="_blank">with Electrum</a></li>
+</ul>
 
+<ng-container *ngIf="catsPaginated$ | async as i">
 
-<!-- <ng-container *rxLet="mintFacade.inscriptions$; let i">
+  <h2 class="mt-5" id="latest">Minted cats</h2>
 
-  <h2 class="mt-5" id="latest">Minted cubes</h2>
-
-  <p class="mb-3">
-    Here you see all {{ i.totalInscriptions }} cubes that have been inscribed so far.
-    You can find the full collection on <a target="_blank" href="https://magiceden.io/ordinals/marketplace/ordinal-cubes-by-haus-hoppe">MagicEden</a>, too.
+  <p class="mb-4">
+    Here you see all {{ i.totalResults }} cats that have been rescued so far.
   </p>
 
   <div class="row">
 
-    <div *ngFor="let inscription of i.inscriptions" class="col-6 col-md-4 col-lg-3">
-      <app-inscription-list-item [inscription]="inscription"></app-inscription-list-item>
+    <div *ngFor="let cat of i.cats" class="col-6 col-md-4 col-lg-3">
+      <app-cat21-viewer [cat21Transaction]="cat" />
     </div>
 
-    <ngb-pagination
-      class="mt-4 d-flex justify-content-center"
-      [collectionSize]="i.totalInscriptions"
-      [page]="i.currentPage"
-      [pageSize]="i.itemsPerPage"
-      aria-label="Page Cubes"
-      [maxSize]="5"
-      [rotate]="true"
-      (pageChange)="mintFacade.loadInscriptions(i.itemsPerPage, $event)">
-    </ngb-pagination>
+    <div>
+      <a href="javascript:void(0)" class="float-end" (click)="loadCats(defaultItemsPerPage, defaultItemsPerPage, 1)">Reload</a>
 
-    <app-loading-indicator
+      <ngb-pagination
+        class="mt-4 d-flex justify-content-center"
+        [collectionSize]="i.totalResults"
+        [page]="i.currentPage"
+        [pageSize]="i.itemsPerPage"
+        aria-label="Page Cats"
+        [maxSize]="5"
+        [rotate]="true"
+        (pageChange)="loadCats(i.totalResults, i.itemsPerPage, $event)">
+      </ngb-pagination>
+    </div>
+
+
+    <!-- <app-loading-indicator
       [state]="mintFacade.inscriptionsStatus$ | push" class="mb-5"
-      sendDataText="Loading latest cubes…"
-    />
+      sendDataText="Loading latest cat…"
+    /> -->
 
   </div>
 
-</ng-container> -->
+</ng-container>
+
+
+<h2 class="mt-2">WTF?</h2>
+
+<p class="mb-3">
+  Just <a href="https://github.com/haushoppe/cat-21" target="_blank">RTFM</a> and don't eat cats! Meow!
+</p>
+
 
 <!--
 <h2 class="mt-2">FAQs</h2>

@@ -9,6 +9,12 @@ export class Cat21 {
   transactionId: string;
 
   @ApiProperty({
+    description: 'The incremented number of the cat. Cat 0 is the first one.',
+    example: 0
+  })
+  number: number;
+
+  @ApiProperty({
     description: 'The block height where the CAT-21 asset was created / minted',
     example: 824205
   })

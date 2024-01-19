@@ -60,8 +60,10 @@ export class CatService {
 
   private transactionsToCats(transactions: Transaction[]): Cat21[] {
 
+    let counter = transactions.length - 1;
     const cats = transactions.map(tx => ({
       transactionId: tx.hash,
+      number: counter--,
       blockHeight: tx.block_id,
       fee: tx.fee,
       size: tx.size,

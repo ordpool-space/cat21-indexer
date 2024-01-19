@@ -7,7 +7,7 @@ import { PushModule } from '@rx-angular/template/push';
 import { environment } from '../../environments/environment';
 import { LoadingIndicatorComponent } from '../layout/loading-indicator/loading-indicator.component';
 import { ShortenAddressPipe } from '../layout/shorten-address.pipe';
-import { SafeResourceUrlPipe } from '../safe-url.pipe';
+import { NoSanitizePipe } from '../no-sanitize.pipe';
 import { MintFacade } from '../store/mint.facade';
 
 @Component({
@@ -19,7 +19,7 @@ import { MintFacade } from '../store/mint.facade';
     LoadingIndicatorComponent,
     NgIf,
     RouterLink,
-    SafeResourceUrlPipe,
+    NoSanitizePipe,
     LetModule,
     PushModule,
     NgFor,

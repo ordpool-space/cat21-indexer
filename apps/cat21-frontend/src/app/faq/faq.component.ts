@@ -6,7 +6,7 @@ import { PushModule } from '@rx-angular/template/push';
 
 import { LoadingIndicatorComponent } from '../layout/loading-indicator/loading-indicator.component';
 import { ParseMarkdownPipe } from '../parse-markdown.pipe';
-import { SafeResourceUrlPipe } from '../safe-url.pipe';
+import { NoSanitizePipe } from '../no-sanitize.pipe';
 
 interface Faq {
   question: string;
@@ -24,7 +24,7 @@ interface Faq {
     NgIf,
     ParseMarkdownPipe,
     RouterLink,
-    SafeResourceUrlPipe,
+    NoSanitizePipe,
     LetModule,
     PushModule,
     NgFor,
@@ -39,7 +39,7 @@ export class FaqComponent {
 
   faqs: Faq[] = [
     {
-      question: 'What is the purpose of the "Ordinal Cubes" project?',
+      question: 'What is the purpose of the "Ordinal Cats" project?',
       answer: `This project allows anyone to create art on the Bitcoin blockchain. The artistic process consists of selecting suitable images that are already present on the chain.<br><br>Additionally this project seeks to fully utilize the technical possibilities around Ordinals and Inscriptions. Normally, collections are pre-generated, and all digital artifacts are known from the start. The buyer acquires one of the artifacts without any possibility of intervening in the process. We want to reverse this process - the art collector becomes the curator and chooses the images to be added to the cube. __It's a bit like fx(params), but for Bitcoin!__ Furthermore, the cube artifacts have been generated with the maximum possible technical compression. Each individual inscription stores data with exactly __557 bytes__ in size, making it incredibly efficient. This efficiency is made possible through the use of recursive inscriptions.`
     },
     {

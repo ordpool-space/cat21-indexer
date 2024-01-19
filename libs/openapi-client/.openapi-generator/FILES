@@ -2,11 +2,14 @@
 .openapi-generator-ignore
 README.md
 api.module.ts
+api/api.service.ts
 api/api.ts
 configuration.ts
 encoder.ts
 git_push.sh
 index.ts
+model/cat21.ts
+model/cat21PaginatedResult.ts
 model/models.ts
 param.ts
 variables.ts
