@@ -1,54 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import axios from 'axios';
-import { delay } from '../utils/delay';
-import { retry } from "../utils/retry";
 
-
-/**
- * Bitcoin Transaction in the format of the Blockchair API
- */
-export interface Transaction {
-  block_id: number;
-  id: number;
-  hash: string;
-  date: string;
-  time: string;
-  size: number;
-  weight: number;
-  version: number;
-  lock_time: number;
-  is_coinbase: boolean;
-  has_witness: boolean;
-  input_count: number;
-  output_count: number;
-  input_total: number;
-  input_total_usd: number;
-  output_total: number;
-  output_total_usd: number;
-  fee: number;
-  fee_usd: number;
-  fee_per_kb: number;
-  fee_per_kb_usd: number;
-  fee_per_kwu: number;
-  fee_per_kwu_usd: number;
-  cdd_total: number;
-}
-
-interface Context {
-  code: number;
-  source: string;
-  limit: number;
-  offset: number;
-  rows: number;
-  total_rows: number;
-  state: number;
-  market_price_usd: number;
-}
-
-interface ApiResponse {
-  data: Transaction[];
-  context: Context;
-}
+import { ApiResponseBlockchair, TransactionBlockchair } from '../types/transaction-blockchair';
+import { retry } from '../utils/retry';
 
 
 /**
@@ -61,24 +15,24 @@ export class BlockchairApiService {
 
   /**
    * Fetches a limited number of transactions starting from a specific offset.
-   * Retries the request up to a maximum of MAX_RETRIES times in case of failure.
+   * Retries the request several times.
    *
    * @param limit - The number of transactions to fetch in one call.
    * @param offset - The offset from where to start fetching transactions.
    * @param network - Empty for Bitcoin Mainnet, 'testnet' for Testnet
-   * @returns A promise that resolves to the response containing the transactions.
-   * @throws Throws an error if the maximum retry attempts are reached or the request fails.
+   * @returns A promise containing the transactions.
+   * @throws Throws an error if the maximum retry attempts are reached.
    */
-  private async fetchTransactions(limit: number, offset: number, network = ''): Promise<Transaction[]> {
+  private async fetchTransactions(limit: number, offset: number, network = ''): Promise<TransactionBlockchair[]> {
 
     return retry(async () => {
-      const response = await axios.get<ApiResponse>(
+      const response = await axios.get<ApiResponseBlockchair>(
         `${this.BASE_URL}/${network ? network + '/' : ''}transactions`,
         {
           params: {
             'q': 'lock_time(21)',
-            'limit': limit,
-            'offset': offset
+            limit,
+            offset
           }
         });
       return response.data.data;
@@ -93,9 +47,9 @@ export class BlockchairApiService {
    * @param network - Empty for Bitcoin Mainnet, 'testnet' for Testnet
    * @returns A promise that resolves to an array of all fetched transactions.
    */
-  async fetchAllTransactions(limit: number, network = ''): Promise<Transaction[]> {
+  async fetchAllTransactions(limit: number, network = ''): Promise<TransactionBlockchair[]> {
     let offset = 0;
-    let allTransactions: Transaction[] = [];
+    let allTransactions: TransactionBlockchair[] = [];
     let hasMoreResults = true;
 
     while (hasMoreResults) {

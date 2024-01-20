@@ -1,15 +1,16 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
 import { ApiController } from './api/api.controller';
 import { configuration, validationSchema } from './app.configuration';
 import { AppController } from './app.controller';
+import { BlockchairApiService } from './model/blockchair-api.service';
 import { CacheService } from './model/cache.service';
 import { CatService } from './model/cat.service';
-import { BlockchairApiService } from './model/blockchair-api.service';
-import { ScheduleModule } from '@nestjs/schedule';
+import { EsploraApiService } from './model/esplora-api.service';
 
 
 @Module({
@@ -35,7 +36,8 @@ import { ScheduleModule } from '@nestjs/schedule';
   providers: [
     CacheService,
     CatService,
-    BlockchairApiService
+    BlockchairApiService,
+    EsploraApiService
   ]
 })
 export class AppModule { }

@@ -2,7 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 
 import { Cat21 } from '../types/cat21';
-import { BlockchairApiService, Transaction } from './blockchair-api.service';
+import { BlockchairApiService } from './blockchair-api.service';
+import { EsploraApiService } from './esplora-api.service';
+import { TransactionBlockchair } from '../types/transaction-blockchair';
 
 
 
@@ -11,7 +13,8 @@ export class CatService {
 
   private allCats: Cat21[] = [];
 
-  constructor(private blockchairApi: BlockchairApiService) {
+  constructor(private blockchairApi: BlockchairApiService,
+    private esploraApi: EsploraApiService) {
   }
 
   /**
@@ -33,6 +36,8 @@ export class CatService {
   private async indexAllCats() {
 
     const transactions = await this.blockchairApi.fetchAllTransactions(100);
+
+    // const enrichedTransactions = await this.esploraApi.enrichTransactions(transactions);
 
     // if the amount of transactions is smaller (for whatever reason), then we prefer to keep the old data
     if (this.allCats.length < transactions.length) {
@@ -58,7 +63,7 @@ export class CatService {
     return this.allCats;
   }
 
-  private transactionsToCats(transactions: Transaction[]): Cat21[] {
+  private transactionsToCats(transactions: TransactionBlockchair[]): Cat21[] {
 
     let counter = transactions.length - 1;
     const cats = transactions.map(tx => ({
