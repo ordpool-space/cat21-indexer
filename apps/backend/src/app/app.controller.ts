@@ -26,7 +26,7 @@ export class AppController {
   </h1>
 
   <p>
-    Meow! Don't eat cats!
+    Meow! Rescue the cats!
   </p>
 
   <ul>
