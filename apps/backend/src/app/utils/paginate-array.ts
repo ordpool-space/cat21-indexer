@@ -6,7 +6,7 @@
  * @param currentPage - The current page number, starting at 1.
  * @returns The paginated slice of the array.
  */
-export function paginateArray(array, itemsPerPage, currentPage) {
+export function paginateArray<T>(array: T[], itemsPerPage: number, currentPage: number): T[] {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   return array.slice(startIndex, endIndex);

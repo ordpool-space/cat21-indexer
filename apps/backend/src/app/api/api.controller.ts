@@ -2,7 +2,7 @@ import { Controller, Get, Header, Param, ParseIntPipe } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
 import { CatService } from '../model/cat.service';
-import { paginateArray } from '../model/paginate-array';
+import { paginateArray } from '../utils/paginate-array';
 import { Cat21 } from '../types/cat21';
 import { Cat21PaginatedResult } from '../types/cat21-paginated-result';
 import { oneMinuteInSeconds } from '../types/constants';

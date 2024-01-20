@@ -28,8 +28,6 @@
     </div>
 
     <div>
-      <a href="javascript:void(0)" class="float-end" (click)="loadCats(defaultItemsPerPage, defaultItemsPerPage, 1)">Reload</a>
-
       <ngb-pagination
         class="mt-4 d-flex justify-content-center"
         [collectionSize]="i.totalResults"
@@ -40,6 +38,8 @@
         [rotate]="true"
         (pageChange)="loadCats(i.totalResults, i.itemsPerPage, $event)">
       </ngb-pagination>
+
+      <a href="javascript:void(0)" class="float-end" (click)="loadCats(defaultItemsPerPage, defaultItemsPerPage, 1)">Reload</a>
     </div>
 
 

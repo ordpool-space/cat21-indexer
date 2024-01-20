@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
+import { delay } from '../utils/delay';
+import { retry } from "../utils/retry";
+
 
 /**
  * Bitcoin Transaction in the format of the Blockchair API
@@ -55,7 +58,6 @@ interface ApiResponse {
 export class BlockchairApiService {
 
   private readonly BASE_URL = 'https://api.blockchair.com/bitcoin';
-  private readonly MAX_RETRIES = 2;
 
   /**
    * Fetches a limited number of transactions starting from a specific offset.
@@ -68,24 +70,19 @@ export class BlockchairApiService {
    * @throws Throws an error if the maximum retry attempts are reached or the request fails.
    */
   private async fetchTransactions(limit: number, offset: number, network = ''): Promise<Transaction[]> {
-    let attempts = 0;
 
-    if (network) {
-      network = network + '/';
-    }
-
-    while (attempts <= this.MAX_RETRIES) {
-      try {
-        const response = await axios.get<ApiResponse>(`${this.BASE_URL}/${network}transactions?q=lock_time(21)&limit=${limit}&offset=${offset}`);
-        return response.data.data;
-
-      } catch (error) {
-        attempts++;
-        Logger.error(`Attempt #${attempts} failed:`, error, 'blockchair_api_service');
-      }
-    }
-
-    throw new Error(`Failed to fetch transactions from Blockchair after #${attempts} attempts.`);
+    return retry(async () => {
+      const response = await axios.get<ApiResponse>(
+        `${this.BASE_URL}/${network ? network + '/' : ''}transactions`,
+        {
+          params: {
+            'q': 'lock_time(21)',
+            'limit': limit,
+            'offset': offset
+          }
+        });
+      return response.data.data;
+    });
   }
 
   /**
