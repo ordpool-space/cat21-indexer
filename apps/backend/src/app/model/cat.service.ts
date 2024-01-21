@@ -4,7 +4,6 @@ import { Interval } from '@nestjs/schedule';
 import { Cat21 } from '../types/cat21';
 import { TransactionBlockchair } from '../types/transaction-blockchair';
 import { BlockchairApiService } from './blockchair-api.service';
-import { EsploraApiService } from './esplora-api.service';
 import { OrdApiService } from './ord-api.service';
 
 
@@ -15,7 +14,6 @@ export class CatService {
   private cats: Cat21[] = [];
 
   constructor(private blockchairApi: BlockchairApiService,
-    private esploraApi: EsploraApiService,
     private ordApi: OrdApiService) {
   }
 
@@ -27,7 +25,7 @@ export class CatService {
     Logger.log('Initializing CatService', 'cat_service');
     await this.handleInterval(); // immediate execution upon module initialization
 
-    Logger.verbose('Fetched ' + this.cats.length + ' CAT-21 assets', 'cat_service');
+    Logger.verbose(`Successfully indexed ${this.cats.length} CAT-21 assets! 😺`, 'cat_service');
   }
 
   @Interval(1000 * 60 * 5) // every 5 minutes
@@ -39,19 +37,20 @@ export class CatService {
 
     try {
       const transactions = await this.blockchairApi.fetchAllCat21Transactions();
+
       if (transactions.length > this.cats.length) {
 
-        // const enrichedTransactions = await this.esploraApi.enrichTransactions(transactions);
-
-        Logger.log(`Updating cached cats with ${transactions.length} entries!`, 'cat_service');
+        Logger.verbose(`Found ${transactions.length} CAT-21 transactions. Trying to update the cache...`, 'cat_service');
         const cats = this.transactionsToCats(transactions);
 
-        this.addOutputInformation(cats);
-
+        Logger.verbose(`Adding output information from ord...`, 'cat_service');
+        await this.addOutputInformation(cats);
         this.cats = cats;
+      } else {
+        Logger.verbose(`Found ${transactions.length} CAT-21 transactions but there are already ${this.cats.length} cached!`, 'cat_service');
       }
     } catch (error) {
-      Logger.warn(`** Error indexing all cats! **`, error);
+      Logger.error(`** Error indexing all cats! **`, error);
       // don't throw here! if this errors a startup, the app will exit with code 1
       // throw error;
     }

@@ -30,5 +30,5 @@ export async function retry<T>(action: () => Promise<T>, maxRetries = 3, retryDe
   }
 
   // Throw an error after all retries have been exhausted
-  throw new Error('Action failed after maximum retries. Giving up!');
+  throw new Error('** Action failed after maximum retries. Giving up! **');
 }
