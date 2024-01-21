@@ -15,6 +15,6 @@ export const validationSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production'),
   PORT: Joi.number(),
   ESPLORA_BASE_URL: Joi.string(),
-  ORD_BASE_URL: Joi.string(),
-  ORD_BASE_URL_TESTNET: Joi.string()
+  ORD_BASE_URL: Joi.string().required(),
+  ORD_BASE_URL_TESTNET: Joi.string().required()
 })
