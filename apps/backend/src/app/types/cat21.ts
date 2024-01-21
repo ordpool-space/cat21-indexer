@@ -50,7 +50,7 @@ export class Cat21 {
 
   @ApiProperty({
     description: 'The satoshi that is associated with the cat',
-    example: 546
+    example: 596964966600565
   })
   sat: number;
 

@@ -1,4 +1,3 @@
-
 // Format:
 // https://github.com/Blockstream/esplora/blob/master/API.md
 /*

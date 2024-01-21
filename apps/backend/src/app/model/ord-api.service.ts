@@ -1,9 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
-import { retry } from '../utils/retry';
 import { TransactionOutputOrd } from '../types/transaction-output-ord';
+import { retry } from '../utils/retry';
 
 
 /**

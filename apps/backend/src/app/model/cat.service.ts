@@ -47,13 +47,42 @@ export class CatService {
         await this.addOutputInformation(cats);
         this.cats = cats;
       } else {
-        Logger.verbose(`Found ${transactions.length} CAT-21 transactions but there are already ${this.cats.length} cached!`, 'cat_service');
+        // Logger.verbose(`Found ${transactions.length} CAT-21 transactions but there are already ${this.cats.length} cached!`, 'cat_service');
       }
     } catch (error) {
       Logger.error(`** Error indexing all cats! **`, error);
       // don't throw here! if this errors a startup, the app will exit with code 1
       // throw error;
     }
+  }
+
+  /**
+   * Retrieves all CAT-21 assets (cached)
+   */
+  async getAllCats(): Promise<Cat21[]> {
+
+    // something must have went very wrong?! we still have a count of zero?
+    // let's try again to build an index
+    if (!this.cats.length) {
+      await this.indexAllCats();
+    }
+
+    // copy to new array to protect against mutation (required if we reverse the array)
+    // return this.allCats.map(c => c);
+
+    return this.cats;
+  }
+
+  /**
+   * Finds all CAT-21 assets (cached) whose sat value falls within any of the provided ranges.
+   *
+   * @param satRanges - Array of satoshi ranges to search for.
+   * @returns Array of CAT-21 assets matching the sat ranges.
+   */
+  async findCatsBySatRanges(satRanges: [number, number][]): Promise<Cat21[]> {
+    return this.cats.filter(cat =>
+      satRanges.some(([start, end]) => cat.sat >= start && cat.sat <= end)
+    );
   }
 
   /**
@@ -76,30 +105,15 @@ export class CatService {
         throw error;
       }
     }
-
   }
 
   /**
-   * Retrieves all cats (cached)
+   * Maps an array of TransactionBlockchair to an array of Cat21
    */
-  async getAllCats(): Promise<Cat21[]> {
-
-    // something must have went very wrong?! we still have a count of zero?
-    // let's try again to build an index
-    if (!this.cats.length) {
-      await this.indexAllCats();
-    }
-
-    // copy to new array to protect against mutation (required if we reverse the array)
-    // return this.allCats.map(c => c);
-
-    return this.cats;
-  }
-
   private transactionsToCats(transactions: TransactionBlockchair[]): Cat21[] {
 
     let counter = transactions.length - 1;
-    const cats = transactions.map(tx => ({
+    return transactions.map(tx => ({
       transactionId: tx.hash,
       number: counter--,
       blockHeight: tx.block_id,
@@ -113,7 +127,5 @@ export class CatService {
       firstOwner: '',
       // currentOwner: ''
     }));
-
-    return cats;
   }
 }

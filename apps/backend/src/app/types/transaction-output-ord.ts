@@ -7,7 +7,8 @@ export interface TransactionOutputOrd {
   script_pubkey: string;
   address: string;
   transaction: string;
-  sat_ranges: [number, number][];
+  // always null, if ord does not run with --index-sats
+  sat_ranges: [number, number][] | null;
   inscriptions: string[];
   runes: any;
 }

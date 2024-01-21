@@ -1,5 +1,5 @@
-import { Controller, Get, Header, Param, ParseIntPipe } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Header, Param, ParseIntPipe } from '@nestjs/common';
+import { ApiOkResponse, ApiOperation, ApiParam, ApiTags, ApiBody } from '@nestjs/swagger';
 
 import { CatService } from '../model/cat.service';
 import { paginateArray } from '../utils/paginate-array';
@@ -25,7 +25,7 @@ export class ApiController {
   @ApiParam({ name: 'currentPage', type: 'number', example: 1 })
   @ApiOkResponse({ type: Cat21PaginatedResult })
   @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
-  async getInscriptions(
+  async getCats(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,
   ): Promise<Cat21PaginatedResult> {
@@ -41,6 +41,30 @@ export class ApiController {
       itemsPerPage,
       currentPage
     }
+  }
+
+  /**
+   * Get CAT-21 assets by satoshi ranges.
+   */
+  @Post('api/cats/by-sat-ranges')
+  @ApiOperation({ operationId: 'catsBySatRanges' })
+  @ApiOkResponse({ type: Cat21, isArray: true })
+  @ApiBody({
+    description: 'Sat ranges to search for',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'array',
+        items: {
+          type: 'number',
+        },
+        example: [100000, 200000],
+      },
+      example: [[100000, 200000], [300000, 400000]],
+    },
+  })
+  async getCatsBySatRanges(@Body() satRanges: [number, number][]): Promise<Cat21[]> {
+    return this.catService.findCatsBySatRanges(satRanges);
   }
 }
 
