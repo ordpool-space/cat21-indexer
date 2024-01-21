@@ -54,7 +54,7 @@ export class EsploraApiService {
         enrichedTransactions.push(txn);
 
       } catch (error) {
-        Logger.error(`Error enriching data for transaction ${transaction.hash }.`, error);
+        Logger.error(`** Error enriching data for transaction ${transaction.hash }. **`, error);
         throw error;
       }
     }

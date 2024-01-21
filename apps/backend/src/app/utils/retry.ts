@@ -25,7 +25,7 @@ export async function retry<T>(action: () => Promise<T>, maxRetries = 3, retryDe
 
     } catch (error) {
       attempts++;
-      Logger.error(`Attempt #${attempts} failed:`, error);
+      Logger.error(`** Attempt #${attempts} to call ${action} failed! **`, error);
     }
   }
 

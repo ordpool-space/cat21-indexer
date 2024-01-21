@@ -28,7 +28,7 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
     };
 
     if (status === 500) {
-      Logger.error('Internal Server Error', { path: request.url, message });
+      Logger.error('** Internal Server Error **', { path: request.url, message });
     }
 
     response.status(status).json(errorResponse);

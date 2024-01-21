@@ -37,17 +37,23 @@ export class CatService {
 
   private async indexAllCats() {
 
-    const transactions = await this.blockchairApi.fetchAllCat21Transactions();
-    if (transactions.length > this.cats.length) {
+    try {
+      const transactions = await this.blockchairApi.fetchAllCat21Transactions();
+      if (transactions.length > this.cats.length) {
 
-      // const enrichedTransactions = await this.esploraApi.enrichTransactions(transactions);
+        // const enrichedTransactions = await this.esploraApi.enrichTransactions(transactions);
 
-      Logger.log(`Updating cached cats with ${transactions.length} entries!`, 'cat_service');
-      const cats = this.transactionsToCats(transactions);
+        Logger.log(`Updating cached cats with ${transactions.length} entries!`, 'cat_service');
+        const cats = this.transactionsToCats(transactions);
 
-      this.addOutputInformation(cats);
+        this.addOutputInformation(cats);
 
-      this.cats = cats;
+        this.cats = cats;
+      }
+    } catch (error) {
+      Logger.error(`** Error indexing all cats! **`, error);
+      // don't throw here! if this errors a startup, the app will exit with code 1
+      // throw error;
     }
   }
 
@@ -67,7 +73,7 @@ export class CatService {
         // cat.currentOwner = firstOutput.address;
 
       } catch (error) {
-        Logger.error(`Error enriching output data for cat ${cat.transactionId }.`, error);
+        Logger.error(`** Error enriching output data for cat ${cat.transactionId }. **`, error);
         throw error;
       }
     }
