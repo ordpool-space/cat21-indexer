@@ -11,6 +11,7 @@ import { BlockchairApiService } from './model/blockchair-api.service';
 import { CacheService } from './model/cache.service';
 import { CatService } from './model/cat.service';
 import { EsploraApiService } from './model/esplora-api.service';
+import { OrdApiService } from './model/ord-api.service';
 
 
 @Module({
@@ -37,7 +38,8 @@ import { EsploraApiService } from './model/esplora-api.service';
     CacheService,
     CatService,
     BlockchairApiService,
-    EsploraApiService
+    EsploraApiService,
+    OrdApiService
   ]
 })
 export class AppModule { }

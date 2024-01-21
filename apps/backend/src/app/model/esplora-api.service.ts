@@ -7,6 +7,7 @@ import { retry } from '../utils/retry';
 
 
 /**
+ * Not used at the moment!
  * Service to interact with an Esplora API for fetching Bitcoin data.
  */
 @Injectable()
@@ -19,14 +20,14 @@ export class EsploraApiService {
   }
 
   /**
-   * Fetches a single Bitcoin transaction.
+   * Fetches data about a single Bitcoin transaction.
    * Retries the request several times.
    *
    * @param network - Empty for Bitcoin Mainnet, 'testnet' for Testnet
    * @returns A promise containing the transaction.
    * @throws Throws an error if the maximum retry attempts are reached.
    */
-  async fetchTransaction(txId: string, network = ''): Promise<Transaction> {
+  async fetchTransaction(txId: string, network: '' | 'testnet' = ''): Promise<Transaction> {
 
     return retry(async () => {
       const response = await axios.get<Transaction>(
