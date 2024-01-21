@@ -51,7 +51,7 @@ export class CatService {
         this.cats = cats;
       }
     } catch (error) {
-      Logger.error(`** Error indexing all cats! **`, error);
+      Logger.warn(`** Error indexing all cats! **`, error);
       // don't throw here! if this errors a startup, the app will exit with code 1
       // throw error;
     }
@@ -73,7 +73,7 @@ export class CatService {
         // cat.currentOwner = firstOutput.address;
 
       } catch (error) {
-        Logger.error(`** Error enriching output data for cat ${cat.transactionId }. **`, error);
+        Logger.warn(`** Error enriching output data for cat ${cat.transactionId }. **`, error);
         throw error;
       }
     }
