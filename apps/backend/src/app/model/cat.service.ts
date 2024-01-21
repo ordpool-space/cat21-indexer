@@ -61,7 +61,8 @@ export class CatService {
 
         const firstOutput = await this.ordApi.fetchOutput(cat.transactionId + ':0');
         cat.value = firstOutput.value;
-        cat.sat = firstOutput.sat_ranges[0][0];
+        // if sat tracking is disabled (or not tracked yet)
+        cat.sat = firstOutput.sat_ranges && firstOutput.sat_ranges.length && firstOutput.sat_ranges[0][0];
         cat.firstOwner = firstOutput.address;
         // cat.currentOwner = firstOutput.address;
 
