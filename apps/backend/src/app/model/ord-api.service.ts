@@ -41,4 +41,29 @@ export class OrdApiService {
       return response.data;
     });
   }
+
+  /**
+   * Fetches satoshi ranges for a list of UTXOs from the Ordinals API.
+   * This method iterates over the provided UTXOs, fetching data for each,
+   * and aggregates their satoshi ranges if available.
+   *
+   * @param utxos - Array of UTXO strings to fetch satoshi ranges for.
+   * @param network - Optional network parameter, default is mainnet. Use 'testnet' for Testnet.
+   * @returns A promise that resolves to an array of satoshi ranges.
+   * @throws Throws an error if any of the UTXO fetch operations fail.
+   */
+  async fetchSatRangesForUtxos(utxos: string[], network: '' | 'testnet' = ''): Promise<[number, number][]> {
+    const satRanges: [number, number][] = [];
+
+    for (const utxo of utxos) {
+      const output = await this.fetchOutput(utxo, network);
+      if (output.sat_ranges) {
+        for (const range of output.sat_ranges) {
+          satRanges.push(range);
+        }
+      }
+    }
+
+    return satRanges;
+  }
 }

@@ -56,7 +56,7 @@ export class Cat21 {
 
   @ApiProperty({
     description: 'The first cat owner (Address that received the first output of the mint transaction)',
-    example: 'bc1...'
+    example: 'bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh'
   })
   firstOwner: string;
 
