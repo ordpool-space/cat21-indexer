@@ -1,6 +1,6 @@
 /**
  * 🐱 CAT-21 Indexer API
- * Meow! Don\'t eat cats!
+ * Meow! Rescue the cats!
  *
  * The version of the OpenAPI document: 1.0
  * 

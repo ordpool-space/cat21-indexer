@@ -28,7 +28,7 @@ export class Cat21ViewerComponent {
 
   _cat21Transaction: Cat21 | undefined = undefined;
   svg: string | undefined = undefined;
-  traits: CatTraits | undefined = undefined;
+  traits: CatTraits | undefined | null = undefined;
 
   @Input() showDetails = false;
 
@@ -61,7 +61,10 @@ export class Cat21ViewerComponent {
 
     return Cat21ParserService.parse({
       txid: cat.transactionId,
-      locktime: 21
+      locktime: 21,
+      status: {
+        block_hash: cat.blockId
+      }
     }) || undefined;
   }
 }

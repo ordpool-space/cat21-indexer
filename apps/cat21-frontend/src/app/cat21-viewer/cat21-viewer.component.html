@@ -1,7 +1,7 @@
 <!-- placeholder to avoid page jumps-->
 <ng-container *ngIf="!_cat21Transaction">
 
-  <strong>CAT #?</strong><br>
+  <strong *ngIf="showDetails">CAT #?</strong><br>
   <br *ngIf="showDetails">
 
   <svg viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
@@ -9,14 +9,18 @@
     <text x="3" y="12"  font-size="0.1em" fill="white">Loading...</text>
   </svg>
 
+  <strong *ngIf="!showDetails">CAT #?</strong><br>
+
 </ng-container>
 
 <ng-container *ngIf="svg && traits && _cat21Transaction">
 
-  <strong>CAT {{ _cat21Transaction.number }}</strong><br>
+  <strong *ngIf="showDetails">CAT {{ _cat21Transaction.number }}</strong><br>
   <br *ngIf="showDetails">
 
   <div class="cat-container" [innerHTML]="svg | noSanitize" [ngClass]="{ 'cat-container-gray': !traits.orangeBackground }"></div>
+
+  <strong *ngIf="!showDetails">CAT {{ _cat21Transaction.number }}</strong><br>
 
   <div class="mt-2" *ngIf="showDetails">
     <strong>Traits</strong>

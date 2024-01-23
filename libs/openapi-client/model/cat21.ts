@@ -1,6 +1,6 @@
 /**
  * 🐱 CAT-21 Indexer API
- * Meow! Don\'t eat cats!
+ * Meow! Rescue the cats!
  *
  * The version of the OpenAPI document: 1.0
  * 
@@ -13,28 +13,48 @@
 
 export interface Cat21 { 
     /**
-     * The transactionId where the CAT-21 asset was created / minted
+     * The transactionId (hash in hex format) where the CAT-21 asset was created / minted
      */
     transactionId: string;
     /**
-     * The incremented number of the cat. Cat 0 is the first one.
+     * The blockId (hash in hex format) where the CAT-21 asset was created / minted
+     */
+    blockId: string;
+    /**
+     * The incremented number of the cat. Cat #0 is the first one.
      */
     number: number;
     /**
-     * The block height where the CAT-21 asset was created / minted
+     * Just for information: The block height where the CAT-21 asset was created / minted
      */
     blockHeight: number;
     /**
-     * Total fees paid to process the mint transaction in (Unit: sats)
+     * Just for information: The block time where the CAT-21 asset was created / minted (Unit: seconds)
+     */
+    blockTime: number;
+    /**
+     * Just for information: Total fees paid to process the mint transaction (Unit: sats)
      */
     fee: number;
     /**
-     * Total size of the mint transaction (Unit: Bytes)
+     * Just for information: Total size of the mint transaction (Unit: bytes)
      */
     size: number;
     /**
-     * Weight of the mint transaction, which is a measurement to compare the size of different transactions to each other in proportion to the block size limit (Unit: WU)
+     * Just for information: Weight of the mint transaction, which is a measurement to compare the size of different transactions to each other in proportion to the block size limit (Unit: WU)
      */
     weight: number;
+    /**
+     * Just for information: Value of the first output of the mint transaction (Unit: sats)
+     */
+    value: number;
+    /**
+     * The satoshi that is associated with the cat
+     */
+    sat: number;
+    /**
+     * The first cat owner (Address that received the first output of the mint transaction)
+     */
+    firstOwner: string;
 }
 

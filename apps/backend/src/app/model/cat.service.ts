@@ -5,6 +5,8 @@ import { Cat21 } from '../types/cat21';
 import { TransactionBlockchair } from '../types/transaction-blockchair';
 import { BlockchairApiService } from './blockchair-api.service';
 import { OrdApiService } from './ord-api.service';
+import { EsploraApiService } from './esplora-api.service';
+import { delay } from '../utils/delay';
 
 
 
@@ -14,6 +16,7 @@ export class CatService {
   private cats: Cat21[] = [];
 
   constructor(private blockchairApi: BlockchairApiService,
+    private esploraApi: EsploraApiService,
     private ordApi: OrdApiService) {
   }
 
@@ -43,8 +46,12 @@ export class CatService {
         Logger.verbose(`Found ${transactions.length} CAT-21 transactions. Trying to update the cache...`, 'cat_service');
         const cats = this.transactionsToCats(transactions);
 
+        Logger.verbose(`Adding block information from esplora...`, 'cat_service');
+        await this.addBlockInformation(cats);
+
         Logger.verbose(`Adding output information from ord...`, 'cat_service');
         await this.addOutputInformation(cats);
+
         this.cats = cats;
       } else {
         // Logger.verbose(`Found ${transactions.length} CAT-21 transactions but there are already ${this.cats.length} cached!`, 'cat_service');
@@ -67,7 +74,8 @@ export class CatService {
       await this.indexAllCats();
     }
 
-    // copy to new array to protect against mutation (required if we reverse the array)
+    // copy to new array to protect the array against mutation
+    // (only required if we reverse the array)
     // return this.allCats.map(c => c);
 
     return this.cats;
@@ -86,7 +94,35 @@ export class CatService {
   }
 
   /**
+   * Mutates the cats and adds information about block
+   * via Esplora (Blockstream)
+   */
+  private async addBlockInformation(cats: Cat21[]) {
+
+    let first = true;
+    for (const cat of cats) {
+      try {
+
+        if (!first) {
+          await delay(50); // avoid Too Many Requests
+        } else {
+          first = false;
+        }
+
+        const transaction = await this.esploraApi.fetchTransaction(cat.transactionId);
+        cat.blockId = transaction.status.block_hash || 'unconfirmed??'
+        cat.blockTime = transaction.status.block_time || -1;
+
+      } catch (error) {
+        Logger.warn(`** Error enriching block data for cat ${cat.transactionId}. **`, error);
+        throw error;
+      }
+    }
+  }
+
+  /**
    * Mutates the cats and adds information about the first Output of the transaction
+   * via Or
    */
   private async addOutputInformation(cats: Cat21[]) {
 
@@ -101,7 +137,7 @@ export class CatService {
         // cat.currentOwner = firstOutput.address;
 
       } catch (error) {
-        Logger.warn(`** Error enriching output data for cat ${cat.transactionId }. **`, error);
+        Logger.warn(`** Error enriching output data for cat ${cat.transactionId}. **`, error);
         throw error;
       }
     }
@@ -121,7 +157,11 @@ export class CatService {
       size: tx.size,
       weight: tx.weight,
 
-      // will be added with more data later on
+      // will be added later on by esplora
+      blockId: '',
+      blockTime: -1,
+
+      // will be added later on by ord
       value: -1,
       sat: -1,
       firstOwner: '',

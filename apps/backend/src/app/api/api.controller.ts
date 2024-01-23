@@ -1,17 +1,34 @@
-import { Controller, Get, Post, Body, Header, Param, ParseIntPipe, UsePipes, HttpCode, NotFoundException } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiParam, ApiTags, ApiBody, ApiBadRequestResponse, ApiNotFoundResponse } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  NotFoundException,
+  Param,
+  ParseIntPipe,
+  Post,
+  UsePipes,
+} from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiBody,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { CatService } from '../model/cat.service';
-import { paginateArray } from '../utils/paginate-array';
-import { Cat21 } from '../types/cat21';
-import { ErrorResponse } from '../types/error-response';
-
-import { Cat21PaginatedResult } from '../types/cat21-paginated-result';
-import { SatRangesValidationPipe } from '../types/sat-ranges-validation-pipe';
-
-import { oneMinuteInSeconds } from '../types/constants';
 import { OrdApiService } from '../model/ord-api.service';
-
+import { Cat21 } from '../types/cat21';
+import { Cat21PaginatedResult } from '../types/cat21-paginated-result';
+import { oneMinuteInSeconds } from '../types/constants';
+import { ErrorResponse } from '../types/error-response';
+import { SatRangesValidationPipe } from '../types/sat-ranges-validation-pipe';
+import { UtxosValidationPipe } from '../types/utxos-validation-pipe';
+import { paginateArray } from '../utils/paginate-array';
 
 
 @ApiTags('api')
@@ -135,7 +152,7 @@ export class ApiController {
    * Test data: <a href="https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0" target="_blank">First Output of the genesis cat</a><br>
    * Test data: <a href="https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0" target="_blank">First Output of the second cat</a>
    *
-   * Please make sure to sent a UTXOs input. Possible issues:
+   * Please make sure to sent a valid UTXOs input. Possible issues:
    * - UTXOs must be an array.
    * - The number of UTXOs cannot exceed 100.
    * - Each UTXO must be a string.
@@ -166,6 +183,7 @@ export class ApiController {
       example: ['98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0', '90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0'],
     }
   })
+  @UsePipes(new UtxosValidationPipe())
   async getCatsByUtxos(@Body() utxos: string[]): Promise<Cat21[]> {
     const longSatRanges = await this.ordApiService.fetchSatRangesForUtxos(utxos);
     const shortSatRanges = longSatRanges.map(x => [x[0], x[0]] as [number, number]);
