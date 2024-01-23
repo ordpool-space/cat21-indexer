@@ -14,7 +14,7 @@ describe('CatService', () => {
       { sat: 400 }  // 3
     ] as Cat21[];
 
-    catService = new CatService({} as any, {} as any);
+    catService = new CatService({} as any, {} as any, {} as any);
     catService['cats'] = mockCats;
   });
 
