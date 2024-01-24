@@ -3,13 +3,13 @@
   <div class="clearfix">
 
     <a *ngIf="c?.cat?.nextTransactionId" [routerLink]="['/cat', c?.cat?.nextTransactionId]"
-      class="fw-bold mt-4 mb-4 float-start">« Next Cat</a>
+      class="fw-bold mt-4 mb-4 float-start">« Next</a>
 
     <span *ngIf="!c?.cat?.nextTransactionId"
       class="fw-bold mt-4 mb-4 float-start">&nbsp;</span>
 
     <a *ngIf="c?.cat?.previousTransactionId" [routerLink]="['/cat', c?.cat?.previousTransactionId]"
-      class="fw-bold mt-4 mb-4 float-end">» Previous Cat</a>
+      class="fw-bold mt-4 mb-4 float-end">» Previous</a>
 
     <span *ngIf="!c?.cat?.previousTransactionId"
       class="fw-bold mt-4 mb-4 float-end">&nbsp;</span>
