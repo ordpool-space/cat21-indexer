@@ -5,6 +5,7 @@ import { provideRouter, withInMemoryScrolling } from '@angular/router';
 import { environment } from '../environments/environment';
 import { ApiModule, Configuration } from './openapi-client';
 import { StartComponent } from './start/start.component';
+import { DetailsComponent } from './details/details.component';
 
 
 export const appConfig: ApplicationConfig = {
@@ -21,7 +22,7 @@ export const appConfig: ApplicationConfig = {
     provideRouter(
       [
         { path: '', component: StartComponent },
-        // { path: 'inscription/:inscriptionId', component: DetailsComponent },
+        { path: 'cat/:transactionId', component: DetailsComponent, data: { smallHeader: true }  },
         // { path: 'faq', component: FaqComponent },
         { path: '**', component: StartComponent },
       ],

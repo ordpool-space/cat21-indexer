@@ -1,11 +1,11 @@
 import { NgClass, NgFor, NgIf, NgStyle } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { FontAwesomeModule } from '@fortawesome/angular-fontawesome';
-import { NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
+import { NgbTooltip, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 import { Cat21ParserService, CatTraits, ParsedCat21 } from 'ordpool-parser';
 
 import { NoSanitizePipe } from '../no-sanitize.pipe';
 import { Cat21 } from '../openapi-client';
+import { ShortenStringPipe } from './shorten-string.pipe';
 
 
 @Component({
@@ -17,9 +17,9 @@ import { Cat21 } from '../openapi-client';
     NgFor,
     NoSanitizePipe,
     NgbTooltip,
-    FontAwesomeModule,
     NgStyle,
-    NgClass
+    NgClass,
+    ShortenStringPipe
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true
@@ -29,6 +29,15 @@ export class Cat21ViewerComponent {
   _cat21Transaction: Cat21 | undefined = undefined;
   svg: string | undefined = undefined;
   traits: CatTraits | undefined | null = undefined;
+
+  constructor(
+    tooltipConfig: NgbTooltipConfig
+  ) {
+    tooltipConfig.animation = false;
+
+    //tooltipConfig.triggers = 'hover';
+    // tooltipConfig.closeDelay = 1000 * 60;
+  }
 
   @Input() showDetails = false;
 

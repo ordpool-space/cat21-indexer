@@ -4,30 +4,28 @@
 
 .cat-container-gray {
   background-color: #555555;
-
 }
 
 i.colorBlock {
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  margin-bottom: -3px;
 }
 
 // same as in transaction.component.scss
 .table {
   tr td {
-    padding: 0.75rem 0.5rem;
-    @media (min-width: 576px) {
-      padding: 0.75rem 0.75rem;
-    }
-    &:last-child {
-      text-align: right;
-      @media (min-width: 850px) {
-        text-align: left;
-      }
-    }
-    .btn {
-      display: block;
-    }
+    padding: 0.75rem 0;
+    vertical-align: top;
   }
+}
+
+b {
+  display: inline-block;
+  padding: 1px;
+  background-color: white;
+  color: #FF9900;
+  margin-right: 8px;
 }

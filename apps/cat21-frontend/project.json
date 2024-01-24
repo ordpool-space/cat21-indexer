@@ -19,11 +19,6 @@
           "apps/cat21-frontend/src/assets"
         ],
         "styles": [
-          "node_modules/@fontsource/yantramanav/300.css",
-          "node_modules/@fontsource/yantramanav/500.css",
-          "node_modules/@fontsource/yantramanav/700.css",
-
-          "node_modules/bootstrap-icons/font/bootstrap-icons.css",
           "apps/cat21-frontend/src/styles.scss"
         ],
         "scripts": []
@@ -64,8 +59,7 @@
     "serve": {
       "executor": "@angular-devkit/build-angular:dev-server",
       "options": {
-        "port": 4200,
-        "proxyConfig": "apps/cat21-frontend/src/proxy.conf.json"
+        "port": 4200
       },
       "configurations": {
         "production": {

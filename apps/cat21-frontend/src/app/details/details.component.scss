@@ -1,33 +1,7 @@
-// X-Small devices (portrait phones, less than 576px)
-@media (min-width: 0) {
-  iframe  {
-    height: 90vw;
-    display: block;
-    margin: auto;
-  }
+.cat-box {
+  width: 600px;
+  margin: auto;
 }
-
-// Medium devices (tablets, 768px and up)
-@media (min-width: 768px) {
-  iframe {
-    height: 70vw;
-  }
-}
-
-// Large devices (desktops, 992px and up)
-@media (min-width: 992px) {
-  iframe {
-    height: 60vw;
-  }
-}
-
-// X-Large devices (large desktops, 1200px and up)
-@media (min-width: 1200px) {
-  iframe, img {
-    height: 35vw;
-  }
-}
-
 
 .table {
   table-layout: fixed;

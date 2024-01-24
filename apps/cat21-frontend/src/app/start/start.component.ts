@@ -1,14 +1,11 @@
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgbPagination } from '@ng-bootstrap/ng-bootstrap';
-import { Observable, of, retry, startWith } from 'rxjs';
+import { Observable, retry, startWith } from 'rxjs';
 
 import { Cat21ViewerComponent } from '../cat21-viewer/cat21-viewer.component';
-import { AlertComponent } from '../layout/alert/alert.component';
-import { LoadingIndicatorButtonComponent } from '../layout/loading-indicator-button/loading-indicator-button.component';
-import { LoadingIndicatorComponent } from '../layout/loading-indicator/loading-indicator.component';
-import { ApiService, Cat21PaginatedResult } from '../openapi-client';
+import { ApiService, Cat21 } from '../openapi-client';
 
 
 @Component({
@@ -17,9 +14,6 @@ import { ApiService, Cat21PaginatedResult } from '../openapi-client';
   styleUrls: ['./start.component.scss'],
   standalone: true,
   imports: [
-    LoadingIndicatorComponent,
-    LoadingIndicatorButtonComponent,
-    AlertComponent,
     NgFor,
     NgIf,
     RouterLink,
@@ -31,20 +25,15 @@ import { ApiService, Cat21PaginatedResult } from '../openapi-client';
 })
 export class StartComponent {
 
-  defaultItemsPerPage = 12;
-  catsPaginated$: Observable<Cat21PaginatedResult> = of(
-    this.emptyResult(
-      this.defaultItemsPerPage,
-      this.defaultItemsPerPage,
-      1)
-  );
+  private api = inject(ApiService);
 
-  constructor(private api: ApiService) {
-    this.loadCats(
-      this.defaultItemsPerPage,
-      this.defaultItemsPerPage,
-      1)
-  }
+  defaultItemsPerPage = 12;
+  catsPaginated$: Observable<{
+    cats: Array<Cat21 | undefined>;
+    totalResults: number;
+    itemsPerPage: number;
+    currentPage: number;
+  }> = this.loadCats()
 
   emptyResult(totalResults: number, itemsPerPage: number, currentPage: number) {
     return {
@@ -55,13 +44,21 @@ export class StartComponent {
     }
   }
 
-  loadCats(totalResults: number, itemsPerPage: number, currentPage: number) {
-    this.catsPaginated$ = this.api.cats(itemsPerPage, currentPage).pipe(
+  loadCats(totalResults?: number, itemsPerPage?: number, currentPage = 1) {
+
+    totalResults = totalResults || this.defaultItemsPerPage;
+    itemsPerPage = itemsPerPage || this.defaultItemsPerPage;
+
+    return this.api.cats(itemsPerPage, currentPage).pipe(
       retry({
-        count: 2,
+        count: 3,
         delay: 1000
       }),
       startWith(this.emptyResult(totalResults, itemsPerPage, currentPage))
     );
+  }
+
+  changePage(totalResults: number, itemsPerPage: number, currentPage: number) {
+    this.catsPaginated$ = this.loadCats(totalResults, itemsPerPage, currentPage);
   }
 }

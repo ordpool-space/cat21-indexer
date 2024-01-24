@@ -24,7 +24,15 @@
   <div class="row">
 
     <div *ngFor="let cat of i.cats" class="col-6 col-md-4 col-lg-3">
-      <app-cat21-viewer [cat21Transaction]="cat" />
+
+      <!-- cat image -->
+      <a *ngIf="cat" [routerLink]="['/cat', cat.transactionId]">
+        <app-cat21-viewer [cat21Transaction]="cat" />
+      </a>
+
+      <!-- loading text -->
+      <app-cat21-viewer *ngIf="!cat" [cat21Transaction]="undefined" />
+
     </div>
 
     <div>
@@ -36,17 +44,11 @@
         aria-label="Page Cats"
         [maxSize]="5"
         [rotate]="true"
-        (pageChange)="loadCats(i.totalResults, i.itemsPerPage, $event)">
+        (pageChange)="changePage(i.totalResults, i.itemsPerPage, $event)">
       </ngb-pagination>
 
-      <a href="javascript:void(0)" class="float-end" (click)="loadCats(defaultItemsPerPage, defaultItemsPerPage, 1)">Reload</a>
+      <a href="javascript:void(0)" class="float-end" (click)="changePage(defaultItemsPerPage, defaultItemsPerPage, 1)">Reload</a>
     </div>
-
-
-    <!-- <app-loading-indicator
-      [state]="mintFacade.inscriptionsStatus$ | push" class="mb-5"
-      sendDataText="Loading latest cat…"
-    /> -->
 
   </div>
 

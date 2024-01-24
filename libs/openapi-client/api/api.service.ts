@@ -23,6 +23,8 @@ import { Cat21 } from '../model/cat21';
 // @ts-ignore
 import { Cat21PaginatedResult } from '../model/cat21PaginatedResult';
 // @ts-ignore
+import { Cat21SingleResult } from '../model/cat21SingleResult';
+// @ts-ignore
 import { ErrorResponse } from '../model/errorResponse';
 
 // @ts-ignore
@@ -102,9 +104,9 @@ export class ApiService {
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public cat(transactionId: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Cat21>;
-    public cat(transactionId: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Cat21>>;
-    public cat(transactionId: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Cat21>>;
+    public cat(transactionId: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Cat21SingleResult>;
+    public cat(transactionId: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Cat21SingleResult>>;
+    public cat(transactionId: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Cat21SingleResult>>;
     public cat(transactionId: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
         if (transactionId === null || transactionId === undefined) {
             throw new Error('Required parameter transactionId was null or undefined when calling cat.');
@@ -142,7 +144,7 @@ export class ApiService {
         }
 
         let localVarPath = `/api/cat/${this.configuration.encodeParam({name: "transactionId", value: transactionId, in: "path", style: "simple", explode: false, dataType: "string", dataFormat: undefined})}`;
-        return this.httpClient.request<Cat21>('get', `${this.configuration.basePath}${localVarPath}`,
+        return this.httpClient.request<Cat21SingleResult>('get', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 responseType: <any>responseType_,

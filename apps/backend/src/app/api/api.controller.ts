@@ -19,11 +19,14 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { findItemByTransactionId } from './find-item-by-transaction-id';
+
 
 import { CatService } from '../model/cat.service';
 import { OrdApiService } from '../model/ord-api.service';
 import { Cat21 } from '../types/cat21';
 import { Cat21PaginatedResult } from '../types/cat21-paginated-result';
+import { Cat21SingleResult } from '../types/cat21-single-result';
 import { oneMinuteInSeconds } from '../types/constants';
 import { ErrorResponse } from '../types/error-response';
 import { SatRangesValidationPipe } from '../types/sat-ranges-validation-pipe';
@@ -54,8 +57,6 @@ export class ApiController {
   ): Promise<Cat21PaginatedResult> {
 
     const allCats: Cat21[] = await this.catService.getAllCats();
-
-    // allCats = allCats.reverse();
     const cats = paginateArray(allCats, itemsPerPage, currentPage);
 
     return {
@@ -72,19 +73,23 @@ export class ApiController {
   @Get(['api/cat/:transactionId'])
   @ApiOperation({ operationId: 'cat' })
   @ApiParam({ name: 'transactionId', type: 'string', example: '98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892' })
-  @ApiOkResponse({ type: Cat21 })
+  @ApiOkResponse({ type: Cat21SingleResult })
   @ApiNotFoundResponse({ description: 'No CAT-21 asset indexed with this transactionId' })
   @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
-  async getCat(@Param('transactionId') transactionId: string): Promise<Cat21> {
+  async getCat(@Param('transactionId') transactionId: string): Promise<Cat21SingleResult> {
 
     const allCats: Cat21[] = await this.catService.getAllCats();
-    const cat = allCats.find(c => c.transactionId === transactionId);
+    const cats = findItemByTransactionId(allCats, transactionId)
 
-    if (!cat) {
+    if (!cats.current) {
       throw new NotFoundException('No CAT-21 asset indexed with this transactionId');
     }
 
-    return cat;
+    return {
+      cat: cats.current,
+      previousTransactionId: cats.previous ? cats.previous.transactionId : null,
+      nextTransactionId: cats.next ? cats.next.transactionId : null
+    }
   }
 
   /**
