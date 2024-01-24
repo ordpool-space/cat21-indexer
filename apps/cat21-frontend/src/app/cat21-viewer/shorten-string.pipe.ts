@@ -11,6 +11,6 @@ export class ShortenStringPipe implements PipeTransform {
       return str;
     }
     const half = length / 2;
-    return str.substring(0, half) + '...' + str.substring(str.length - half);
+    return str.substring(0, half) + '…' + str.substring(str.length - half);
   }
 }
