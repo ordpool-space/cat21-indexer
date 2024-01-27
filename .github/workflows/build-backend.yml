@@ -28,5 +28,5 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
       run: |
-        npx angular-cli-ghpages --message="Auto-generated commit" --repo=https://github.com/haushoppe/cat21-backend-build.git --branch=main --dir=dist/apps/backend --name="The Buildbot" --email=noreply@haushoppe.art
+        npx angular-cli-ghpages --repo=https://github.com/haushoppe/cat21-backend-build.git --branch=main --dir=dist/apps/backend --name="The Buildbot" --email=noreply@haushoppe.art --no-notfound --no-nojekyll
 
