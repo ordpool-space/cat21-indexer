@@ -13,7 +13,7 @@ export class AppController {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>🐱 CAT-21 Indexer API</title>
+  <title>🟧 CAT-21 Indexer API</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, minimal-ui">
   <link rel="icon" href="/public/logo.svg">
@@ -22,7 +22,7 @@ export class AppController {
 
 <body class="markdown-body">
   <h1>
-    🐱 CAT-21 Indexer API
+    🟧 CAT-21 Indexer API
   </h1>
 
   <p>

@@ -13,7 +13,7 @@ async function bootstrap() {
   const config = app.get(ConfigService);
 
   const openApiConfig = new DocumentBuilder()
-    .setTitle('🐱 CAT-21 Indexer API')
+    .setTitle('🟧 CAT-21 Indexer API')
     .setDescription('Meow! Rescue the cats!')
     .setVersion('1.0')
     .build();
