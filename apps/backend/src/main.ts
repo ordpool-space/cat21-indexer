@@ -14,7 +14,7 @@ async function bootstrap() {
 
   const openApiConfig = new DocumentBuilder()
     .setTitle('🟧 CAT-21 Indexer API')
-    .setDescription('Meow! Rescue the cats!')
+    .setDescription('Meow! Signal your support for OP_CAT and mint a CAT-21 ordinal!')
     .setVersion('1.0')
     .build();
 

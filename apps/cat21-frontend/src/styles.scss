@@ -6,12 +6,9 @@
 
 @import "assets/public-pixel.scss";
 
-body {
-  font-family: "Public Pixel", sans-serif;
-  // font-weight: 300;
-  font-size: 1.1em;
+code {
+  font-size: $font-size-base;
 }
-
 
 strong {
   font-weight: 700;

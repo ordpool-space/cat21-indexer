@@ -26,7 +26,7 @@ export class AppController {
   </h1>
 
   <p>
-    Meow! Rescue the cats!
+    Meow! Signal your support for OP_CAT and mint a CAT-21 ordinal!
   </p>
 
   <ul>
