@@ -24,6 +24,9 @@ export class AppController {
 </head>
 
 <body class="markdown-body">
+
+  <img src="/public/genesis-cat-transparent.svg" width="50%">
+
   <h1>
     🟧 CAT-21 Indexer API
   </h1>
@@ -37,10 +40,16 @@ export class AppController {
       <a href="https://github.com/haushoppe/cat-21" target="_blank">CAT-21 Protocol Specification</a>
     </li>
     <li>
-      <a href="/open-api">OpenAPI UI</a>
+      <a href="https://cat21.space" target="_blank">Offical website (mainnet)</a>
     </li>
     <li>
-      <a href="/open-api-json">OpenAPI Specification</a>
+      <a href="https://cat21.space/testnet" target="_blank">Offical website (testnet)</a>
+    </li>
+    <li>
+      <a href="/open-api">Indexer: OpenAPI UI</a>
+    </li>
+    <li>
+      <a href="/open-api-json">Indexer: OpenAPI Specification</a>
     </li>
   </ul>
 

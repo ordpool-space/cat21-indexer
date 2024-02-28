@@ -22,7 +22,12 @@ export const appConfig: ApplicationConfig = {
     provideRouter(
       [
         { path: '', component: StartComponent },
-        { path: 'cat/:transactionId', component: DetailsComponent, data: { smallHeader: true }  },
+        { path: 'cat/:transactionId', component: DetailsComponent, data: { smallHeader: true }},
+
+        { path: 'testnet', component: StartComponent, data: { testnet: true }},
+        { path: 'testnet/cat/:transactionId', component: DetailsComponent, data: { smallHeader: true, testnet: true }},
+
+
         // { path: 'faq', component: FaqComponent },
         { path: '**', component: StartComponent },
       ],
