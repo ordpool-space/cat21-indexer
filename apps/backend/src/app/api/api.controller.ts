@@ -93,15 +93,15 @@ export class ApiController {
   }
 
   /**
-   * Get CAT-21 ls by blockId (hash of the block in hex format).
+   * Get CAT-21 ordinals by blockId (hash of the block in hex format).
    */
-  @Post('api/cats/by-block-id')
+  @Post('api/cats/by-block-id/:blockId')
   @HttpCode(200)
   @ApiOperation({ operationId: 'catsByBlockId' })
-  @ApiOkResponse({ type: Cat21, isArray: true })
   @ApiParam({ name: 'blockId', type: 'string', example: '000000000000000000018e3ea447b11385e3330348010e1b2418d0d8ae4e0ac7' })
-  async getCatsByBlockId(@Body() satRanges: [number, number][]): Promise<Cat21[]> {
-    return this.catService.findCatsBySatRanges(satRanges);
+  @ApiOkResponse({ type: Cat21, isArray: true })
+  async getCatsByBlockId(@Param('blockId') blockId: string): Promise<Cat21[]> {
+    return this.catService.findCatsByBlockId(blockId);
   }
 
   /**

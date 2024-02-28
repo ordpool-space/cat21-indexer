@@ -82,12 +82,36 @@ export class CatService {
   }
 
   /**
+   * Finds all CAT-21 ordinals (cached) that were minted in the given block.
+   *
+   * @param blockId - blockId (hash of the block in hex format)
+   * @returns Array of CAT-21 ordinals.
+   */
+  async findCatsByBlockId(blockId: string): Promise<Cat21[]> {
+
+    // something must have went very wrong?! we still have a count of zero?
+    // let's try again to build an index
+    if (!this.cats.length) {
+      await this.indexAllCats();
+    }
+
+    return this.cats.filter(cat => cat.blockId === blockId);
+  }
+
+  /**
    * Finds all CAT-21 ordinals (cached) whose sat value falls within any of the provided ranges.
    *
    * @param satRanges - Array of satoshi ranges to search for.
    * @returns Array of CAT-21 ordinals matching the sat ranges.
    */
   async findCatsBySatRanges(satRanges: [number, number][]): Promise<Cat21[]> {
+
+    // something must have went very wrong?! we still have a count of zero?
+    // let's try again to build an index
+    if (!this.cats.length) {
+      await this.indexAllCats();
+    }
+
     return this.cats.filter(cat =>
       satRanges.some(([start, end]) => cat.sat >= start && cat.sat <= end)
     );
