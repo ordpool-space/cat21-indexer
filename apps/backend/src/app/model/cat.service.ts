@@ -28,7 +28,7 @@ export class CatService {
     Logger.log('Initializing CatService', 'cat_service');
     await this.handleInterval(); // immediate execution upon module initialization
 
-    Logger.verbose(`Successfully indexed ${this.cats.length} CAT-21 assets! 😺`, 'cat_service');
+    Logger.verbose(`Successfully indexed ${this.cats.length} CAT-21 ordinals! 😺`, 'cat_service');
   }
 
   @Interval(1000 * 60 * 5) // every 5 minutes
@@ -64,7 +64,7 @@ export class CatService {
   }
 
   /**
-   * Retrieves all CAT-21 assets (cached)
+   * Retrieves all CAT-21 ordinals (cached)
    */
   async getAllCats(): Promise<Cat21[]> {
 
@@ -82,10 +82,10 @@ export class CatService {
   }
 
   /**
-   * Finds all CAT-21 assets (cached) whose sat value falls within any of the provided ranges.
+   * Finds all CAT-21 ordinals (cached) whose sat value falls within any of the provided ranges.
    *
    * @param satRanges - Array of satoshi ranges to search for.
-   * @returns Array of CAT-21 assets matching the sat ranges.
+   * @returns Array of CAT-21 ordinals matching the sat ranges.
    */
   async findCatsBySatRanges(satRanges: [number, number][]): Promise<Cat21[]> {
     return this.cats.filter(cat =>

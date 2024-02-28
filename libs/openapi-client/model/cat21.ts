@@ -13,11 +13,11 @@
 
 export interface Cat21 { 
     /**
-     * The transactionId (hash in hex format) where the CAT-21 asset was created / minted
+     * The transactionId (hash in hex format) where the CAT-21 ordinal was created / minted
      */
     transactionId: string;
     /**
-     * The blockId (hash in hex format) where the CAT-21 asset was created / minted
+     * The blockId (hash in hex format) where the CAT-21 ordinal was created / minted
      */
     blockId: string;
     /**
@@ -25,11 +25,11 @@ export interface Cat21 {
      */
     number: number;
     /**
-     * Just for information: The block height where the CAT-21 asset was created / minted
+     * Just for information: The block height where the CAT-21 ordinal was created / minted
      */
     blockHeight: number;
     /**
-     * Just for information: The block time where the CAT-21 asset was created / minted (Unit: seconds)
+     * Just for information: The block time where the CAT-21 ordinal was created / minted (Unit: seconds)
      */
     blockTime: number;
     /**

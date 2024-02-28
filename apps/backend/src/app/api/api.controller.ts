@@ -43,7 +43,7 @@ export class ApiController {
     private ordApiService: OrdApiService) { }
 
   /**
-   * Get all indexed CAT-21 assets (paged and cached)
+   * Get all indexed CAT-21 ordinals (paged and cached)
    */
   @Get(['api/cats/:itemsPerPage/:currentPage'])
   @ApiOperation({ operationId: 'cats' })
@@ -68,13 +68,13 @@ export class ApiController {
   }
 
   /**
-   * Get single CAT-21 asset by transactionId (cached)
+   * Get single CAT-21 ordinal by transactionId (cached)
    */
   @Get(['api/cat/:transactionId'])
   @ApiOperation({ operationId: 'cat' })
   @ApiParam({ name: 'transactionId', type: 'string', example: '98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892' })
   @ApiOkResponse({ type: Cat21SingleResult })
-  @ApiNotFoundResponse({ description: 'No CAT-21 asset indexed with this transactionId' })
+  @ApiNotFoundResponse({ description: 'No CAT-21 ordinal indexed with this transactionId' })
   @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
   async getCat(@Param('transactionId') transactionId: string): Promise<Cat21SingleResult> {
 
@@ -82,7 +82,7 @@ export class ApiController {
     const cats = findItemByTransactionId(allCats, transactionId)
 
     if (!cats.current) {
-      throw new NotFoundException('No CAT-21 asset indexed with this transactionId');
+      throw new NotFoundException('No CAT-21 ordinal indexed with this transactionId');
     }
 
     return {
@@ -93,7 +93,19 @@ export class ApiController {
   }
 
   /**
-   * Get CAT-21 assets by sat ranges.<br>
+   * Get CAT-21 ls by blockId (hash of the block in hex format).
+   */
+  @Post('api/cats/by-block-id')
+  @HttpCode(200)
+  @ApiOperation({ operationId: 'catsByBlockId' })
+  @ApiOkResponse({ type: Cat21, isArray: true })
+  @ApiParam({ name: 'blockId', type: 'string', example: '000000000000000000018e3ea447b11385e3330348010e1b2418d0d8ae4e0ac7' })
+  async getCatsByBlockId(@Body() satRanges: [number, number][]): Promise<Cat21[]> {
+    return this.catService.findCatsBySatRanges(satRanges);
+  }
+
+  /**
+   * Get CAT-21 ordinals by sat ranges.<br>
    * The sat ranges are the same ranges that you get from Ord.<br>
    * <strong>This API gives you super fast results, because the response is fully cached.</strong>
    *
@@ -145,7 +157,7 @@ export class ApiController {
   }
 
   /**
-   * Get CAT-21 assets for a list of UTXOs.<br>
+   * Get CAT-21 ordinals for a list of UTXOs.<br>
    * <strong>This APIs gives you significantly slower results, because the UTXOs are fetched from the Ord API on demand.</strong>
    *
    * <strong>Warning!</strong>

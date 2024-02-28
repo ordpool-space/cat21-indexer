@@ -4,10 +4,10 @@ import { Cat21 } from './cat21';
 
 export class Cat21PaginatedResult {
 
-  @ApiProperty({ description: 'An array of CAT-21 assets', type: Cat21, isArray: true })
+  @ApiProperty({ description: 'An array of CAT-21 ordinals', type: Cat21, isArray: true })
   cats: Cat21[];
 
-  @ApiProperty({ example: 100, description: 'Total number of all CAT-21 assets' })
+  @ApiProperty({ example: 100, description: 'Total number of all CAT-21 ordinals' })
   totalResults: number;
 
   @ApiProperty({ example: 12 })

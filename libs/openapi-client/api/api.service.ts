@@ -99,7 +99,7 @@ export class ApiService {
 
     /**
      * 
-     * Get single CAT-21 asset by transactionId (cached)
+     * Get single CAT-21 ordinal by transactionId (cached)
      * @param transactionId 
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
@@ -158,7 +158,7 @@ export class ApiService {
 
     /**
      * 
-     * Get all indexed CAT-21 assets (paged and cached)
+     * Get all indexed CAT-21 ordinals (paged and cached)
      * @param itemsPerPage 
      * @param currentPage 
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
@@ -221,7 +221,80 @@ export class ApiService {
 
     /**
      * 
-     * Get CAT-21 assets by sat ranges.&lt;br&gt; The sat ranges are the same ranges that you get from Ord.&lt;br&gt; &lt;strong&gt;This API gives you super fast results, because the response is fully cached.&lt;/strong&gt;  &lt;strong&gt;Warning!&lt;/strong&gt; In a CAT-21 mint transaction, only a single cat is created for the first satoshi of the first output.&lt;br&gt; So calling this API with [596964966600565, 596964966601111], [596964966601111, 596964966601657] will give you three cats!&lt;br&gt; If you want an exact match, call the API like this: [596964966600565, 596964966600565], [596964966601111, 596964966601111] &lt;br&gt; &lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the genesis cat&lt;/a&gt;&lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the second cat&lt;/a&gt;  Please make sure to sent a valid sat ranges input. Possible issues: - Sat ranges must be an array. - The number of sat ranges cannot exceed 1000. - Each sat range must be an array of exactly two numbers. - Each element in a sat range must be a number  Please call the API multiple times for a higher amount of ranges.
+     * Get CAT-21 ordinals by blockId (hash of the block in hex format).
+     * @param blockId 
+     * @param requestBody 
+     * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
+     * @param reportProgress flag to report request and response progress.
+     */
+    public catsByBlockId(blockId: string, requestBody: Array<string>, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Array<Cat21>>;
+    public catsByBlockId(blockId: string, requestBody: Array<string>, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Array<Cat21>>>;
+    public catsByBlockId(blockId: string, requestBody: Array<string>, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Array<Cat21>>>;
+    public catsByBlockId(blockId: string, requestBody: Array<string>, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
+        if (blockId === null || blockId === undefined) {
+            throw new Error('Required parameter blockId was null or undefined when calling catsByBlockId.');
+        }
+        if (requestBody === null || requestBody === undefined) {
+            throw new Error('Required parameter requestBody was null or undefined when calling catsByBlockId.');
+        }
+
+        let localVarHeaders = this.defaultHeaders;
+
+        let localVarHttpHeaderAcceptSelected: string | undefined = options && options.httpHeaderAccept;
+        if (localVarHttpHeaderAcceptSelected === undefined) {
+            // to determine the Accept header
+            const httpHeaderAccepts: string[] = [
+                'application/json'
+            ];
+            localVarHttpHeaderAcceptSelected = this.configuration.selectHeaderAccept(httpHeaderAccepts);
+        }
+        if (localVarHttpHeaderAcceptSelected !== undefined) {
+            localVarHeaders = localVarHeaders.set('Accept', localVarHttpHeaderAcceptSelected);
+        }
+
+        let localVarHttpContext: HttpContext | undefined = options && options.context;
+        if (localVarHttpContext === undefined) {
+            localVarHttpContext = new HttpContext();
+        }
+
+
+        // to determine the Content-Type header
+        const consumes: string[] = [
+            'application/json'
+        ];
+        const httpContentTypeSelected: string | undefined = this.configuration.selectHeaderContentType(consumes);
+        if (httpContentTypeSelected !== undefined) {
+            localVarHeaders = localVarHeaders.set('Content-Type', httpContentTypeSelected);
+        }
+
+        let responseType_: 'text' | 'json' | 'blob' = 'json';
+        if (localVarHttpHeaderAcceptSelected) {
+            if (localVarHttpHeaderAcceptSelected.startsWith('text')) {
+                responseType_ = 'text';
+            } else if (this.configuration.isJsonMime(localVarHttpHeaderAcceptSelected)) {
+                responseType_ = 'json';
+            } else {
+                responseType_ = 'blob';
+            }
+        }
+
+        let localVarPath = `/api/cats/by-block-id`;
+        return this.httpClient.request<Array<Cat21>>('post', `${this.configuration.basePath}${localVarPath}`,
+            {
+                context: localVarHttpContext,
+                body: requestBody,
+                responseType: <any>responseType_,
+                withCredentials: this.configuration.withCredentials,
+                headers: localVarHeaders,
+                observe: observe,
+                reportProgress: reportProgress
+            }
+        );
+    }
+
+    /**
+     * 
+     * Get CAT-21 ordinals by sat ranges.&lt;br&gt; The sat ranges are the same ranges that you get from Ord.&lt;br&gt; &lt;strong&gt;This API gives you super fast results, because the response is fully cached.&lt;/strong&gt;  &lt;strong&gt;Warning!&lt;/strong&gt; In a CAT-21 mint transaction, only a single cat is created for the first satoshi of the first output.&lt;br&gt; So calling this API with [596964966600565, 596964966601111], [596964966601111, 596964966601657] will give you three cats!&lt;br&gt; If you want an exact match, call the API like this: [596964966600565, 596964966600565], [596964966601111, 596964966601111] &lt;br&gt; &lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the genesis cat&lt;/a&gt;&lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the second cat&lt;/a&gt;  Please make sure to sent a valid sat ranges input. Possible issues: - Sat ranges must be an array. - The number of sat ranges cannot exceed 1000. - Each sat range must be an array of exactly two numbers. - Each element in a sat range must be a number  Please call the API multiple times for a higher amount of ranges.
      * @param requestBody Sat ranges to search for
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
@@ -290,7 +363,7 @@ export class ApiService {
 
     /**
      * 
-     * Get CAT-21 assets for a list of UTXOs.&lt;br&gt; &lt;strong&gt;This APIs gives you significantly slower results, because the UTXOs are fetched from the Ord API on demand.&lt;/strong&gt;  &lt;strong&gt;Warning!&lt;/strong&gt; In a CAT-21 mint transaction, only a single cat is created for the first satoshi of the first output.&lt;br&gt; We completely ignore a potential consolidation of UTXOs here. If someone accidentally joins two UTXOs with two CAT-21 together – then the sotoshis must be extracted so that both cats are visible again. &lt;br&gt; &lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the genesis cat&lt;/a&gt;&lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the second cat&lt;/a&gt;  Please make sure to sent a valid UTXOs input. Possible issues: - UTXOs must be an array. - The number of UTXOs cannot exceed 100. - Each UTXO must be a string. - Each UTXO must be in the format transactionId:number.  Please call the API multiple times for a higher amount of UTXOs.
+     * Get CAT-21 ordinals for a list of UTXOs.&lt;br&gt; &lt;strong&gt;This APIs gives you significantly slower results, because the UTXOs are fetched from the Ord API on demand.&lt;/strong&gt;  &lt;strong&gt;Warning!&lt;/strong&gt; In a CAT-21 mint transaction, only a single cat is created for the first satoshi of the first output.&lt;br&gt; We completely ignore a potential consolidation of UTXOs here. If someone accidentally joins two UTXOs with two CAT-21 together – then the sotoshis must be extracted so that both cats are visible again. &lt;br&gt; &lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the genesis cat&lt;/a&gt;&lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the second cat&lt;/a&gt;  Please make sure to sent a valid UTXOs input. Possible issues: - UTXOs must be an array. - The number of UTXOs cannot exceed 100. - Each UTXO must be a string. - Each UTXO must be in the format transactionId:number.  Please call the API multiple times for a higher amount of UTXOs.
      * @param requestBody List of UTXOs
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.

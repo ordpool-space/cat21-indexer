@@ -3,13 +3,13 @@ import { ApiProperty } from '@nestjs/swagger';
 export class Cat21 {
 
   @ApiProperty({
-    description: 'The transactionId (hash in hex format) where the CAT-21 asset was created / minted',
+    description: 'The transactionId (hash in hex format) where the CAT-21 ordinal was created / minted',
     example: '98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892'
   })
   transactionId: string;
 
   @ApiProperty({
-    description: 'The blockId (hash in hex format) where the CAT-21 asset was created / minted',
+    description: 'The blockId (hash in hex format) where the CAT-21 ordinal was created / minted',
     example: '000000000000000000018e3ea447b11385e3330348010e1b2418d0d8ae4e0ac7'
   })
   blockId: string;
@@ -21,13 +21,13 @@ export class Cat21 {
   number: number;
 
   @ApiProperty({
-    description: 'Just for information: The block height where the CAT-21 asset was created / minted',
+    description: 'Just for information: The block height where the CAT-21 ordinal was created / minted',
     example: 824205
   })
   blockHeight: number;
 
   @ApiProperty({
-    description: 'Just for information: The block time where the CAT-21 asset was created / minted (Unit: seconds)',
+    description: 'Just for information: The block time where the CAT-21 ordinal was created / minted (Unit: seconds)',
     example: 1704315886
   })
   blockTime: number;

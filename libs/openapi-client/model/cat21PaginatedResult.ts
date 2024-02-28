@@ -14,11 +14,11 @@ import { Cat21 } from './cat21';
 
 export interface Cat21PaginatedResult { 
     /**
-     * An array of CAT-21 assets
+     * An array of CAT-21 ordinals
      */
     cats: Array<Cat21>;
     /**
-     * Total number of all CAT-21 assets
+     * Total number of all CAT-21 ordinals
      */
     totalResults: number;
     itemsPerPage: number;
