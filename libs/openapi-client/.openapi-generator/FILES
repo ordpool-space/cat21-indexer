@@ -4,6 +4,7 @@ README.md
 api.module.ts
 api/api.service.ts
 api/api.ts
+api/testnetApi.service.ts
 configuration.ts
 encoder.ts
 git_push.sh
@@ -14,5 +15,6 @@ model/cat21SingleResult.ts
 model/cat21SingleResultCat.ts
 model/errorResponse.ts
 model/models.ts
+model/statusResult.ts
 param.ts
 variables.ts

@@ -10,6 +10,9 @@ export class AppController {
   @ApiExcludeEndpoint()
   @Header('Cache-Control', 'public, max-age=' + oneHourInSeconds + ', immutable')
   getStart(): string {
+
+    const uptime = this.formatSeconds(process.uptime())
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,7 +43,22 @@ export class AppController {
       <a href="/open-api-json">OpenAPI Specification</a>
     </li>
   </ul>
+
+  <hr>
+
+  Uptime: ${ uptime }
 </html>`;
+  }
+
+  formatSeconds(seconds: number) {
+    const pad = function (s: number) {
+      return (s < 10 ? '0' : '') + s;
+    }
+    const hours = Math.floor(seconds / (60 * 60));
+    const minutes = Math.floor(seconds % (60 * 60) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    return pad(hours) + ':' + pad(minutes) + ':' + pad(secs);
   }
 
   @Get('/robots.txt')

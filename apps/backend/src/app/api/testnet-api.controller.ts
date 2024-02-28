@@ -36,24 +36,25 @@ import { findItemByTransactionId } from './find-item-by-transaction-id';
 
 
 
-@ApiTags('api')
+@ApiTags('testnet-api')
 @Controller()
-export class ApiController {
+export class TestnetApiController {
 
   private catService: CatService;
-  private network: '' | 'testnet' = '';
+  private network: '' | 'testnet' = 'testnet';
+
 
   constructor(
     private ordApiService: OrdApiService,
     private moduleRef: ModuleRef) {
-    this.catService = this.moduleRef.get<CatService>('');
+    this.catService = this.moduleRef.get<CatService>('testnet');
   }
 
   /**
-   * Returns some stats about the indexer
+   * Returns some stats about the testnet indexer
    */
-  @Get(['api/status'])
-  @ApiOperation({ operationId: 'status' })
+  @Get(['testnet/api/status'])
+  @ApiOperation({ operationId: 'testnet-status' })
   @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
   async getStatus(): Promise<StatusResult> {
 
@@ -69,10 +70,10 @@ export class ApiController {
   }
 
   /**
-   * Get all indexed CAT-21 ordinals (paged and cached).
+   * Get all indexed CAT-21 ordinals (paged and cached) for testnet.
    */
-  @Get(['api/cats/:itemsPerPage/:currentPage'])
-  @ApiOperation({ operationId: 'cats' })
+  @Get(['testnet/api/cats/:itemsPerPage/:currentPage'])
+  @ApiOperation({ operationId: 'testnet-cats' })
   @ApiParam({ name: 'itemsPerPage', type: 'number', example: 12 })
   @ApiParam({ name: 'currentPage', type: 'number', example: 1 })
   @ApiOkResponse({ type: Cat21PaginatedResult })
@@ -94,11 +95,11 @@ export class ApiController {
   }
 
   /**
-   * Get single CAT-21 ordinal by transactionId (cached).
+   * Get single CAT-21 ordinal by transactionId (cached) for testnet.
    */
-  @Get(['api/cat/:transactionId'])
-  @ApiOperation({ operationId: 'cat' })
-  @ApiParam({ name: 'transactionId', type: 'string', example: '98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892' })
+  @Get(['testnet/api/cat/:transactionId'])
+  @ApiOperation({ operationId: 'testnet-cat' })
+  @ApiParam({ name: 'transactionId', type: 'string', example: '691698aad93884f74fc919fcc6f98e099aaca7e5edb7eb8009f93f6c9d7c16e0' })
   @ApiOkResponse({ type: Cat21SingleResult })
   @ApiNotFoundResponse({ description: 'No CAT-21 ordinal indexed with this transactionId' })
   @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
@@ -119,42 +120,23 @@ export class ApiController {
   }
 
   /**
-   * Get CAT-21 ordinals by blockId (hash of the block in hex format).
+   * Get CAT-21 ordinals by blockId (hash of the block in hex format) for testnet.
    */
-  @Post('api/cats/by-block-id/:blockId')
+  @Post('testnet/api/cats/by-block-id/:blockId')
   @HttpCode(200)
-  @ApiOperation({ operationId: 'catsByBlockId' })
-  @ApiParam({ name: 'blockId', type: 'string', example: '000000000000000000018e3ea447b11385e3330348010e1b2418d0d8ae4e0ac7' })
+  @ApiOperation({ operationId: 'testnet-catsByBlockId' })
+  @ApiParam({ name: 'blockId', type: 'string', example: '000000000000006b21ebe7df90e156b334dcb5e18485719f40bb8091ffd6272b' })
   @ApiOkResponse({ type: Cat21, isArray: true })
   async getCatsByBlockId(@Param('blockId') blockId: string): Promise<Cat21[]> {
     return this.catService.findCatsByBlockId(blockId);
   }
 
   /**
-   * Get CAT-21 ordinals by sat ranges.<br>
-   * The sat ranges are the same ranges that you get from Ord.<br>
-   * <strong>This API gives you super fast results, because the response is fully cached.</strong>
-   *
-   * <strong>Warning!</strong>
-   * In a CAT-21 mint transaction, only a single cat is created for the first satoshi of the first output.<br>
-   * So calling this API with [596964966600565, 596964966601111], [596964966601111, 596964966601657] will give you three cats!<br>
-   * If you want an exact match, call the API like this: [596964966600565, 596964966600565], [596964966601111, 596964966601111]
-   * <br>
-   * <br>
-   * Test data: <a href="https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0" target="_blank">First Output of the genesis cat</a><br>
-   * Test data: <a href="https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0" target="_blank">First Output of the second cat</a>
-   *
-   * Please make sure to sent a valid sat ranges input. Possible issues:
-   * - Sat ranges must be an array.
-   * - The number of sat ranges cannot exceed 1000.
-   * - Each sat range must be an array of exactly two numbers.
-   * - Each element in a sat range must be a number
-   *
-   * Please call the API multiple times for a higher amount of ranges.
+   * Get CAT-21 ordinals by sat ranges for testnet.
    */
-  @Post('api/cats/by-sat-ranges')
+  @Post('testnet/api/cats/by-sat-ranges')
   @HttpCode(200)
-  @ApiOperation({ operationId: 'catsBySatRanges' })
+  @ApiOperation({ operationId: 'testnet-catsBySatRanges' })
   @ApiOkResponse({ type: Cat21, isArray: true })
   @ApiBadRequestResponse({
     description: 'Invalid sat ranges input. Possible issues: \n' +
@@ -172,9 +154,9 @@ export class ApiController {
         items: {
           type: 'number',
         },
-        example: [596964966600565, 596964966601111],
+        example: [1721703178595431, 1721703178596431],
       },
-      example: [[596964966600565, 596964966601111], [596964966601111, 596964966601657]],
+      example: [[1721703178595431, 1721703178596431], [1721703178606431, 1721703178607431]],
     }
   })
   @UsePipes(new SatRangesValidationPipe())
@@ -183,29 +165,11 @@ export class ApiController {
   }
 
   /**
-   * Get CAT-21 ordinals for a list of UTXOs.<br>
-   * <strong>This APIs gives you significantly slower results, because the UTXOs are fetched from the Ord API on demand.</strong>
-   *
-   * <strong>Warning!</strong>
-   * In a CAT-21 mint transaction, only a single cat is created for the first satoshi of the first output.<br>
-   * We completely ignore a potential consolidation of UTXOs here.
-   * If someone accidentally joins two UTXOs with two CAT-21 together – then the sotoshis must be extracted so that both cats are visible again.
-   * <br>
-   * <br>
-   * Test data: <a href="https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0" target="_blank">First Output of the genesis cat</a><br>
-   * Test data: <a href="https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0" target="_blank">First Output of the second cat</a>
-   *
-   * Please make sure to sent a valid UTXOs input. Possible issues:
-   * - UTXOs must be an array.
-   * - The number of UTXOs cannot exceed 100.
-   * - Each UTXO must be a string.
-   * - Each UTXO must be in the format transactionId:number.
-   *
-   * Please call the API multiple times for a higher amount of UTXOs.
+   * Get CAT-21 ordinals for a list of UTXOs for testnet.
    */
-  @Post('api/cats/by-utxos')
+  @Post('testnet/api/cats/by-utxos')
   @HttpCode(200)
-  @ApiOperation({ operationId: 'catsByUtxos' })
+  @ApiOperation({ operationId: 'testnet-catsByUtxos' })
   @ApiOkResponse({ type: Cat21, isArray: true })
   @ApiBadRequestResponse({
     description: 'Invalid UTXOs input. Possible issues: \n' +
@@ -221,9 +185,9 @@ export class ApiController {
       type: 'array',
       items: {
         type: 'string',
-        example: '98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0',
+        example: '691698aad93884f74fc919fcc6f98e099aaca7e5edb7eb8009f93f6c9d7c16e0:0',
       },
-      example: ['98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0', '90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0'],
+      example: ['691698aad93884f74fc919fcc6f98e099aaca7e5edb7eb8009f93f6c9d7c16e0:0', 'd5f01585b89b0d87537451f3fbec0e406bf3f5d7082273eff79b8be361402930:0'],
     }
   })
   @UsePipes(new UtxosValidationPipe())

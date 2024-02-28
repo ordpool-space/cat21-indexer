@@ -5,10 +5,11 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
 import { ApiController } from './api/api.controller';
+import { TestnetApiController } from './api/testnet-api.controller';
+
 import { configuration, validationSchema } from './app.configuration';
 import { AppController } from './app.controller';
 import { BlockchairApiService } from './model/blockchair-api.service';
-import { CacheService } from './model/cache.service';
 import { CatService } from './model/cat.service';
 import { EsploraApiService } from './model/esplora-api.service';
 import { OrdApiService } from './model/ord-api.service';
@@ -32,14 +33,26 @@ import { OrdApiService } from './model/ord-api.service';
   ],
   controllers: [
     AppController,
-    ApiController
+    ApiController,
+    TestnetApiController
   ],
   providers: [
-    CacheService,
-    CatService,
     BlockchairApiService,
     EsploraApiService,
-    OrdApiService
+    OrdApiService,
+
+    // registers CatService for mainnet and testnet
+    ...['', 'testnet'].map((network: '' | 'testnet') => ({
+      provide: network,
+      useFactory: (
+        blockchairApi: BlockchairApiService,
+        esploraApi: EsploraApiService,
+        ordApi: OrdApiService
+      ) => {
+        return new CatService(network, blockchairApi, esploraApi, ordApi);
+      },
+      inject: [BlockchairApiService, EsploraApiService, OrdApiService]
+    })),
   ]
 })
 export class AppModule { }

@@ -14,8 +14,11 @@ import { delay } from '../utils/delay';
 export class CatService {
 
   private cats: Cat21[] = [];
+  lastSuccessfulExecution: undefined | string
 
-  constructor(private blockchairApi: BlockchairApiService,
+  constructor(
+    private network: '' | 'testnet',
+    private blockchairApi: BlockchairApiService,
     private esploraApi: EsploraApiService,
     private ordApi: OrdApiService) {
   }
@@ -25,10 +28,10 @@ export class CatService {
    */
   async onModuleInit() {
     // return; // while debugging
-    Logger.log('Initializing CatService', 'cat_service');
+    Logger.log('Initializing CatService', 'cat_service_');
     await this.handleInterval(); // immediate execution upon module initialization
 
-    Logger.verbose(`Successfully indexed ${this.cats.length} CAT-21 ordinals! 😺`, 'cat_service');
+    Logger.verbose(`Successfully indexed ${this.cats.length} CAT-21 ordinals! 😺`, 'cat_service_' + this.network);
   }
 
   @Interval(1000 * 60 * 5) // every 5 minutes
@@ -39,22 +42,23 @@ export class CatService {
   private async indexAllCats() {
 
     try {
-      const transactions = await this.blockchairApi.fetchAllCat21Transactions();
+      const transactions = await this.blockchairApi.fetchAllCat21Transactions(100, this.network);
 
       if (transactions.length > this.cats.length) {
 
-        Logger.verbose(`Found ${transactions.length} CAT-21 transactions. Trying to update the cache...`, 'cat_service');
+        Logger.verbose(`Found ${transactions.length} CAT-21 transactions. Trying to update the cache...`, 'cat_service_' + this.network);
         const cats = this.transactionsToCats(transactions);
 
-        Logger.verbose(`Adding block information from esplora...`, 'cat_service');
+        Logger.verbose(`Adding block information from esplora...`, 'cat_service_' + this.network);
         await this.addBlockInformation(cats);
 
-        Logger.verbose(`Adding output information from ord...`, 'cat_service');
+        Logger.verbose(`Adding output information from ord...`, 'cat_service_' + this.network);
         await this.addOutputInformation(cats);
 
         this.cats = cats;
+        this.lastSuccessfulExecution = (new Date()).toISOString();
       } else {
-        // Logger.verbose(`Found ${transactions.length} CAT-21 transactions but there are already ${this.cats.length} cached!`, 'cat_service');
+        // Logger.verbose(`Found ${transactions.length} CAT-21 transactions but there are already ${this.cats.length} cached!`, 'cat_service_' + this.network);
       }
     } catch (error) {
       Logger.error(`** Error indexing all cats! **`, error);
@@ -133,7 +137,7 @@ export class CatService {
           first = false;
         }
 
-        const transaction = await this.esploraApi.fetchTransaction(cat.transactionId);
+        const transaction = await this.esploraApi.fetchTransaction(cat.transactionId, this.network);
         cat.blockId = transaction.status.block_hash || 'unconfirmed??'
         cat.blockTime = transaction.status.block_time || -1;
 
@@ -153,7 +157,7 @@ export class CatService {
     for (const cat of cats) {
       try {
 
-        const firstOutput = await this.ordApi.fetchOutput(cat.transactionId + ':0');
+        const firstOutput = await this.ordApi.fetchOutput(cat.transactionId + ':0', this.network);
         cat.value = firstOutput.value;
         // if sat tracking is disabled (or not tracked yet)
         cat.sat = firstOutput.sat_ranges && firstOutput.sat_ranges.length && firstOutput.sat_ranges[0][0];

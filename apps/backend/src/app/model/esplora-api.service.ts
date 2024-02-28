@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
@@ -34,31 +34,5 @@ export class EsploraApiService {
         `${this.BASE_URL}/${network ? network + '/' : ''}api/tx/${txId}`);
       return response.data;
     });
-  }
-
-  /**
-   * Enriches a list of transactions from Blockchair with additional data from the Esplora API,
-   * processing each transaction sequentially to avoid hitting rate limits.
-   *
-   * @param transactions - Array of transactions from Blockchair.
-   * @returns - A promise containing an array of enriched transactions.
-   */
-  async enrichTransactions(transactions: { hash: string }[]): Promise<Transaction[]> {
-
-    const enrichedTransactions: Transaction[] = [];
-
-    for (const transaction of transactions) {
-      try {
-
-        const txn = await this.fetchTransaction(transaction.hash);
-        enrichedTransactions.push(txn);
-
-      } catch (error) {
-        Logger.warn(`** Error enriching data for transaction ${transaction.hash }. **`, error);
-        throw error;
-      }
-    }
-
-    return enrichedTransactions;
   }
 }

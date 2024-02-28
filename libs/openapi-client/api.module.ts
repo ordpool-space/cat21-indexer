@@ -3,6 +3,7 @@ import { Configuration } from './configuration';
 import { HttpClient } from '@angular/common/http';
 
 import { ApiService } from './api/api.service';
+import { TestnetApiService } from './api/testnetApi.service';
 
 @NgModule({
   imports:      [],

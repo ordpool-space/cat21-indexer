@@ -25,12 +25,17 @@ export class BlockchairApiService {
    */
   private async fetchCat21Transactions(limit: number, offset: number, network: '' | 'testnet' = ''): Promise<TransactionBlockchair[]> {
 
+    // regarding the date:
+    // on testnet there are some old lockTime=21 transactions from 2017
+    // but ord does not provide sat-ranges for these old times
+    // solution: search only for transactions since 2023
+
     return retry(async () => {
       const response = await axios.get<ApiResponseBlockchair>(
         `${this.BASE_URL}/${network ? network + '/' : ''}transactions`,
         {
           params: {
-            'q': 'lock_time(21)',
+            'q': 'lock_time(21),time(2023-01-01..)',
             limit,
             offset
           }

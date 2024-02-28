@@ -38,7 +38,7 @@ import { Configuration }                                     from '../configurat
 @Injectable({
   providedIn: 'root'
 })
-export class ApiService {
+export class TestnetApiService {
 
     protected basePath = 'http://localhost';
     public defaultHeaders = new HttpHeaders();
@@ -101,17 +101,17 @@ export class ApiService {
 
     /**
      * 
-     * Get single CAT-21 ordinal by transactionId (cached).
+     * Get single CAT-21 ordinal by transactionId (cached) for testnet.
      * @param transactionId 
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public cat(transactionId: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Cat21SingleResult>;
-    public cat(transactionId: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Cat21SingleResult>>;
-    public cat(transactionId: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Cat21SingleResult>>;
-    public cat(transactionId: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
+    public testnetCat(transactionId: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Cat21SingleResult>;
+    public testnetCat(transactionId: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Cat21SingleResult>>;
+    public testnetCat(transactionId: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Cat21SingleResult>>;
+    public testnetCat(transactionId: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
         if (transactionId === null || transactionId === undefined) {
-            throw new Error('Required parameter transactionId was null or undefined when calling cat.');
+            throw new Error('Required parameter transactionId was null or undefined when calling testnetCat.');
         }
 
         let localVarHeaders = this.defaultHeaders;
@@ -145,7 +145,7 @@ export class ApiService {
             }
         }
 
-        let localVarPath = `/api/cat/${this.configuration.encodeParam({name: "transactionId", value: transactionId, in: "path", style: "simple", explode: false, dataType: "string", dataFormat: undefined})}`;
+        let localVarPath = `/testnet/api/cat/${this.configuration.encodeParam({name: "transactionId", value: transactionId, in: "path", style: "simple", explode: false, dataType: "string", dataFormat: undefined})}`;
         return this.httpClient.request<Cat21SingleResult>('get', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
@@ -160,21 +160,21 @@ export class ApiService {
 
     /**
      * 
-     * Get all indexed CAT-21 ordinals (paged and cached).
+     * Get all indexed CAT-21 ordinals (paged and cached) for testnet.
      * @param itemsPerPage 
      * @param currentPage 
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public cats(itemsPerPage: number, currentPage: number, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Cat21PaginatedResult>;
-    public cats(itemsPerPage: number, currentPage: number, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Cat21PaginatedResult>>;
-    public cats(itemsPerPage: number, currentPage: number, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Cat21PaginatedResult>>;
-    public cats(itemsPerPage: number, currentPage: number, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
+    public testnetCats(itemsPerPage: number, currentPage: number, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Cat21PaginatedResult>;
+    public testnetCats(itemsPerPage: number, currentPage: number, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Cat21PaginatedResult>>;
+    public testnetCats(itemsPerPage: number, currentPage: number, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Cat21PaginatedResult>>;
+    public testnetCats(itemsPerPage: number, currentPage: number, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
         if (itemsPerPage === null || itemsPerPage === undefined) {
-            throw new Error('Required parameter itemsPerPage was null or undefined when calling cats.');
+            throw new Error('Required parameter itemsPerPage was null or undefined when calling testnetCats.');
         }
         if (currentPage === null || currentPage === undefined) {
-            throw new Error('Required parameter currentPage was null or undefined when calling cats.');
+            throw new Error('Required parameter currentPage was null or undefined when calling testnetCats.');
         }
 
         let localVarHeaders = this.defaultHeaders;
@@ -208,7 +208,7 @@ export class ApiService {
             }
         }
 
-        let localVarPath = `/api/cats/${this.configuration.encodeParam({name: "itemsPerPage", value: itemsPerPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}/${this.configuration.encodeParam({name: "currentPage", value: currentPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}`;
+        let localVarPath = `/testnet/api/cats/${this.configuration.encodeParam({name: "itemsPerPage", value: itemsPerPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}/${this.configuration.encodeParam({name: "currentPage", value: currentPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}`;
         return this.httpClient.request<Cat21PaginatedResult>('get', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
@@ -223,17 +223,17 @@ export class ApiService {
 
     /**
      * 
-     * Get CAT-21 ordinals by blockId (hash of the block in hex format).
+     * Get CAT-21 ordinals by blockId (hash of the block in hex format) for testnet.
      * @param blockId 
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public catsByBlockId(blockId: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Array<Cat21>>;
-    public catsByBlockId(blockId: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Array<Cat21>>>;
-    public catsByBlockId(blockId: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Array<Cat21>>>;
-    public catsByBlockId(blockId: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
+    public testnetCatsByBlockId(blockId: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Array<Cat21>>;
+    public testnetCatsByBlockId(blockId: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Array<Cat21>>>;
+    public testnetCatsByBlockId(blockId: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Array<Cat21>>>;
+    public testnetCatsByBlockId(blockId: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
         if (blockId === null || blockId === undefined) {
-            throw new Error('Required parameter blockId was null or undefined when calling catsByBlockId.');
+            throw new Error('Required parameter blockId was null or undefined when calling testnetCatsByBlockId.');
         }
 
         let localVarHeaders = this.defaultHeaders;
@@ -267,7 +267,7 @@ export class ApiService {
             }
         }
 
-        let localVarPath = `/api/cats/by-block-id/${this.configuration.encodeParam({name: "blockId", value: blockId, in: "path", style: "simple", explode: false, dataType: "string", dataFormat: undefined})}`;
+        let localVarPath = `/testnet/api/cats/by-block-id/${this.configuration.encodeParam({name: "blockId", value: blockId, in: "path", style: "simple", explode: false, dataType: "string", dataFormat: undefined})}`;
         return this.httpClient.request<Array<Cat21>>('post', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
@@ -282,17 +282,17 @@ export class ApiService {
 
     /**
      * 
-     * Get CAT-21 ordinals by sat ranges.&lt;br&gt; The sat ranges are the same ranges that you get from Ord.&lt;br&gt; &lt;strong&gt;This API gives you super fast results, because the response is fully cached.&lt;/strong&gt;  &lt;strong&gt;Warning!&lt;/strong&gt; In a CAT-21 mint transaction, only a single cat is created for the first satoshi of the first output.&lt;br&gt; So calling this API with [596964966600565, 596964966601111], [596964966601111, 596964966601657] will give you three cats!&lt;br&gt; If you want an exact match, call the API like this: [596964966600565, 596964966600565], [596964966601111, 596964966601111] &lt;br&gt; &lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the genesis cat&lt;/a&gt;&lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the second cat&lt;/a&gt;  Please make sure to sent a valid sat ranges input. Possible issues: - Sat ranges must be an array. - The number of sat ranges cannot exceed 1000. - Each sat range must be an array of exactly two numbers. - Each element in a sat range must be a number  Please call the API multiple times for a higher amount of ranges.
+     * Get CAT-21 ordinals by sat ranges for testnet.
      * @param requestBody Sat ranges to search for
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public catsBySatRanges(requestBody: Array<Array<number>>, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Array<Cat21>>;
-    public catsBySatRanges(requestBody: Array<Array<number>>, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Array<Cat21>>>;
-    public catsBySatRanges(requestBody: Array<Array<number>>, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Array<Cat21>>>;
-    public catsBySatRanges(requestBody: Array<Array<number>>, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
+    public testnetCatsBySatRanges(requestBody: Array<Array<number>>, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Array<Cat21>>;
+    public testnetCatsBySatRanges(requestBody: Array<Array<number>>, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Array<Cat21>>>;
+    public testnetCatsBySatRanges(requestBody: Array<Array<number>>, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Array<Cat21>>>;
+    public testnetCatsBySatRanges(requestBody: Array<Array<number>>, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
         if (requestBody === null || requestBody === undefined) {
-            throw new Error('Required parameter requestBody was null or undefined when calling catsBySatRanges.');
+            throw new Error('Required parameter requestBody was null or undefined when calling testnetCatsBySatRanges.');
         }
 
         let localVarHeaders = this.defaultHeaders;
@@ -335,7 +335,7 @@ export class ApiService {
             }
         }
 
-        let localVarPath = `/api/cats/by-sat-ranges`;
+        let localVarPath = `/testnet/api/cats/by-sat-ranges`;
         return this.httpClient.request<Array<Cat21>>('post', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
@@ -351,17 +351,17 @@ export class ApiService {
 
     /**
      * 
-     * Get CAT-21 ordinals for a list of UTXOs.&lt;br&gt; &lt;strong&gt;This APIs gives you significantly slower results, because the UTXOs are fetched from the Ord API on demand.&lt;/strong&gt;  &lt;strong&gt;Warning!&lt;/strong&gt; In a CAT-21 mint transaction, only a single cat is created for the first satoshi of the first output.&lt;br&gt; We completely ignore a potential consolidation of UTXOs here. If someone accidentally joins two UTXOs with two CAT-21 together – then the sotoshis must be extracted so that both cats are visible again. &lt;br&gt; &lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the genesis cat&lt;/a&gt;&lt;br&gt; Test data: &lt;a href&#x3D;\&quot;https://ordinals.com/output/90dcf7825be098d1700014f15c6e4b5f99371d61cc7fc40cd5c3ae9228c64290:0\&quot; target&#x3D;\&quot;_blank\&quot;&gt;First Output of the second cat&lt;/a&gt;  Please make sure to sent a valid UTXOs input. Possible issues: - UTXOs must be an array. - The number of UTXOs cannot exceed 100. - Each UTXO must be a string. - Each UTXO must be in the format transactionId:number.  Please call the API multiple times for a higher amount of UTXOs.
+     * Get CAT-21 ordinals for a list of UTXOs for testnet.
      * @param requestBody List of UTXOs
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public catsByUtxos(requestBody: Array<string>, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Array<Cat21>>;
-    public catsByUtxos(requestBody: Array<string>, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Array<Cat21>>>;
-    public catsByUtxos(requestBody: Array<string>, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Array<Cat21>>>;
-    public catsByUtxos(requestBody: Array<string>, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
+    public testnetCatsByUtxos(requestBody: Array<string>, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<Array<Cat21>>;
+    public testnetCatsByUtxos(requestBody: Array<string>, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<Array<Cat21>>>;
+    public testnetCatsByUtxos(requestBody: Array<string>, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<Array<Cat21>>>;
+    public testnetCatsByUtxos(requestBody: Array<string>, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
         if (requestBody === null || requestBody === undefined) {
-            throw new Error('Required parameter requestBody was null or undefined when calling catsByUtxos.');
+            throw new Error('Required parameter requestBody was null or undefined when calling testnetCatsByUtxos.');
         }
 
         let localVarHeaders = this.defaultHeaders;
@@ -404,7 +404,7 @@ export class ApiService {
             }
         }
 
-        let localVarPath = `/api/cats/by-utxos`;
+        let localVarPath = `/testnet/api/cats/by-utxos`;
         return this.httpClient.request<Array<Cat21>>('post', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
@@ -420,14 +420,14 @@ export class ApiService {
 
     /**
      * 
-     * Returns some stats about the indexer
+     * Returns some stats about the testnet indexer
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      */
-    public status(observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<StatusResult>;
-    public status(observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<StatusResult>>;
-    public status(observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<StatusResult>>;
-    public status(observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
+    public testnetStatus(observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<StatusResult>;
+    public testnetStatus(observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpResponse<StatusResult>>;
+    public testnetStatus(observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<HttpEvent<StatusResult>>;
+    public testnetStatus(observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext}): Observable<any> {
 
         let localVarHeaders = this.defaultHeaders;
 
@@ -460,7 +460,7 @@ export class ApiService {
             }
         }
 
-        let localVarPath = `/api/status`;
+        let localVarPath = `/testnet/api/status`;
         return this.httpClient.request<StatusResult>('get', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
