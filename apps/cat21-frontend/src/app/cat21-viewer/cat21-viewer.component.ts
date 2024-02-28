@@ -5,6 +5,7 @@ import { Cat21ParserService, CatTraits, ParsedCat21 } from 'ordpool-parser';
 
 import { NoSanitizePipe } from '../no-sanitize.pipe';
 import { Cat21 } from '../openapi-client';
+import { CapitalizeFirstPipe } from './capitalize-first.pipe';
 import { ShortenStringPipe } from './shorten-string.pipe';
 
 
@@ -19,7 +20,8 @@ import { ShortenStringPipe } from './shorten-string.pipe';
     NgbTooltip,
     NgStyle,
     NgClass,
-    ShortenStringPipe
+    ShortenStringPipe,
+    CapitalizeFirstPipe
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true

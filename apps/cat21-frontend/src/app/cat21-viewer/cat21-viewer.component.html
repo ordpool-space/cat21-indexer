@@ -72,13 +72,13 @@
         </tr>
 
         <tr>
-          <td><b ngbTooltip="Regular or Inverted color palette. There is a 50% chance to receive an inverted cat.">i</b>Pal&shy;ette&nbsp;</td>
-          <td>{{ traits.inverted ? 'Inverted' : 'Regular' }}</td>
+          <td><b ngbTooltip="The gender (sex) of a cat. There is a 50% chance to receive a female cat.">i</b>Gender</td>
+          <td>{{ traits.gender | capitalizeFirst }}</td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="The gorgeous laser eyes trait. There is a 10% chance to receive a cat with red laser eyes, 10% chance for green, 10% chance for blue. There is a 70% chance to receive no laser eyes at all.">i</b>Laser Eyes</td>
-          <td>{{ traits.laserEyes.charAt(0).toUpperCase() + traits.laserEyes.slice(1) }}</td>
+          <td>{{ traits.laserEyes | capitalizeFirst}}</td>
         </tr>
 
         <tr>
@@ -104,6 +104,11 @@
         <tr>
           <td><b ngbTooltip="Design facing of the cat: Left or Right. 50% chance.">i</b>Facing</td>
           <td>{{ traits.designFacing }}</td>
+        </tr>
+
+        <tr>
+          <td><b ngbTooltip="The crown trait. There is a 10% chance to receive a cat with a crown.">i</b>Crown</td>
+          <td>{{ traits.crown ? traits.orangeBackground ? 'Diamond' : 'Gold'  : 'None' }}</td>
         </tr>
 
       </tbody>
