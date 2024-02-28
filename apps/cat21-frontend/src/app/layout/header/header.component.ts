@@ -17,6 +17,6 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class HeaderComponent {
-
+  @Input() testnet: boolean | null = false;
   @Input() smallHeader: boolean | null = false;
 }

@@ -1,11 +1,11 @@
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgbPagination } from '@ng-bootstrap/ng-bootstrap';
-import { EMPTY, map, Observable, retry, startWith } from 'rxjs';
+import { combineLatest, map, retry, startWith, switchMap } from 'rxjs';
 
 import { Cat21ViewerComponent } from '../cat21-viewer/cat21-viewer.component';
-import { ApiService, Cat21, Cat21PaginatedResult, TestnetApiService } from '../openapi-client';
+import { ApiService, TestnetApiService } from '../openapi-client';
 
 
 @Component({
@@ -25,62 +25,54 @@ import { ApiService, Cat21, Cat21PaginatedResult, TestnetApiService } from '../o
 })
 export class StartComponent {
 
+  private defaultItemsPerPage = 12;
+  private lastTotalResults = 0;
+
   private api = inject(ApiService);
   private testnetApi = inject(TestnetApiService);
-  private isTestnet = false;
+  private router = inject(Router);
+
+  routing$ = inject(ActivatedRoute).paramMap.pipe(
+    map(paramMap => ({
+      itemsPerPage: parseInt(paramMap.get('itemsPerPage') || '') || this.defaultItemsPerPage,
+      currentPage: parseInt(paramMap.get('currentPage') || '') || 1
+    }))
+  );
 
   testnet$ = inject(ActivatedRoute).data.pipe(
     map(data => !!data.testnet),
   );
 
-  defaultItemsPerPage = 12;
-  catsPaginated$: Observable<{
-    cats: Array<Cat21 | undefined>;
-    totalResults: number;
-    itemsPerPage: number;
-    currentPage: number;
-  }> = EMPTY;
+  catsPaginated$ = combineLatest([
+    this.routing$,
+    this.testnet$
+  ]).pipe(
+    switchMap(([{ itemsPerPage, currentPage }, testnet]) => {
 
-
-  constructor() {
-    this.testnet$.subscribe(testnet => {
-      this.isTestnet = testnet;
-      this.catsPaginated$ = this.loadCats()
+      return (!testnet ?
+         this.api.cats(itemsPerPage, currentPage) :
+         this.testnetApi.testnetCats(itemsPerPage, currentPage)
+      ).pipe(
+        retry({
+          count: 3,
+          delay: 1000
+        }),
+        startWith(this.emptyResult(itemsPerPage, currentPage))
+      );
     })
+  );
 
-  }
-
-  emptyResult(totalResults: number, itemsPerPage: number, currentPage: number) {
+  emptyResult(itemsPerPage: number, currentPage: number) {
     return {
       cats: new Array(itemsPerPage), // array with x times undefined, which renders the "Loading..." text
-      totalResults,
+      totalResults: this.lastTotalResults,
       itemsPerPage,
       currentPage,
     }
   }
 
-  loadCats(totalResults?: number, itemsPerPage?: number, currentPage = 1) {
-
-    totalResults = totalResults || this.defaultItemsPerPage;
-    itemsPerPage = itemsPerPage || this.defaultItemsPerPage;
-
-    let api: Observable<Cat21PaginatedResult>;
-    if (!this.isTestnet) {
-      api = this.api.cats(itemsPerPage, currentPage);
-    } else {
-      api = this.testnetApi.testnetCats(itemsPerPage, currentPage);
-    }
-
-    return api.pipe(
-      retry({
-        count: 3,
-        delay: 1000
-      }),
-      startWith(this.emptyResult(totalResults, itemsPerPage, currentPage))
-    );
-  }
-
-  changePage(totalResults: number, itemsPerPage: number, currentPage: number) {
-    this.catsPaginated$ = this.loadCats(totalResults, itemsPerPage, currentPage);
+  changePage(totalResults: number, itemsPerPage: number, currentPage: number, testnet:boolean) {
+    this.lastTotalResults = totalResults;
+    this.router.navigate([testnet ? '/testnet/' : '/', 'cats', itemsPerPage, currentPage]);
   }
 }

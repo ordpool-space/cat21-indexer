@@ -1,14 +1,16 @@
-<ng-container *ngIf="{ cat: cat$ | async } as c">
+<ng-container *ngIf="{
+  cat: cat$ | async,
+  testnet: testnet$ | async } as c">
 
   <div class="clearfix">
 
-    <a *ngIf="c?.cat?.nextTransactionId" [routerLink]="['/cat', c?.cat?.nextTransactionId]"
+    <a *ngIf="c?.cat?.nextTransactionId" [routerLink]="[(c.testnet ? '/testnet/' : '/') + 'cat', c?.cat?.nextTransactionId]"
       class="fw-bold mt-4 mb-4 float-start">« Next</a>
 
     <span *ngIf="!c?.cat?.nextTransactionId"
       class="fw-bold mt-4 mb-4 float-start">&nbsp;</span>
 
-    <a *ngIf="c?.cat?.previousTransactionId" [routerLink]="['/cat', c?.cat?.previousTransactionId]"
+    <a *ngIf="c?.cat?.previousTransactionId" [routerLink]="[(c.testnet ? '/testnet/' : '/') + 'cat', c?.cat?.previousTransactionId]"
       class="fw-bold mt-4 mb-4 float-end">» Previous</a>
 
     <span *ngIf="!c?.cat?.previousTransactionId"
@@ -22,7 +24,8 @@
     [showDetails]="true" />
   </div>
 
+  <a [routerLink]="c.testnet ? '/testnet' : '/'" class="btn btn btn-primary fw-bold mt-4 mb-4" >« Back</a>
+
 </ng-container>
 
-<a routerLink="/" class="btn btn btn-primary fw-bold mt-4 mb-4" >« Back</a>
 

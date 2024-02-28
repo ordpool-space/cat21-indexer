@@ -1,9 +1,9 @@
-<header [smallHeader]="smallHeader$ | async"></header>
+<header [smallHeader]="smallHeader$ | async" [testnet]="testnet$ | async"></header>
 
 <div class="cover-container">
 
   <router-outlet />
 
-  <footer></footer>
+  <footer [testnet]="testnet$ | async"></footer>
 
 </div>

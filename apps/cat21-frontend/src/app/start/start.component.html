@@ -19,45 +19,49 @@
   <li><a href="https://github.com/haushoppe/cat-21/blob/main/HOWTO.md" target="_blank">with Electrum</a></li>
 </ul>
 
-<ng-container *ngIf="catsPaginated$ | async as i">
+<ng-container *ngIf="{
+  catsPaginated: catsPaginated$ | async,
+  routing: routing$ | async,
+  testnet: testnet$ | async } as c">
 
-  <h2 class="mt-5" id="latest">Minted cats</h2>
+  <ng-container *ngIf="c.catsPaginated as catsPaginated">
+    <h2 class="mt-5" id="latest">Minted cats</h2>
 
-  <p class="mb-4">
-    Here you see all {{ i.totalResults }} cats that have been revealed so far.
-  </p>
+    <p class="mb-4">
+      Here you see all {{ c?.catsPaginated?.totalResults }} cats that have been revealed so far{{ c.testnet ? ' on testnet' : ''}}.
+    </p>
 
-  <div class="row">
+    <div class="row">
 
-    <div *ngFor="let cat of i.cats" class="col-6 col-md-4 col-lg-3">
+      <div *ngFor="let cat of c?.catsPaginated?.cats" class="col-6 col-md-4 col-lg-3">
 
-      <!-- cat image -->
-      <a *ngIf="cat" [routerLink]="['/cat', cat.transactionId]">
-        <app-cat21-viewer [cat21Transaction]="cat" />
-      </a>
+        <!-- cat image -->
+        <a *ngIf="cat" [routerLink]="[(c.testnet ? '/testnet/' : '/') + 'cat', cat.transactionId]">
+          <app-cat21-viewer [cat21Transaction]="cat" />
+        </a>
 
-      <!-- loading text -->
-      <app-cat21-viewer *ngIf="!cat" [cat21Transaction]="undefined" />
+        <!-- loading text -->
+        <app-cat21-viewer *ngIf="!cat" [cat21Transaction]="undefined" />
+
+      </div>
+
+      <div>
+        <ngb-pagination
+          class="mt-4 d-flex justify-content-center"
+          [collectionSize]="catsPaginated.totalResults"
+          [page]="catsPaginated.currentPage"
+          [pageSize]="catsPaginated.itemsPerPage"
+          aria-label="Page Cats"
+          [maxSize]="5"
+          [rotate]="true"
+          (pageChange)="changePage(catsPaginated.totalResults, catsPaginated.itemsPerPage, $event, !!c.testnet)">
+        </ngb-pagination>
+
+        <a [routerLink]="c.testnet ? '/testnet' : '/'" class="float-end">Reload</a>
+      </div>
 
     </div>
-
-    <div>
-      <ngb-pagination
-        class="mt-4 d-flex justify-content-center"
-        [collectionSize]="i.totalResults"
-        [page]="i.currentPage"
-        [pageSize]="i.itemsPerPage"
-        aria-label="Page Cats"
-        [maxSize]="5"
-        [rotate]="true"
-        (pageChange)="changePage(i.totalResults, i.itemsPerPage, $event)">
-      </ngb-pagination>
-
-      <a href="javascript:void(0)" class="float-end" (click)="changePage(defaultItemsPerPage, defaultItemsPerPage, 1)">Reload</a>
-    </div>
-
-  </div>
-
+  </ng-container>
 </ng-container>
 
 

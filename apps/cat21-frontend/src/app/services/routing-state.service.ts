@@ -23,4 +23,8 @@ export class RoutingStateService {
   smallHeader$ = this.navigation$.pipe(
     map(data => !!data.smallHeader)
   );
+
+  testnet$ = this.navigation$.pipe(
+    map(data => !!data.testnet)
+  );
 }

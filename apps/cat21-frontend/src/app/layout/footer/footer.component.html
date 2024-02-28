@@ -6,6 +6,9 @@
   <a href="https://discord.gg/F25NEDuyEb" class="text-decoration-none bi bi-discord" target="_blank"> Discord</a> |
   <a href="https://linktr.ee/haushoppe" class="text-decoration-none bi bi-house" target="_blank"> All our projects</a> -->
 
-  Brought to you by <a href="https://twitter.com/HausHoppe" class="text-decoration-none bi bi-twitter" target="_blank">HAUS HOPPE</a>.
+  By <a href="https://twitter.com/HausHoppe" class="text-decoration-none bi bi-twitter" target="_blank">HAUS HOPPE</a> |
 
+  Switch to <a [routerLink]="testnet ? '/' : '/testnet'" class="text-decoration-none">
+    {{ testnet ? 'Mainnet' : 'Testnet' }}
+  </a>
 </p>

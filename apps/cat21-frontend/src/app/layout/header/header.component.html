@@ -1,4 +1,4 @@
-<a routerLink="/" class="text-decoration-none">
+<a [routerLink]="testnet ? '/testnet' : '/'" class="text-decoration-none">
 
   <img
     *ngIf="!smallHeader"
