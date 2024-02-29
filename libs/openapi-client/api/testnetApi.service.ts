@@ -223,7 +223,7 @@ export class TestnetApiService {
 
     /**
      * 
-     * Get CAT-21 ordinals by blockId (hash of the block in hex format) for testnet.
+     * Get CAT-21 ordinals by blockId (hash of the block in hex format) for testnet (cached).
      * @param blockId 
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
@@ -268,7 +268,7 @@ export class TestnetApiService {
         }
 
         let localVarPath = `/testnet/api/cats/by-block-id/${this.configuration.encodeParam({name: "blockId", value: blockId, in: "path", style: "simple", explode: false, dataType: "string", dataFormat: undefined})}`;
-        return this.httpClient.request<Array<Cat21>>('post', `${this.configuration.basePath}${localVarPath}`,
+        return this.httpClient.request<Array<Cat21>>('get', `${this.configuration.basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 responseType: <any>responseType_,

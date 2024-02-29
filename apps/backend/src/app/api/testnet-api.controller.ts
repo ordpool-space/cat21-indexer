@@ -70,31 +70,6 @@ export class TestnetApiController {
   }
 
   /**
-   * Get all indexed CAT-21 ordinals (paged and cached) for testnet.
-   */
-  @Get(['testnet/api/cats/:itemsPerPage/:currentPage'])
-  @ApiOperation({ operationId: 'testnet-cats' })
-  @ApiParam({ name: 'itemsPerPage', type: 'number', example: 12 })
-  @ApiParam({ name: 'currentPage', type: 'number', example: 1 })
-  @ApiOkResponse({ type: Cat21PaginatedResult })
-  @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
-  async getCats(
-    @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
-    @Param('currentPage', ParseIntPipe) currentPage: number,
-  ): Promise<Cat21PaginatedResult> {
-
-    const allCats: Cat21[] = await this.catService.getAllCats();
-    const cats = paginateArray(allCats, itemsPerPage, currentPage);
-
-    return {
-      cats,
-      totalResults: allCats.length,
-      itemsPerPage,
-      currentPage
-    }
-  }
-
-  /**
    * Get single CAT-21 ordinal by transactionId (cached) for testnet.
    */
   @Get(['testnet/api/cat/:transactionId'])
@@ -120,15 +95,40 @@ export class TestnetApiController {
   }
 
   /**
-   * Get CAT-21 ordinals by blockId (hash of the block in hex format) for testnet.
+   * Get CAT-21 ordinals by blockId (hash of the block in hex format) for testnet (cached).
    */
-  @Post('testnet/api/cats/by-block-id/:blockId')
-  @HttpCode(200)
+  @Get(['testnet/api/cats/by-block-id/:blockId'])
   @ApiOperation({ operationId: 'testnet-catsByBlockId' })
   @ApiParam({ name: 'blockId', type: 'string', example: '000000000000006b21ebe7df90e156b334dcb5e18485719f40bb8091ffd6272b' })
   @ApiOkResponse({ type: Cat21, isArray: true })
+  @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
   async getCatsByBlockId(@Param('blockId') blockId: string): Promise<Cat21[]> {
     return this.catService.findCatsByBlockId(blockId);
+  }
+
+  /**
+   * Get all indexed CAT-21 ordinals (paged and cached) for testnet.
+   */
+  @Get(['testnet/api/cats/:itemsPerPage/:currentPage'])
+  @ApiOperation({ operationId: 'testnet-cats' })
+  @ApiParam({ name: 'itemsPerPage', type: 'number', example: 12 })
+  @ApiParam({ name: 'currentPage', type: 'number', example: 1 })
+  @ApiOkResponse({ type: Cat21PaginatedResult })
+  @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
+  async getCats(
+    @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
+    @Param('currentPage', ParseIntPipe) currentPage: number,
+  ): Promise<Cat21PaginatedResult> {
+
+    const allCats: Cat21[] = await this.catService.getAllCats();
+    const cats = paginateArray(allCats, itemsPerPage, currentPage);
+
+    return {
+      cats,
+      totalResults: allCats.length,
+      itemsPerPage,
+      currentPage
+    }
   }
 
   /**
@@ -197,5 +197,3 @@ export class TestnetApiController {
     return this.catService.findCatsBySatRanges(shortSatRanges);
   }
 }
-
-

@@ -69,31 +69,6 @@ export class ApiController {
   }
 
   /**
-   * Get all indexed CAT-21 ordinals (paged and cached).
-   */
-  @Get(['api/cats/:itemsPerPage/:currentPage'])
-  @ApiOperation({ operationId: 'cats' })
-  @ApiParam({ name: 'itemsPerPage', type: 'number', example: 12 })
-  @ApiParam({ name: 'currentPage', type: 'number', example: 1 })
-  @ApiOkResponse({ type: Cat21PaginatedResult })
-  @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
-  async getCats(
-    @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
-    @Param('currentPage', ParseIntPipe) currentPage: number,
-  ): Promise<Cat21PaginatedResult> {
-
-    const allCats: Cat21[] = await this.catService.getAllCats();
-    const cats = paginateArray(allCats, itemsPerPage, currentPage);
-
-    return {
-      cats,
-      totalResults: allCats.length,
-      itemsPerPage,
-      currentPage
-    }
-  }
-
-  /**
    * Get single CAT-21 ordinal by transactionId (cached).
    */
   @Get(['api/cat/:transactionId'])
@@ -119,15 +94,40 @@ export class ApiController {
   }
 
   /**
-   * Get CAT-21 ordinals by blockId (hash of the block in hex format).
+   * Get CAT-21 ordinals by blockId (hash of the block in hex format) (cached).
    */
-  @Post('api/cats/by-block-id/:blockId')
-  @HttpCode(200)
+  @Get(['api/cats/by-block-id/:blockId'])
   @ApiOperation({ operationId: 'catsByBlockId' })
   @ApiParam({ name: 'blockId', type: 'string', example: '000000000000000000018e3ea447b11385e3330348010e1b2418d0d8ae4e0ac7' })
   @ApiOkResponse({ type: Cat21, isArray: true })
+  @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
   async getCatsByBlockId(@Param('blockId') blockId: string): Promise<Cat21[]> {
     return this.catService.findCatsByBlockId(blockId);
+  }
+
+  /**
+   * Get all indexed CAT-21 ordinals (paged and cached).
+   */
+  @Get(['api/cats/:itemsPerPage/:currentPage'])
+  @ApiOperation({ operationId: 'cats' })
+  @ApiParam({ name: 'itemsPerPage', type: 'number', example: 12 })
+  @ApiParam({ name: 'currentPage', type: 'number', example: 1 })
+  @ApiOkResponse({ type: Cat21PaginatedResult })
+  @Header('Cache-Control', 'public, max-age=' + oneMinuteInSeconds + ', immutable')
+  async getCats(
+    @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
+    @Param('currentPage', ParseIntPipe) currentPage: number,
+  ): Promise<Cat21PaginatedResult> {
+
+    const allCats: Cat21[] = await this.catService.getAllCats();
+    const cats = paginateArray(allCats, itemsPerPage, currentPage);
+
+    return {
+      cats,
+      totalResults: allCats.length,
+      itemsPerPage,
+      currentPage
+    }
   }
 
   /**
@@ -233,5 +233,3 @@ export class ApiController {
     return this.catService.findCatsBySatRanges(shortSatRanges);
   }
 }
-
-
