@@ -28,6 +28,10 @@ export interface Cat21SingleResultCat {
      */
     number: number;
     /**
+     * The paid fee rate that determines the color of the cat.
+     */
+    feeRate: number;
+    /**
      * Just for information: The block height where the CAT-21 ordinal was created / minted
      */
     blockHeight: number;

@@ -180,6 +180,7 @@ export class CatService {
     return transactions.map(tx => ({
       transactionId: tx.hash,
       number: counter--,
+      feeRate: tx.fee / (tx.weight / 4),
       blockHeight: tx.block_id,
       fee: tx.fee,
       size: tx.size,

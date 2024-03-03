@@ -21,6 +21,12 @@ export class Cat21 {
   number: number;
 
   @ApiProperty({
+    description: 'The paid fee rate that determines the color of the cat.',
+    example: 24.3
+  })
+  feeRate: number;
+
+  @ApiProperty({
     description: 'Just for information: The block height where the CAT-21 ordinal was created / minted',
     example: 824205
   })
