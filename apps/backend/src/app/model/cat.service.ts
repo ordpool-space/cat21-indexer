@@ -132,7 +132,7 @@ export class CatService {
       try {
 
         if (!first) {
-          await delay(50); // avoid Too Many Requests
+          await delay(100); // avoid Too Many Requests
         } else {
           first = false;
         }
