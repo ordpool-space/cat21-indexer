@@ -32,7 +32,7 @@ export class AppController {
   </h1>
 
   <p>
-    Meow! Signal your support for OP_CAT and mint a CAT-21 ordinal!
+    Meow! Rescue the cats!
   </p>
 
   <ul>

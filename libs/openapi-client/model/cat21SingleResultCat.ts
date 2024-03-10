@@ -1,6 +1,6 @@
 /**
  * 🟧 CAT-21 Indexer API
- * Meow! Signal your support for OP_CAT and mint a CAT-21 ordinal!
+ * Meow! Rescue the cats!
  *
  * The version of the OpenAPI document: 1.0
  * 
