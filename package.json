@@ -36,6 +36,7 @@
     "@nestjs/schedule": "^3.0.3",
     "@nestjs/serve-static": "^4.0.0",
     "@nestjs/swagger": "7.1.10",
+    "@nestjs/typeorm": "^10.0.2",
     "@ng-bootstrap/ng-bootstrap": "^15.1.2",
     "@nx/angular": "^16.8.0",
     "@nx/devkit": "16.8.0",
@@ -47,11 +48,13 @@
     "joi": "^17.7.0",
     "node-cache": "^5.1.2",
     "ordpool-parser": "^0.0.7",
+    "pg": "^8.11.3",
     "reflect-metadata": "^0.1.13",
     "rxjs": "~7.8.0",
     "sats-connect": "^1.1.1",
     "swagger-ui-express": "^5.0.0",
     "tslib": "^2.3.0",
+    "typeorm": "^0.3.20",
     "zone.js": "0.13.1"
   },
   "devDependencies": {
