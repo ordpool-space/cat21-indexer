@@ -73,10 +73,4 @@ export class Cat21 {
     example: 'bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh'
   })
   firstOwner: string;
-
-  // @ApiProperty({
-  //   description: 'The current cat owner (Address that owns the cat now)',
-  //   example: 'bc1...'
-  // })
-  // currentOwner: string;
 }
