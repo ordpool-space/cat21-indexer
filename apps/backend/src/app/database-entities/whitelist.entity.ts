@@ -10,5 +10,5 @@ export class WhitelistEntity {
   name: string;
 
   @Column()
-  level: 'Airdrop' | 'Super Premint' | 'Premint';
+  level: 'Airdrop' | 'Super Premint' | 'Premint' | 'Developer';
 }

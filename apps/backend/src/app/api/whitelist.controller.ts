@@ -1,12 +1,18 @@
-import { Controller, Get, Header, Param } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { MintTransactionEntitiesService } from '../database-entities/mint-transaction.entities.service';
 import { WhitelistEntitiesService } from '../database-entities/whitelist.entities.service';
 import { tenSeconds } from '../types/constants';
 import { WhitelistStatusResult } from '../types/whitelist-status-result';
+import { MintTransaction } from '../types/mint-transaction';
+
 
 export const schedule = {
+  'Developer': {
+    start: '2024-03-28T00:00Z',
+    maxMintAmount: 15
+  },
   'Airdrop': {
     start: '2024-04-10T16:00Z',
     maxMintAmount: 15
@@ -56,11 +62,12 @@ export class WhitelistController {
         mintingAllowed: true,
         mintingAllowedAt: schedule.Public.start
       };
-
     }
 
     const user = await this.whitelistEntitiesService.findOne(walletAddress);
     const mintCount = user ? await this.mintTransactionEntitiesService.countByRecipientAddress(walletAddress) : 0;
+
+
 
     let mintingAllowed = false;
     let mintingAllowedAt = schedule.Public.start;
@@ -79,5 +86,19 @@ export class WhitelistController {
       mintingAllowed,
       mintingAllowedAt
     };
+  }
+
+  /**
+   * Friendly mint announcement
+   *
+   * This method saves all transactions during the premint phase, so that we can update the status
+   * We will also have great live stats so that we don't have to search in the mempool
+   */
+  @Post('whitelist/mintTransaction')
+  @ApiOperation({ operationId: 'announceMintTransaction' })
+  async announceMintTransaction(@Body() mintTransaction: MintTransaction) {
+
+    // TODO: verify signed txn, so that nobody can block other people by submitting faked txns!
+    return this.mintTransactionEntitiesService.save([mintTransaction]);
   }
 }
