@@ -16,11 +16,18 @@ export class MintTransactionEntitiesService {
   }
 
   /**
-   * Finds first entity by id.
+   * Finds one entity by id.
    * If entity was not found in the database - returns null.
    */
   findOne(transactionId: string): Promise<MintTransactionEntity | null> {
     return this.repo.findOneBy({ transactionId });
+  }
+
+  /**
+   * Counts by recipient address.
+   */
+  countByRecipientAddress(recipientAddress: string): Promise<number> {
+    return this.repo.countBy({ recipientAddress });
   }
 
   /**

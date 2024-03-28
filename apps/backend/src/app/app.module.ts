@@ -9,7 +9,7 @@ import { ApiController } from './api/api.controller';
 import { TestnetApiController } from './api/testnet-api.controller';
 import { configuration, validationSchema } from './app.configuration';
 import { AppController } from './app.controller';
-import { AllowlistEntity } from './database-entities/allowlist.entity';
+import { WhitelistEntity } from './database-entities/whitelist.entity';
 import { Cat21Entity } from './database-entities/cat21.entity';
 import { MintTransactionEntity } from './database-entities/mint-transaction.entity';
 import { BlockchairApiService } from './model/blockchair-api.service';
@@ -45,7 +45,7 @@ import { OrdApiService } from './model/ord-api.service';
             password: string,
             database: string}>('dbOptions'),
         entities: [
-          AllowlistEntity,
+          WhitelistEntity,
           MintTransactionEntity,
           Cat21Entity
         ],

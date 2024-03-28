@@ -16,7 +16,7 @@ export class Cat21EntitiesService {
   }
 
   /**
-   * Finds first entity by id.
+   * Finds one entity by id.
    * If entity was not found in the database - returns null.
    */
   findOne(transactionId: string): Promise<Cat21Entity | null> {
