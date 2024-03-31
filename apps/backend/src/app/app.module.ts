@@ -7,11 +7,15 @@ import { join } from 'path';
 
 import { ApiController } from './api/api.controller';
 import { TestnetApiController } from './api/testnet-api.controller';
+import { WhitelistController } from './api/whitelist.controller';
 import { configuration, validationSchema } from './app.configuration';
 import { AppController } from './app.controller';
-import { WhitelistEntity } from './database-entities/whitelist.entity';
+import { Cat21EntitiesService } from './database-entities/cat21.entities.service';
 import { Cat21Entity } from './database-entities/cat21.entity';
+import { MintTransactionEntitiesService } from './database-entities/mint-transaction.entities.service';
 import { MintTransactionEntity } from './database-entities/mint-transaction.entity';
+import { WhitelistEntitiesService } from './database-entities/whitelist.entities.service';
+import { WhitelistEntity } from './database-entities/whitelist.entity';
 import { BlockchairApiService } from './model/blockchair-api.service';
 import { CatService } from './model/cat.service';
 import { EsploraApiService } from './model/esplora-api.service';
@@ -37,7 +41,7 @@ import { OrdApiService } from './model/ord-api.service';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        logging: true,
+        logging: false,
         ...configService.get<{
             host: string,
             port: number,
@@ -53,17 +57,22 @@ import { OrdApiService } from './model/ord-api.service';
         ssl: true
       }),
       inject: [ConfigService],
-    })
+    }),
+    TypeOrmModule.forFeature([WhitelistEntity, MintTransactionEntity, Cat21Entity])
   ],
   controllers: [
     AppController,
     ApiController,
-    TestnetApiController
+    TestnetApiController,
+    WhitelistController
   ],
   providers: [
     BlockchairApiService,
     EsploraApiService,
     OrdApiService,
+    Cat21EntitiesService,
+    MintTransactionEntitiesService,
+    WhitelistEntitiesService,
 
     // registers CatService for mainnet and testnet
     ...['', 'testnet'].map((network: '' | 'testnet') => ({

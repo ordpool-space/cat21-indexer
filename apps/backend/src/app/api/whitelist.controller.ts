@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Header, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { MintTransactionEntitiesService } from '../database-entities/mint-transaction.entities.service';
 import { WhitelistEntitiesService } from '../database-entities/whitelist.entities.service';
 import { tenSeconds } from '../types/constants';
-import { WhitelistStatusResult } from '../types/whitelist-status-result';
 import { MintTransaction } from '../types/mint-transaction';
+import { WhitelistStatusResult } from '../types/whitelist-status-result';
 
 
 export const schedule = {
@@ -94,8 +94,9 @@ export class WhitelistController {
    * This method saves all transactions during the premint phase, so that we can update the status
    * We will also have great live stats so that we don't have to search in the mempool
    */
-  @Post('whitelist/mintTransaction')
+  @Post('whitelist/announceMintTransaction')
   @ApiOperation({ operationId: 'announceMintTransaction' })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async announceMintTransaction(@Body() mintTransaction: MintTransaction) {
 
     // TODO: verify signed txn, so that nobody can block other people by submitting faked txns!

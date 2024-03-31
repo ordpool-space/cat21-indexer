@@ -1,5 +1,7 @@
-import { Logger } from "@nestjs/common";
-import { delay } from "./delay";
+import { Logger } from '@nestjs/common';
+
+import { toJson } from '../../to-json';
+import { delay } from './delay';
 
 /**
  * Retries a given function a specified number of times with a delay between retries.
@@ -25,7 +27,7 @@ export async function retry<T>(action: () => Promise<T>, maxRetries = 3, retryDe
 
     } catch (error) {
       attempts++;
-      Logger.warn(`** Attempt #${attempts} to call ${action} failed! **`, error);
+      Logger.warn(`** Attempt #${attempts} to call ${action} failed! ** ${ toJson(error) }`, 'retry');
     }
   }
 
