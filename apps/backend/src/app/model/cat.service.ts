@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 
+import { toJson } from '../../to-json';
 import { Cat21 } from '../types/cat21';
 import { TransactionBlockchair } from '../types/transaction-blockchair';
-import { BlockchairApiService } from './blockchair-api.service';
-import { OrdApiService } from './ord-api.service';
-import { EsploraApiService } from './esplora-api.service';
 import { delay } from '../utils/delay';
+import { BlockchairApiService } from './blockchair-api.service';
+import { EsploraApiService } from './esplora-api.service';
+import { OrdApiService } from './ord-api.service';
 
 
 
@@ -15,12 +16,17 @@ export class CatService {
 
   private cats: Cat21[] = [];
   lastSuccessfulExecution: undefined | string
+  private loggingContext = 'cat_service';
 
   constructor(
     private network: '' | 'testnet',
     private blockchairApi: BlockchairApiService,
     private esploraApi: EsploraApiService,
     private ordApi: OrdApiService) {
+
+    if (network) {
+      this.loggingContext += `_${ this.network }`;
+    }
   }
 
   /**
@@ -31,7 +37,7 @@ export class CatService {
     Logger.log('Initializing CatService', 'cat_service_');
     await this.handleInterval(); // immediate execution upon module initialization
 
-    Logger.verbose(`Successfully indexed ${this.cats.length} CAT-21 ordinals! 😺`, 'cat_service_' + this.network);
+    Logger.verbose(`Successfully indexed ${this.cats.length} CAT-21 ordinals! 😺`, this.loggingContext);
   }
 
   @Interval(1000 * 60 * 5) // every 5 minutes
@@ -46,22 +52,22 @@ export class CatService {
 
       if (transactions.length > this.cats.length) {
 
-        Logger.verbose(`Found ${transactions.length} CAT-21 transactions. Trying to update the cache...`, 'cat_service_' + this.network);
+        Logger.verbose(`Found ${transactions.length} CAT-21 transactions. Trying to update the cache...`, this.loggingContext);
         const cats = this.transactionsToCats(transactions);
 
-        Logger.verbose(`Adding block information from esplora...`, 'cat_service_' + this.network);
+        Logger.verbose(`Adding block information from esplora...`, this.loggingContext);
         await this.addBlockInformation(cats);
 
-        Logger.verbose(`Adding output information from ord...`, 'cat_service_' + this.network);
+        Logger.verbose(`Adding output information from ord...`, this.loggingContext);
         await this.addOutputInformation(cats);
 
         this.cats = cats;
         this.lastSuccessfulExecution = (new Date()).toISOString();
       } else {
-        // Logger.verbose(`Found ${transactions.length} CAT-21 transactions but there are already ${this.cats.length} cached!`, 'cat_service_' + this.network);
+        // Logger.verbose(`Found ${transactions.length} CAT-21 transactions but there are already ${this.cats.length} cached!`, this.loggingContext);
       }
     } catch (error) {
-      Logger.error(`** Error indexing all cats! **`, error);
+      Logger.error(`** Error indexing all cats! ** ${ toJson(error) }`, this.loggingContext);
       // don't throw here! if this errors a startup, the app will exit with code 1
       // throw error;
     }
@@ -142,7 +148,7 @@ export class CatService {
         cat.blockTime = transaction.status.block_time || -1;
 
       } catch (error) {
-        Logger.warn(`** Error enriching block data for cat ${cat.transactionId}. **`, error);
+        Logger.warn(`** Error enriching block data for cat ${cat.transactionId}. ** ${ toJson(error) }`, this.loggingContext);
         throw error;
       }
     }
@@ -165,7 +171,7 @@ export class CatService {
         // cat.currentOwner = firstOutput.address;
 
       } catch (error) {
-        Logger.warn(`** Error enriching output data for cat ${cat.transactionId}. **`, error);
+        Logger.warn(`** Error enriching output data for cat ${cat.transactionId}. ** ${ toJson(error) }`, this.loggingContext);
         throw error;
       }
     }

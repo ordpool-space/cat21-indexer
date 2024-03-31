@@ -1,6 +1,9 @@
-import { Catch, ArgumentsHost, HttpException, Logger } from '@nestjs/common';
+import { ArgumentsHost, Catch, HttpException, Logger } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
 import { Request, Response } from 'express';
+
+import { toJson } from './to-json';
+
 
 @Catch()
 export class AllExceptionsFilter extends BaseExceptionFilter {
@@ -9,28 +12,36 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : 500;
+    const exceptionStatus = exception instanceof HttpException ? exception.getStatus() : 500;
+    const exceptionResponse = exception instanceof HttpException ? exception.getResponse() : {};
 
-    const message = (exception as any)?.message;
-    const stack = (exception as any)?.stack;
+    let message = 'An unexpected error occurred.';
+    const stack = (exception as Error)?.stack;
+
+    if (typeof exceptionResponse === 'object' && 'message' in exceptionResponse) {
+
+       // Handle array of constraints for validation errors
+      if (Array.isArray(exceptionResponse.message)) {
+        message = exceptionResponse.message.map(msg => typeof msg === 'string' ? msg : JSON.stringify(msg)).join(' ');
+      } else {
+        message = (exceptionResponse.message).toString();
+      }
+    } else if ((exception as Error).message) {
+      message = (exception as Error).message;
+    }
 
     const errorResponse = {
-      statusCode: status,
+      statusCode: exceptionStatus,
       timestamp: new Date().toISOString(),
       path: request.url,
       message,
-      // Include the stack trace if it exists
-      // TODO: Disable or filter out these stack traces in a production environment, as they may contain sensitive information.
-      stack
+      stack: process.env.NODE_ENV !== 'production' ? stack : undefined
     };
 
-    if (status === 500) {
-      Logger.error('** Internal Server Error **', { path: request.url, message });
+    if (exceptionStatus === 500) {
+      Logger.error(`** Internal Server Error ** ${ toJson({ path: request.url, exception }) }`, 'all_exceptions_filter');
     }
 
-    response.status(status).json(errorResponse);
+    response.status(exceptionStatus).json(errorResponse);
   }
 }

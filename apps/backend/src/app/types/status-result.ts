@@ -9,7 +9,7 @@ export class StatusResult {
   @ApiProperty({ example: 100, description: 'Total number of all indexed CAT-21 ordinals.' })
   indexedCats: number;
 
-  @ApiProperty({ example: '2024-01-01T00:00:00.000Z', description: 'ISO formated string with the the time of the last execution of the indexer.' })
+  @ApiProperty({ example: '2024-01-01T00:00:00.000Z', description: 'ISO formated string with the time of the last execution of the indexer.' })
   lastSuccessfulExecution: string;
 
   @ApiProperty({ example: 10000, description: 'The number of seconds the server process has been running.' })

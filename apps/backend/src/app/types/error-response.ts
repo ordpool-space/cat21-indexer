@@ -9,7 +9,7 @@ export class ErrorResponse {
   statusCode: number;
 
   @ApiProperty({
-    description: 'ISO formated string with the the exact moment when the error was fetched',
+    description: 'ISO formated string with the exact moment when the error was fetched',
     example: '2024-01-01T00:00:00.000Z'
   })
   timestamp: string;

@@ -1,3 +1,4 @@
+export const tenSeconds = 10;
 export const oneMinuteInSeconds = 60;
 export const fiveMinuteInSeconds = 60  * 5;
 export const tenMinutesInSeconds = 60 * 10;
