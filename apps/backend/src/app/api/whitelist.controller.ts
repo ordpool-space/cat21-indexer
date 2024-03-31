@@ -49,7 +49,7 @@ export class WhitelistController {
    * - Public - everyone can mint without any restrictions
    */
   @Get(['whitelist/status/:walletAddress'])
-  @ApiOperation({ operationId: 'status' })
+  @ApiOperation({ operationId: 'whitelistStatus' })
   @Header('Cache-Control', 'public, max-age=' + tenSeconds + ', immutable')
   async getStatus(@Param('walletAddress') walletAddress: string): Promise<WhitelistStatusResult> {
 

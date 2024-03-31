@@ -4,6 +4,7 @@ import { HttpClient } from '@angular/common/http';
 
 import { ApiService } from './api/api.service';
 import { TestnetApiService } from './api/testnetApi.service';
+import { WhitelistService } from './api/whitelist.service';
 
 @NgModule({
   imports:      [],

@@ -5,6 +5,7 @@ api.module.ts
 api/api.service.ts
 api/api.ts
 api/testnetApi.service.ts
+api/whitelist.service.ts
 configuration.ts
 encoder.ts
 git_push.sh
@@ -14,7 +15,10 @@ model/cat21PaginatedResult.ts
 model/cat21SingleResult.ts
 model/cat21SingleResultCat.ts
 model/errorResponse.ts
+model/mintTransaction.ts
+model/mintTransactionEntity.ts
 model/models.ts
 model/statusResult.ts
+model/whitelistStatusResult.ts
 param.ts
 variables.ts
