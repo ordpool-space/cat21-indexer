@@ -24,9 +24,7 @@
 
 <ng-container *ngIf="svg && traits && _cat21Transaction">
 
-  <div class="cat-container" [innerHTML]="svg | noSanitize"
-    [ngClass]="{ 'cat-container-gray': !traits.orangeBackground }">
-  </div>
+  <div class="cat-container" [innerHTML]="svg | noSanitize"></div>
 
   <br *ngIf="showDetails">
   <strong>CAT {{ _cat21Transaction.number }}</strong><br>
@@ -62,28 +60,17 @@
         </tr>
 
         <tr>
-          <td><b ngbTooltip="This includes all colors used to paint the cat, excluding the colors of the laser eyes.">i</b>Colors</td>
+          <td><b ngbTooltip="All colors used to paint the cat, excluding the colors of the laser eyes and other traits.">i</b>Cat Colors</td>
           <td>
-            <ng-container *ngFor="let color of traits.colors; last as l">
-              <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color
-              }}<br *ngIf="!l">
+            <ng-container *ngFor="let color of traits.catColors; last as l">
+              <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}<br *ngIf="!l">
             </ng-container>
           </td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="The gender (sex) of a cat. There is a 50% chance to receive a female cat.">i</b>Gender</td>
-          <td>{{ traits.gender | capitalizeFirst }}</td>
-        </tr>
-
-        <tr>
-          <td><b ngbTooltip="The gorgeous laser eyes trait. There is a 10% chance to receive a cat with red laser eyes, 10% chance for green, 10% chance for blue. There is a 70% chance to receive no laser eyes at all.">i</b>Laser Eyes</td>
-          <td>{{ traits.laserEyes | capitalizeFirst}}</td>
-        </tr>
-
-        <tr>
-          <td><b ngbTooltip="There is a 10% chance to receive a cat with an orange background instead of a transparent background.">i</b>Back&shy;ground</td>
-          <td>{{ traits.orangeBackground ? 'Orange' : 'Transparent' }}</td>
+          <td>{{ traits.gender }}</td>
         </tr>
 
         <tr>
@@ -107,8 +94,55 @@
         </tr>
 
         <tr>
-          <td><b ngbTooltip="The crown trait. There is a 10% chance to receive a cat with a crown.">i</b>Crown</td>
-          <td>{{ traits.crown ? traits.orangeBackground ? 'Diamond' : 'Gold'  : 'None' }}</td>
+          <td><b ngbTooltip="The gorgeous laser eyes trait.
+            There is a 20% chance to receive a cat with orange laser eyes, 20% chance for red, 20% chance for green, 20% chance for blue.
+            There is a 20% chance to receive no laser eyes at all.">i</b>Laser Eyes</td>
+          <td>{{ traits.laserEyes }}</td>
+        </tr>
+
+        <tr>
+          <td><b ngbTooltip="The background trait. All images have a background.
+            There is a 25% chance to receive a cat with a Block 9 background.
+            There is a 25% chance to receive a cat with a cyberpunk background.
+            There is a 25% chance to receive a cat with a background of the Bitcoin Whitepaper.
+            There is a 25% chance to receive a cat with an orange background.
+            The orange color is #ff9900.">i</b>Back&shy;ground</td>
+          <td>{{ traits.background }}</td>
+        </tr>
+
+        <tr>
+          <td><b ngbTooltip="All colors that are used to generate the background.">i</b>BG Colors</td>
+          <td>
+            <ng-container *ngFor="let color of traits.backgroundColors; last as l">
+              <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}<br *ngIf="!l">
+            </ng-container>
+          </td>
+        </tr>
+
+        <tr>
+          <td><b ngbTooltip="The crown trait.
+            There is a 10% chance to receive a cat with a crown.
+            The crown is golden when the background is not orange.
+            The crown is made of diamonds if the background is orange.">i</b>Crown</td>
+          <td>{{ traits.crown }}</td>
+        </tr>
+
+        <tr>
+          <td><b ngbTooltip="The glasses trait.
+            There is a 10% chance to receive a cat with black sunglasses.
+            There is a 10% chance to receive a cat with cool sunglasses.
+            There is a 10% chance to receive a cat with 3D glasses - but ONLY if the cat has no laser eyes!
+            There is a 10% chance to receive a cat with nouns glasses - but ONLY if the cat has no laser eyes!">i</b>Glasses</td>
+          <td>{{ traits.glasses }}</td>
+        </tr>
+
+        <tr *ngIf="traits.glasses !== 'None'">
+          <td><b ngbTooltip="All colors that are used to paint the glasses.">i</b>Colors</td>
+          <td>
+            <ng-container *ngFor="let color of traits.glassesColors; last as l">
+              <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}<br *ngIf="!l">
+            </ng-container>
+          </td>
         </tr>
 
       </tbody>

@@ -73,6 +73,8 @@ export class Cat21ViewerComponent {
     return Cat21ParserService.parse({
       txid: cat.transactionId,
       locktime: 21,
+      weight: cat.weight,
+      fee: cat.fee,
       status: {
         block_hash: cat.blockId
       }
