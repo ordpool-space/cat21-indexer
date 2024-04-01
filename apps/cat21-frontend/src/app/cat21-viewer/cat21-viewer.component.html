@@ -48,6 +48,16 @@
         </tr>
 
         <tr>
+          <td><b ngbTooltip="The satoshi that is associated with the cat, according to the ordinal theory.">i</b>Sat</td>
+          <td><a href="https://ordinals.com/sat/{{ _cat21Transaction.sat }}" target="blank" class="text-white">{{ _cat21Transaction.sat }}</a></td>
+        </tr>
+
+        <tr>
+          <td><b ngbTooltip="The paid fee rate that determines the color of the cat.">i</b>Fee Rate</td>
+          <td>{{ _cat21Transaction.feeRate | number: '1.1-1' }} sat/vB</td>
+        </tr>
+
+        <tr>
           <td colspan="2">
             <hr>
             <strong>Traits</strong><br><br>
@@ -111,7 +121,7 @@
         </tr>
 
         <tr>
-          <td><b ngbTooltip="All colors that are used to generate the background.">i</b>BG Colors</td>
+          <td><b ngbTooltip="All colors that are used to generate the background.">i</b>Bg Colors</td>
           <td>
             <ng-container *ngFor="let color of traits.backgroundColors; last as l">
               <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}<br *ngIf="!l">
@@ -137,7 +147,7 @@
         </tr>
 
         <tr *ngIf="traits.glasses !== 'None'">
-          <td><b ngbTooltip="All colors that are used to paint the glasses.">i</b>Colors</td>
+          <td><b ngbTooltip="All colors that are used to paint the glasses.">i</b>Gl Colors</td>
           <td>
             <ng-container *ngFor="let color of traits.glassesColors; last as l">
               <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}<br *ngIf="!l">

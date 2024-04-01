@@ -53,7 +53,7 @@ import { OrdApiService } from './model/ord-api.service';
           MintTransactionEntity,
           Cat21Entity
         ],
-        synchronize: true, // TODO: disable again!
+        synchronize: true, // TODO: disable to avaoid data-loss!
         ssl: true
       }),
       inject: [ConfigService],

@@ -1,4 +1,4 @@
-import { NgClass, NgFor, NgIf, NgStyle } from '@angular/common';
+import { DecimalPipe, NgClass, NgFor, NgIf, NgStyle } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { NgbTooltip, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 import { Cat21ParserService, CatTraits, ParsedCat21 } from 'ordpool-parser';
@@ -21,7 +21,8 @@ import { ShortenStringPipe } from './shorten-string.pipe';
     NgStyle,
     NgClass,
     ShortenStringPipe,
-    CapitalizeFirstPipe
+    CapitalizeFirstPipe,
+    DecimalPipe
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true

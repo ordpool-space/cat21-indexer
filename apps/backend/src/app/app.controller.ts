@@ -36,9 +36,12 @@ export class AppController {
   </p>
 
   <ul>
-    <li>
-      <a href="https://github.com/haushoppe/cat-21" target="_blank">CAT-21 Protocol Specification</a>
-    </li>
+    ` +
+    // TODO: reveal all infos after premint
+    // <li>
+    //   <a href="https://github.com/haushoppe/cat-21" target="_blank">CAT-21 Protocol Specification</a>
+    // </li>
+    `
     <li>
       <a href="https://cat21.space" target="_blank">Offical website (mainnet)</a>
     </li>
