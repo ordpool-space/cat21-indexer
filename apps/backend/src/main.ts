@@ -3,13 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
-import { AppModule } from './app/app.module';
 import { AllExceptionsFilter } from './all-exceptions.filter';
+import { AppModule } from './app/app.module';
+
+import type { NestExpressApplication } from '@nestjs/platform-express';
 
 const port = process.env.PORT || 3000; // see .env file
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   const config = app.get(ConfigService);
 
   const openApiConfig = new DocumentBuilder()
@@ -27,6 +31,8 @@ async function bootstrap() {
 
   const { httpAdapter } = app.get(HttpAdapterHost);
   app.useGlobalFilters(new AllExceptionsFilter(httpAdapter));
+
+  app.useBodyParser('text', { limit: '10mb' });
 
   await app.listen(port);
   Logger.log(`🚀 Application is running on: http://localhost:${ port }/`);

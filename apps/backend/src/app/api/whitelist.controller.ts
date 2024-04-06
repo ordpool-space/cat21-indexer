@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Header, Param, Post, UsePipes, ValidationPipe } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Header,
+  Logger,
+  Param,
+  Post,
+  RawBodyRequest,
+  Req,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ApiBody, ApiConsumes, ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { MintTransactionEntitiesService } from '../database-entities/mint-transaction.entities.service';
 import { WhitelistEntitiesService } from '../database-entities/whitelist.entities.service';
@@ -36,7 +50,8 @@ export class WhitelistController {
 
   constructor(
     private whitelistEntitiesService: WhitelistEntitiesService,
-    private mintTransactionEntitiesService: MintTransactionEntitiesService) {
+    private mintTransactionEntitiesService: MintTransactionEntitiesService,
+    private configService: ConfigService) {
   }
 
   /**
@@ -101,5 +116,104 @@ export class WhitelistController {
 
     // TODO: verify signed txn, so that nobody can block other people by submitting faked txns!
     return this.mintTransactionEntitiesService.save([mintTransaction]);
+  }
+
+  /**
+   * Saving WL addresses for Airdrop Level - not visible in PROD
+   */
+  @Post('whitelist/save/airdrop')
+  @ApiBody({
+    type: String,
+    description: 'List of addresses',
+  })
+  @ApiConsumes('text/plain')
+  @ApiOperation({ operationId: 'saveAirdrop' })
+  @ApiExcludeEndpoint(process.env.NODE_ENV !== 'development')
+  async saveAirdrop(@Req() req: RawBodyRequest<Request>) {
+    const addresses = req.rawBody.toString();
+    return this.saveList(addresses, 'Airdrop');
+  }
+
+  /**
+   * Saving WL addresses for Super Premit Level - not visible in PROD
+   */
+  @Post('whitelist/save/super-premint')
+  @ApiBody({
+    type: String,
+    description: 'List of addresses',
+  })
+  @ApiConsumes('text/plain')
+  @ApiOperation({ operationId: 'saveSuperPremint' })
+  @ApiExcludeEndpoint(process.env.NODE_ENV !== 'development')
+  async saveSuperPremint(@Req() req: RawBodyRequest<Request>) {
+    const addresses = req.rawBody.toString();
+    return this.saveList(addresses, 'Super Premint');
+  }
+
+  /**
+   * Saving WL addresses for Premint Level - not visible in PROD
+   */
+  @Post('whitelist/save/premint')
+  @ApiBody({
+    type: String,
+    description: 'List of addresses',
+  })
+  @ApiConsumes('text/plain')
+  @ApiOperation({ operationId: 'savePremint' })
+  @ApiExcludeEndpoint(process.env.NODE_ENV !== 'development')
+  async savePreming(@Req() req: RawBodyRequest<Request>) {
+    const addresses = req.rawBody.toString();
+    return this.saveList(addresses, 'Premint');
+  }
+
+  /**
+   * Saving WL addresses for Developer Level - not visible in PROD
+   */
+  @Post('whitelist/save/developer')
+  @ApiBody({
+    type: String,
+    description: 'List of addresses',
+  })
+  @ApiConsumes('text/plain')
+  @ApiOperation({ operationId: 'saveDeveloper' })
+  @ApiExcludeEndpoint(process.env.NODE_ENV !== 'development')
+  async saveDeveloper(@Req() req: RawBodyRequest<Request>) {
+    const addresses = req.rawBody.toString();
+    return this.saveList(addresses, 'Developer');
+  }
+
+  private saveList(addresses: string, level: 'Airdrop' | 'Super Premint' | 'Premint' | 'Developer') {
+
+    if (this.configService.get('environment') !== 'development') {
+      throw new ForbiddenException('This method should not be called on production');
+    }
+
+    const addressesList = addresses.split('\n').filter(line => line.trim());
+
+    const uniqueAddresses = new Set<string>();
+    const duplicates = [];
+
+    addressesList.forEach(address => {
+      if (uniqueAddresses.has(address)) {
+        duplicates.push(address);
+      } else {
+        uniqueAddresses.add(address);
+      }
+    });
+
+    // Log duplicates
+    if (duplicates.length > 0) {
+      Logger.verbose('Duplicate entries:', duplicates);
+    }
+
+    // Convert the Set back to an array if needed
+    const cleanAddressesList = Array.from(uniqueAddresses);
+
+    const entities = cleanAddressesList.map(address => ({
+      walletAddress: address,
+      level,
+      name: level + ' imported ' + (new Date()).toISOString(),
+    }));
+    return this.whitelistEntitiesService.upsert(entities);
   }
 }

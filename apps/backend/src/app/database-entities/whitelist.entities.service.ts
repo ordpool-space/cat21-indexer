@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+
 import { WhitelistEntity } from './whitelist.entity';
 
 @Injectable()
@@ -24,11 +25,10 @@ export class WhitelistEntitiesService {
   }
 
   /**
-   * Saves all given entities in the database.
-   * If entities do not exist in the database then inserts, otherwise updates.
+   * Upserts all given entities in the database.
    */
-  save(whitelistEntities: WhitelistEntity[]): Promise<WhitelistEntity[]> {
-    return this.repo.save(whitelistEntities)
+  upsert(whitelistEntities: WhitelistEntity[]): Promise<any> {
+    return this.repo.upsert(whitelistEntities, ['walletAddress'])
   }
 
   /**
