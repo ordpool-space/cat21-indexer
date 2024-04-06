@@ -201,12 +201,10 @@ export class WhitelistController {
       }
     });
 
-    // Log duplicates
     if (duplicates.length > 0) {
       Logger.verbose('Duplicate entries:', duplicates);
     }
 
-    // Convert the Set back to an array if needed
     const cleanAddressesList = Array.from(uniqueAddresses);
 
     const entities = cleanAddressesList.map(address => ({
