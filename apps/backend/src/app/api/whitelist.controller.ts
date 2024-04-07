@@ -214,4 +214,15 @@ export class WhitelistController {
     }));
     return this.whitelistEntitiesService.upsert(entities);
   }
+
+  /**
+   * Counts all unique entries in the WL DB
+   */
+  @Get(['whitelist/count'])
+  @ApiOperation({ operationId: 'whitelistCount' })
+  @Header('Cache-Control', 'public, max-age=' + tenSeconds + ', immutable')
+  async getLevelsCount() {
+    const count = await this.whitelistEntitiesService.countLevels();
+    return count;
+  }
 }

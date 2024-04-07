@@ -37,4 +37,16 @@ export class WhitelistEntitiesService {
   async remove(whitelistId: number): Promise<void> {
     await this.repo.delete(whitelistId);
   }
+
+  /**
+   * Counts all unique entries in the WL DB
+   */
+  async countLevels(): Promise<any> {
+    const counts = await this.repo.createQueryBuilder('whitelist')
+      .select('level')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('level')
+      .getRawMany();
+    return counts.reduce((acc, { level, count }) => ({ ...acc, [level]: parseInt(count, 10) }), {});
+  }
 }

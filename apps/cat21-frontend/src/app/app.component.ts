@@ -25,6 +25,13 @@ import { RoutingStateService } from './services/routing-state.service';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AppComponent {
+
+  goLiveAt = new Date('2024-04-10T16:00Z');
+
   smallHeader$ = inject(RoutingStateService).smallHeader$;
   testnet$ = inject(RoutingStateService).testnet$;
+
+  isLive() {
+    return (new Date()) > this.goLiveAt;
+  }
 }
