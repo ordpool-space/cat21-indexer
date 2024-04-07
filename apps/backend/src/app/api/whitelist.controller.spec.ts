@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MintTransactionEntitiesService } from '../database-entities/mint-transaction.entities.service';
 import { WhitelistEntitiesService } from '../database-entities/whitelist.entities.service';
 import { schedule, WhitelistController } from './whitelist.controller';
+import { ConfigService } from '@nestjs/config';
 
 describe('WhitelistController Tests', () => {
   let controller: WhitelistController;
@@ -24,7 +25,8 @@ describe('WhitelistController Tests', () => {
       controllers: [WhitelistController],
       providers: [
         { provide: WhitelistEntitiesService, useValue: mockWhitelistEntitiesService },
-        { provide: MintTransactionEntitiesService, useValue: mockMintTransactionEntitiesService }
+        { provide: MintTransactionEntitiesService, useValue: mockMintTransactionEntitiesService },
+        { provide: ConfigService, useValue: null }
       ],
     }).compile();
 
