@@ -36,9 +36,9 @@ export class CatService {
     // return; // while debugging
     Logger.log('Initializing CatService', 'cat_service_');
 
-    if (process.env.NODE_ENV !== 'development') {
-      await this.handleInterval(); // immediate execution upon module initialization
-    }
+    // if (process.env.NODE_ENV !== 'development') {
+    //   await this.handleInterval(); // immediate execution upon module initialization
+    // }
 
     Logger.verbose(`Successfully indexed ${this.cats.length} CAT-21 ordinals! 😺`, this.loggingContext);
   }
