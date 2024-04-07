@@ -6,6 +6,8 @@ import { BannerComponent } from './layout/banner/banner.component';
 import { FooterComponent } from './layout/footer/footer.component';
 import { HeaderComponent } from './layout/header/header.component';
 import { RoutingStateService } from './services/routing-state.service';
+import { schedule } from '../../../shared/schedule'
+
 
 @Component({
   // eslint-disable-next-line @angular-eslint/component-selector
@@ -26,12 +28,10 @@ import { RoutingStateService } from './services/routing-state.service';
 })
 export class AppComponent {
 
-  goLiveAt = new Date('2024-04-10T16:00Z');
-
   smallHeader$ = inject(RoutingStateService).smallHeader$;
   testnet$ = inject(RoutingStateService).testnet$;
 
-  isLive() {
-    return (new Date()) > this.goLiveAt;
+  isSuperPremint() {
+    return (new Date()) > new Date(schedule['Super Premint'].start);
   }
 }

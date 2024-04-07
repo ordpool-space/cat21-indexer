@@ -1,6 +1,6 @@
 <header [smallHeader]="smallHeader$ | async" [testnet]="testnet$ | async"></header>
 
-<div class="cover-container" *ngIf="isLive()">
+<div class="cover-container" *ngIf="isSuperPremint()">
 
   <router-outlet />
 
@@ -9,7 +9,7 @@
 </div>
 
 
-<div *ngIf="!isLive()">
+<div *ngIf="!isSuperPremint()">
 
   <h3 class="text-center mt-4">Meow! Please be patient!</h3>
 

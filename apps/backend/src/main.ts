@@ -7,6 +7,7 @@ import { AllExceptionsFilter } from './all-exceptions.filter';
 import { AppModule } from './app/app.module';
 
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { schedule } from '../../shared/schedule';
 
 const port = process.env.PORT || 3000; // see .env file
 
@@ -22,8 +23,11 @@ async function bootstrap() {
     .setVersion('1.0')
     .build();
 
-  const document = SwaggerModule.createDocument(app, openApiConfig);
-  SwaggerModule.setup('open-api', app, document);
+  // hides Open API until public mint - requires a server restart
+  if (new Date() > new Date(schedule.Public.start)) {
+    const document = SwaggerModule.createDocument(app, openApiConfig);
+    SwaggerModule.setup('open-api', app, document);
+  }
 
   // https://docs.nestjs.com/security/cors
   app.enableCors();

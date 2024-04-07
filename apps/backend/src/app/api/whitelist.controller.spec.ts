@@ -2,8 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { MintTransactionEntitiesService } from '../database-entities/mint-transaction.entities.service';
 import { WhitelistEntitiesService } from '../database-entities/whitelist.entities.service';
-import { schedule, WhitelistController } from './whitelist.controller';
+import { WhitelistController } from './whitelist.controller';
 import { ConfigService } from '@nestjs/config';
+import { schedule } from '../../../../shared/schedule'
+
 
 describe('WhitelistController Tests', () => {
   let controller: WhitelistController;

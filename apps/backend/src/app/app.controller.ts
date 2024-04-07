@@ -2,6 +2,7 @@ import { Controller, Get, Header } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 
 import { oneHourInSeconds, oneWeekInSeconds } from './types/constants';
+import { schedule } from '../../../shared/schedule';
 
 @Controller()
 export class AppController {
@@ -11,6 +12,7 @@ export class AppController {
   @Header('Cache-Control', 'public, max-age=' + oneHourInSeconds + ', immutable')
   getStart(): string {
 
+    const isPublic = new Date() > new Date(schedule.Public.start);
     const uptime = this.formatSeconds(process.uptime())
 
     return `<!DOCTYPE html>
@@ -37,10 +39,14 @@ export class AppController {
 
   <ul>
     ` +
-    // TODO: reveal all infos after premint
-    // <li>
-    //   <a href="https://github.com/haushoppe/cat-21" target="_blank">CAT-21 Protocol Specification</a>
-    // </li>
+
+    (isPublic ?
+
+    `<li>
+      <a href="https://github.com/haushoppe/cat-21" target="_blank">CAT-21 Protocol Specification</a>
+    </li>` : '')
+
+    +
     `
     <li>
       <a href="https://cat21.space" target="_blank">Offical website (mainnet)</a>
@@ -48,12 +54,18 @@ export class AppController {
     <li>
       <a href="https://cat21.space/testnet" target="_blank">Offical website (testnet)</a>
     </li>
-    <li>
+    `+
+
+    (isPublic ?
+
+    `<li>
       <a href="/open-api">Indexer: OpenAPI UI</a>
     </li>
     <li>
       <a href="/open-api-json">Indexer: OpenAPI Specification</a>
-    </li>
+    </li>` : '')
+
+    + `
   </ul>
 
   <hr>
