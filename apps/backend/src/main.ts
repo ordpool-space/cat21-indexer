@@ -24,10 +24,10 @@ async function bootstrap() {
     .build();
 
   // hides Open API until public mint - requires a server restart
-  if (new Date() > new Date(schedule.Public.start)) {
+  // if (new Date() > new Date(schedule.Public.start)) {
     const document = SwaggerModule.createDocument(app, openApiConfig);
     SwaggerModule.setup('open-api', app, document);
-  }
+  // }
 
   // https://docs.nestjs.com/security/cors
   app.enableCors();
