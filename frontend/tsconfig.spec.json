@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/out-tsc",
+    "types": ["jest"],
+    "target": "ES2022",
+    "useDefineForClassFields": false
+  },
+  "include": ["src/**/*.spec.ts", "src/**/*.d.ts"]
+}

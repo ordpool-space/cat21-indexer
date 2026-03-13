@@ -4,79 +4,98 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Nx monorepo with two apps:
+Two independent projects (native CLIs):
 
-- **`apps/cat21-frontend/`** — The **cat21.space** public website (Angular 16, standalone components). Shows minted CAT-21 cats with SVG rendering, trait display, paginated gallery, testnet/mainnet support. **This is the valuable part.**
-- **`apps/backend/`** — **DEPRECATED** NestJS indexer. Tracked CAT-21 mints but couldn't track transfers per ordinal theory and didn't scale. Superseded by `cat21-ord/` (Rust ord fork with LTO indexing).
+- **`backend/`** — NestJS 11 + Fastify + Drizzle ORM. Syncs cat data from `ord.cat21.space`, computes traits via `ordpool-parser`, stores in PostgreSQL. Exposes REST API with Swagger docs.
+- **`frontend/`** — Angular 16 with standalone components. The **cat21.space** public website. Shows minted CAT-21 cats with SVG rendering, trait display, paginated gallery, testnet/mainnet support.
 
 ## Quick Start
 
 ```bash
-npm install
-npm run start:cat21-frontend    # Angular dev server on localhost:4200
+# Backend (needs PostgreSQL running)
+cd backend && npm install && npm run start:dev  # port 3333, Swagger at /docs
+
+# Frontend
+cd frontend && npm install && npm start          # port 4200
 ```
 
-The frontend talks to a backend API:
-- Dev: `http://localhost:3333` (see `apps/cat21-frontend/src/environments/environment.ts`)
-- Prod: `https://backend.cat21.space` (see `environment.prod.ts`)
+## Backend
 
-## Commands
+### Tech Stack
+- **NestJS 11** + Fastify + @fastify/helmet (security headers)
+- **Drizzle ORM** — schema-as-code in `src/modules/shared/drizzle/schema/`
+- **PostgreSQL** — connection via `DATABASE_URL` in `.env`
+- **ordpool-parser** — `Cat21ParserService.parse()` for trait computation
+- **Swagger** — auto-generated docs at `/docs`
 
+### Config
+All config via `.env` (see `.env.example`):
+- `DATABASE_URL` — PostgreSQL connection string
+- `ORD_API_URL` — ord REST API base URL (default: `https://ord.cat21.space`)
+- `SYNC_INTERVAL_MS` — poll interval in ms
+- `CORS_ORIGINS` — comma-separated allowed origins
+
+### Commands
 ```bash
-npm run start:cat21-frontend           # Frontend dev server (port 4200)
-npm run build:cat21-frontend           # Build frontend
-npm run build:cat21-frontend:production # Production build
-npm run test:cat21-frontend            # Frontend tests
-
-npm run start:backend                  # Backend dev server (port 3333, needs PostgreSQL)
-npm run build:backend                  # Build backend
-npm run test:backend                   # Backend tests
-
-npm start                              # Start both
-npm run build                          # Build both
+cd backend
+npm run start:dev      # Watch mode on port 3333
+npm run build          # Compile to dist/
+npm run typecheck      # Type check without emit
+npm run drizzle:gen    # Generate migration from schema diff
+npm run drizzle:push   # Push schema to database
+npm run test           # Jest tests
 ```
 
-## Frontend Architecture
+### Key Modules
+| Module | Purpose |
+|--------|---------|
+| `modules/shared/drizzle/` | Database connection + schema (cats, sync_state) |
+| `modules/sync/` | Polls ord API, computes traits, inserts cats |
+| `modules/cats/` | REST API: `/api/status`, `/api/cat/:txHash`, `/api/cats/:ipp/:page` |
 
+### API Endpoints
+- `GET /api/status` — Total cats, last sync time
+- `GET /api/cat/:txHash` — Single cat by transaction hash
+- `GET /api/cats/:itemsPerPage/:currentPage` — Paginated list
+
+## Frontend
+
+### Tech Stack
 - **Angular 16** with standalone components (no NgModules)
 - **Bootstrap 5.3** + ng-bootstrap for UI
 - **ordpool-parser** for cat SVG generation and trait parsing
-- Routes: `/` (homepage), `/cat/:transactionId` (details), `/cats/:itemsPerPage/:currentPage` (gallery)
-- Testnet routes mirror mainnet under `/testnet/`
+- **OpenAPI client** auto-generated from backend Swagger
+
+### Commands
+```bash
+cd frontend
+npm start                     # Dev server on port 4200
+npm run build:production      # Production build
+npm run generate:api-client   # Regenerate API client from backend Swagger
+```
 
 ### Key Components
-
 | Component | Path | Purpose |
 |-----------|------|---------|
-| StartComponent | `apps/cat21-frontend/src/app/start/` | Homepage + gallery (gallery hidden behind `*ngIf="false"`) |
-| DetailsComponent | `apps/cat21-frontend/src/app/details/` | Single cat view with traits |
-| Cat21ViewerComponent | `apps/cat21-frontend/src/app/cat21-viewer/` | Cat SVG rendering + trait table |
-| HeaderComponent | `apps/cat21-frontend/src/app/layout/header/` | Navigation, genesis cat logo |
+| StartComponent | `src/app/start/` | Homepage + gallery |
+| DetailsComponent | `src/app/details/` | Single cat view with traits |
+| Cat21ViewerComponent | `src/app/cat21-viewer/` | Cat SVG rendering + trait table |
+| HeaderComponent | `src/app/layout/header/` | Navigation, genesis cat logo |
 
-### Current State
-
-- Gallery is disabled (`*ngIf="false"` in start.component.html) — needs a working backend
-- Launch schedule gating in `apps/shared/schedule.ts` (all gates are past, app shows normally)
-- FAQ route is commented out in `app.config.ts`
-
-## Backend (deprecated)
-
-NestJS on port 3333. Swagger docs at `/open-api`. Needs PostgreSQL (see `mempool-config.sample.json` or env vars `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`).
-
-API endpoints:
-- `GET /api/cat/:transactionId` — Single cat
-- `GET /api/cats/:itemsPerPage/:currentPage` — Paginated list
-- `GET /api/cats/by-block-id/:blockId` — Cats by block
-- `GET /api/status` — Indexer stats
+### Routes
+- `/` — Homepage
+- `/cat/:transactionId` — Cat detail
+- `/cats/:itemsPerPage/:currentPage` — Gallery
+- `/testnet/*` — Testnet mirrors
 
 ## Dependency: ordpool-parser
 
-Both frontend and backend use `ordpool-parser`. For local dev:
+Both frontend and backend use `ordpool-parser`. For local dev with linked version:
 
 ```bash
 # In ordpool-parser/
 npm run build && cd dist && npm link
 
-# In cat21-indexer/
+# In cat21-indexer/backend or frontend
 npm link ordpool-parser
 ```

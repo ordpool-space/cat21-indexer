@@ -1,0 +1,58 @@
+{
+  "name": "cat21-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "ng serve",
+    "build": "ng build",
+    "build:production": "ng build --configuration=production",
+    "test": "ng test",
+    "lint": "ng lint",
+    "generate:api-client": "openapi-generator-cli generate -i http://localhost:3333/docs-json -g typescript-angular -o ./src/app/shared/cat21-api"
+  },
+  "dependencies": {
+    "@angular/animations": "16.2.4",
+    "@angular/common": "16.2.4",
+    "@angular/compiler": "16.2.4",
+    "@angular/core": "16.2.4",
+    "@angular/forms": "16.2.4",
+    "@angular/localize": "16.2.4",
+    "@angular/platform-browser": "16.2.4",
+    "@angular/platform-browser-dynamic": "16.2.4",
+    "@angular/router": "16.2.4",
+    "@ng-bootstrap/ng-bootstrap": "^15.1.2",
+    "bootstrap": "^5.3.1",
+    "canvas-confetti": "^1.6.0",
+    "ordpool-parser": "^0.0.9",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0",
+    "zone.js": "0.13.1"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "16.2.1",
+    "@angular-devkit/core": "16.2.1",
+    "@angular-devkit/schematics": "16.2.1",
+    "@angular-eslint/eslint-plugin": "16.0.3",
+    "@angular-eslint/eslint-plugin-template": "16.0.3",
+    "@angular-eslint/template-parser": "16.0.3",
+    "@angular/cli": "~16.2.0",
+    "@angular/compiler-cli": "16.2.4",
+    "@angular/language-service": "16.2.4",
+    "@openapitools/openapi-generator-cli": "^2.23.4",
+    "@schematics/angular": "16.2.1",
+    "@types/canvas-confetti": "^1.6.0",
+    "@types/jest": "29.5.4",
+    "assert": "^2.0.0",
+    "buffer": "^6.0.3",
+    "https-browserify": "^1.0.0",
+    "os-browserify": "^0.3.0",
+    "process": "^0.11.10",
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
+    "typescript": "5.1.6",
+    "util": "^0.12.5"
+  }
+}

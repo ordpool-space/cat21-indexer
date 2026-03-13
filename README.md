@@ -1,12 +1,20 @@
-# cat-21-indexer
-A super simple in-memory indexer for CAT-21 ordinals. 🟧
+# cat21-indexer
 
+Backend + frontend for **cat21.space** — the CAT-21 cat explorer.
 
-<br>
+## Architecture
 
+- **`backend/`** — NestJS + Drizzle ORM + PostgreSQL. Syncs cat data from [ord.cat21.space](https://ord.cat21.space), computes traits, serves REST API.
+- **`frontend/`** — Angular 16. Cat gallery with SVG rendering, trait display, detail pages.
 
-> **Don't forget:** 
->
-> CAT-21 follows the ordinals theory! ord is always right.
->
->Sat Ranges are half-open, meaning that they don't contain the final sat in the range. So sat range `[742707557807033–742707557828440]` does not contain sat `742707557828440`. [(source)](https://github.com/ordinals/ord/issues/2179#issuecomment-1594210084)
+## Quick Start
+
+```bash
+# Backend (needs PostgreSQL)
+cd backend && npm install && npm run start:dev   # port 3333, Swagger at /docs
+
+# Frontend
+cd frontend && npm install && npm start           # port 4200
+```
+
+See `backend/.env.example` for configuration.
