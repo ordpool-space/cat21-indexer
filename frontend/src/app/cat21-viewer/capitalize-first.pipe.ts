@@ -15,8 +15,8 @@ export class CapitalizeFirstPipe implements PipeTransform {
    * @param value The string to be transformed.
    * @returns The transformed string with the first letter in uppercase. If the input is falsy, it returns the input as is.
    */
-  transform(value: string): string {
-    if (!value) return value;
+  transform(value: string | null | undefined): string {
+    if (!value) return '';
 
     return value.charAt(0).toUpperCase() + value.slice(1);
   }

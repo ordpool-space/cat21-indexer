@@ -103,6 +103,30 @@ export class CatsController {
       .send(png);
   }
 
+  @Get('cat/:catNumber/image.gif')
+  @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)' })
+  @ApiProduces('image/gif')
+  async getCatGif(
+    @Param('catNumber', ParseIntPipe) catNumber: number,
+    @Res() reply: FastifyReply,
+  ) {
+    const svg = await this.catsService.getCatSvg(catNumber);
+    if (!svg) {
+      throw new NotFoundException(`Cat #${catNumber} not found`);
+    }
+
+    const gif = await sharp(Buffer.from(svg))
+      .resize(440, 440)
+      .gif()
+      .toBuffer();
+
+    return reply
+      .header('Cache-Control', IMMUTABLE)
+      .header('Content-Type', 'image/gif')
+      .header('Content-Disposition', `inline; filename="cat21-${catNumber}.gif"`)
+      .send(gif);
+  }
+
   @Get('cats/:itemsPerPage/:currentPage')
   @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)' })
   @ApiParam({ name: 'currentPage', description: 'Page number (1-based)' })

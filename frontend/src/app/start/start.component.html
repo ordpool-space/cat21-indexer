@@ -1,78 +1,67 @@
 <h1 class="mt-2">CAT-21</h1>
 
 <p class="mt-2">
-
   Did you know? Every Bitcoin transaction can mint a hidden cat.
   Rescue the cats and be part of the movement!
-
 </p>
-
 
 <h2 class="mt-5" id="mint">Mint a cat</h2>
 
 <ul type="square">
   <li><a href="https://ordpool.space/cat21-mint" target="_blank">with ordpool.space</a></li>
-  <li><a href="https://ordimint.com/inscribe/cat-21" target="_blank">with Ordimint</a></li>
+  <!-- <li><a href="https://ordimint.com/inscribe/cat-21" target="_blank">with Ordimint</a></li> -->
   <li><a href="https://github.com/ordpool-space/cat21/blob/main/HOWTO.md" target="_blank">or manually with Electrum</a></li>
 </ul>
 
-<ng-container *ngIf="false">
-<ng-container *ngIf="{
-  catsPaginated: catsPaginated$ | async,
-  routing: routing$ | async,
-  testnet: testnet$ | async } as c">
+<ng-container *ngIf="catsPaginated$ | async as catsPaginated">
+  <h2 class="mt-5" id="latest">Minted cats</h2>
 
-  <ng-container *ngIf="c.catsPaginated as catsPaginated">
-    <h2 class="mt-5" id="latest">Minted cats</h2>
+  <p class="mb-4">
+    Here you see all {{ catsPaginated.total }} cats that have been minted so far.
+  </p>
 
-    <p class="mb-4">
-      Here you see all {{ c?.catsPaginated?.totalResults }} cats that have been minted so far{{ c.testnet ? ' on testnet' : ''}}.
-    </p>
+  <div class="row">
 
-    <div class="row">
+    <div *ngFor="let cat of catsPaginated.cats" class="col-4 col-md-3 col-lg-2">
 
-      <div *ngFor="let cat of c?.catsPaginated?.cats" class="col-6 col-md-4 col-lg-3">
+      <!-- cat image -->
+      <a *ngIf="cat" [routerLink]="['/cat', cat.catNumber]">
+        <app-cat21-viewer [cat]="cat" />
+      </a>
 
-        <!-- cat image -->
-        <a *ngIf="cat" [routerLink]="[(c.testnet ? '/testnet/' : '/') + 'cat', cat.transactionId]">
-          <app-cat21-viewer [cat21Transaction]="cat" />
-        </a>
-
-        <!-- loading text -->
-        <app-cat21-viewer *ngIf="!cat" [cat21Transaction]="undefined" />
-
-      </div>
-
-      <div>
-        <ngb-pagination
-          class="mt-4 d-flex justify-content-center"
-          [collectionSize]="catsPaginated.totalResults"
-          [page]="catsPaginated.currentPage"
-          [pageSize]="catsPaginated.itemsPerPage"
-          aria-label="Page Cats"
-          [maxSize]="5"
-          [rotate]="true"
-          (pageChange)="changePage(catsPaginated.totalResults, catsPaginated.itemsPerPage, $event, !!c.testnet)">
-        </ngb-pagination>
-
-        <a [routerLink]="c.testnet ? '/testnet' : '/'" class="float-end">Reload</a>
-      </div>
+      <!-- loading text -->
+      <app-cat21-viewer *ngIf="!cat" [cat]="undefined" />
 
     </div>
-  </ng-container>
+
+    <div *ngIf="catsPaginated.total > 0">
+      <ngb-pagination
+        class="mt-4 d-flex justify-content-center"
+        [collectionSize]="catsPaginated.total"
+        [page]="catsPaginated.currentPage"
+        [pageSize]="catsPaginated.itemsPerPage"
+        aria-label="Page Cats"
+        [maxSize]="7"
+        [rotate]="true"
+        [ellipses]="true"
+        [boundaryLinks]="true"
+        (pageChange)="changePage(catsPaginated.total, catsPaginated.itemsPerPage, $event)">
+        <ng-template ngbPaginationEllipsis>&hellip;</ng-template>
+        <ng-template ngbPaginationFirst>&laquo;</ng-template>
+        <ng-template ngbPaginationPrevious>&lt;</ng-template>
+        <ng-template ngbPaginationNext>&gt;</ng-template>
+        <ng-template ngbPaginationLast>&raquo;</ng-template>
+      </ngb-pagination>
+
+      <a (click)="reload()" class="float-end" role="button">Reload</a>
+    </div>
+
+  </div>
 </ng-container>
-</ng-container>
+
 <h2 class="mt-5">WTF?</h2>
 
 <p class="mb-3">
   Please read the official <a href="https://github.com/ordpool-space/cat21" target="_blank">Specification</a>!
   Meow!
 </p>
-
-<!--
-<h2 class="mt-2">FAQs</h2>
-
-<p class="mb-3">
-  If you have any outstanding questions,
-  <a routerLink="/faq">please refer to our FAQ section.</a>
-</p> -->

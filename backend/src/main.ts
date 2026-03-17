@@ -15,19 +15,12 @@ async function bootstrap() {
     new FastifyAdapter({ logger: false }),
   );
 
-  await app.register(helmet);
-
-  const cfg = app.get(ConfigService);
-  const origins = (cfg.get<string>('CORS_ORIGINS') ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  app.enableCors({
-    origin: origins,
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+  // Public read-only API — permissive CORP so <img> tags work cross-origin
+  await app.register(helmet, {
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   });
+
+  app.enableCors();
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -39,6 +32,7 @@ async function bootstrap() {
 
   setupSwagger(app);
 
+  const cfg = app.get(ConfigService);
   const port = cfg.get<number>('PORT', 3333);
   await app.listen(port, '0.0.0.0');
   console.log(`API  : http://localhost:${port}`);

@@ -1,31 +1,34 @@
-<ng-container *ngIf="{
-  cat: cat$ | async,
-  testnet: testnet$ | async } as c">
+<ng-container *ngIf="{ cat: cat$ | async, status: status$ | async } as c">
+<ng-container *ngIf="c.cat as cat">
 
   <div class="clearfix">
 
-    <a *ngIf="c?.cat?.nextTransactionId" [routerLink]="[(c.testnet ? '/testnet/' : '/') + 'cat', c?.cat?.nextTransactionId]"
-      class="fw-bold mt-4 mb-4 float-start">« Next</a>
+    <a *ngIf="cat.catNumber > 0" [routerLink]="['/cat', cat.catNumber - 1]"
+      class="fw-bold mt-4 mb-4 float-start">« Previous</a>
 
-    <span *ngIf="!c?.cat?.nextTransactionId"
+    <span *ngIf="cat.catNumber === 0"
       class="fw-bold mt-4 mb-4 float-start">&nbsp;</span>
 
-    <a *ngIf="c?.cat?.previousTransactionId" [routerLink]="[(c.testnet ? '/testnet/' : '/') + 'cat', c?.cat?.previousTransactionId]"
-      class="fw-bold mt-4 mb-4 float-end">» Previous</a>
-
-    <span *ngIf="!c?.cat?.previousTransactionId"
-      class="fw-bold mt-4 mb-4 float-end">&nbsp;</span>
+    <a *ngIf="c.status && cat.catNumber < c.status.lastSyncedCatNumber"
+      [routerLink]="['/cat', cat.catNumber + 1]"
+      class="fw-bold mt-4 mb-4 float-end">Next »</a>
 
   </div>
 
   <div class="cat-box">
     <app-cat21-viewer
-    [cat21Transaction]="c.cat?.cat"
+    [cat]="cat"
     [showDetails]="true" />
   </div>
 
-  <a [routerLink]="c.testnet ? '/testnet' : '/'" class="btn btn btn-primary fw-bold mt-4 mb-4" >« Back</a>
+  <a routerLink="/" class="btn btn btn-primary fw-bold mt-4 mb-4">« Back</a>
 
 </ng-container>
+</ng-container>
 
-
+<ng-container *ngIf="(cat$ | async) === null">
+  <div class="mt-4">
+    <span class="spinner-border" role="status" style="margin-bottom: -6px;"></span>
+    <span class="ms-3" style="font-size: 1.2em;">Loading...</span>
+  </div>
+</ng-container>

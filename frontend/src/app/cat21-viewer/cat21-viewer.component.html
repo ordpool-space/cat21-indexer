@@ -1,5 +1,5 @@
 <!-- placeholder to avoid page jumps-->
-<ng-container *ngIf="!_cat21Transaction">
+<ng-container *ngIf="!cat">
 
   <div class="cat-container">
     <svg viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
@@ -22,39 +22,40 @@
 
 </ng-container>
 
-<ng-container *ngIf="svg && traits && _cat21Transaction">
+<ng-container *ngIf="cat && imageUrl">
 
-  <div class="cat-container" [innerHTML]="svg | noSanitize"></div>
+  <div class="cat-container">
+    <img [src]="imageUrl" [alt]="'CAT #' + cat.catNumber" class="cat-image">
+  </div>
 
   <br *ngIf="showDetails">
-  <strong>CAT {{ _cat21Transaction.number }}</strong><br>
+  <strong>CAT {{ cat.catNumber }}</strong><br>
 
   <div class="mt-2 cat-container" *ngIf="showDetails">
 
     <table class="table table-borderless" class="mt-4">
       <tbody>
 
-
         <tr>
           <td><b ngbTooltip="The first cat owner (Address that received the first output of the mint transaction)">i</b>First Owner&nbsp;</td>
           <td>
-            <a href="https://ordpool.space/address/{{ _cat21Transaction.firstOwner }}" target="blank" class="text-white">» {{ _cat21Transaction.firstOwner | shortenString }}</a>
+            <a href="https://ordpool.space/address/{{ cat.mintedBy }}" target="blank" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
           </td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="The transactionId where the CAT-21 ordinal was created / minted">i</b>Txn</td>
-          <td><a href="https://ordpool.space/tx/{{ _cat21Transaction.transactionId }}" target="blank" class="text-white">» {{ _cat21Transaction.transactionId | shortenString }}</a></td>
+          <td><a href="https://ordpool.space/tx/{{ cat.txHash }}" target="blank" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="The satoshi that is associated with the cat, according to the ordinal theory.">i</b>Sat</td>
-          <td><a href="https://ordinals.com/sat/{{ _cat21Transaction.sat }}" target="blank" class="text-white">{{ _cat21Transaction.sat }}</a></td>
+          <td><a href="https://ord.cat21.space/sat/{{ cat.sat }}" target="blank" class="text-white">{{ cat.sat }}</a></td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="The paid fee rate that determines the color of the cat.">i</b>Fee Rate</td>
-          <td>{{ _cat21Transaction.feeRate | number: '1.1-1' }} sat/vB</td>
+          <td>{{ cat.feeRate | number: '1.1-1' }} sat/vB</td>
         </tr>
 
         <tr>
@@ -66,13 +67,13 @@
 
         <tr>
           <td><b ngbTooltip="Genesis cat or normal cat. Genesis cats are the only white or black cats. Probability: 0.4%">i</b>Origin</td>
-          <td>{{ traits.genesis ? 'Genesis cat' : 'Normal cat' }}</td>
+          <td>{{ cat.genesis ? 'Genesis cat' : 'Normal cat' }}</td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="All colors used to paint the cat, excluding the colors of the laser eyes and other traits.">i</b>Cat Colors</td>
           <td>
-            <ng-container *ngFor="let color of traits.catColors; last as l">
+            <ng-container *ngFor="let color of cat.catColors; last as l">
               <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}<br *ngIf="!l">
             </ng-container>
           </td>
@@ -80,34 +81,34 @@
 
         <tr>
           <td><b ngbTooltip="The gender (sex) of a cat. There is a 50% chance to receive a female cat.">i</b>Gender</td>
-          <td>{{ traits.gender }}</td>
+          <td>{{ gender }}</td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="Design pose of the cat: Standing, Sleeping, Pouncing or Stalking. Same chance for all traits (25%).">i</b>Pose</td>
-          <td>{{ traits.designPose }}</td>
+          <td>{{ cat.designPose | capitalizeFirst }}</td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="Design expression of the cat: Smile, Grumpy, Pouting or Shy. Same chance for all traits (25%).">i</b>Ex&shy;pres&shy;sion</td>
-          <td>{{ traits.designExpression }}</td>
+          <td>{{ cat.designExpression | capitalizeFirst }}</td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="Design pattern of the cat: Solid, Striped, Eyepatch or Half/Half. Same chance for all traits (25%).">i</b>Pattern</td>
-          <td>{{ traits.designPattern }}</td>
+          <td>{{ cat.designPattern | capitalizeFirst }}</td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="Design facing of the cat: Left or Right. 50% chance.">i</b>Facing</td>
-          <td>{{ traits.designFacing }}</td>
+          <td>{{ cat.designFacing | capitalizeFirst }}</td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="The gorgeous laser eyes trait.
             There is a 20% chance to receive a cat with orange laser eyes, 20% chance for red, 20% chance for green, 20% chance for blue.
             There is a 20% chance to receive no laser eyes at all.">i</b>Laser Eyes</td>
-          <td>{{ traits.laserEyes }}</td>
+          <td>{{ (cat.laserEyes | capitalizeFirst) || 'None' }}</td>
         </tr>
 
         <tr>
@@ -117,13 +118,13 @@
             There is a 25% chance to receive a cat with a background of the Bitcoin Whitepaper.
             There is a 25% chance to receive a cat with an orange background.
             The orange color is #ff9900.">i</b>Back&shy;ground</td>
-          <td>{{ traits.background }}</td>
+          <td>{{ (cat.background | capitalizeFirst) || 'None' }}</td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="All colors that are used to generate the background.">i</b>Bg Colors</td>
           <td>
-            <ng-container *ngFor="let color of traits.backgroundColors; last as l">
+            <ng-container *ngFor="let color of cat.backgroundColors; last as l">
               <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}<br *ngIf="!l">
             </ng-container>
           </td>
@@ -134,7 +135,7 @@
             There is a 10% chance to receive a cat with a crown.
             The crown is golden when the background is not orange.
             The crown is made of diamonds if the background is orange.">i</b>Crown</td>
-          <td>{{ traits.crown }}</td>
+          <td>{{ (cat.crown | capitalizeFirst) || 'None' }}</td>
         </tr>
 
         <tr>
@@ -143,13 +144,13 @@
             There is a 10% chance to receive a cat with cool sunglasses.
             There is a 10% chance to receive a cat with 3D glasses - but ONLY if the cat has no laser eyes!
             There is a 10% chance to receive a cat with nouns glasses - but ONLY if the cat has no laser eyes!">i</b>Glasses</td>
-          <td>{{ traits.glasses }}</td>
+          <td>{{ (cat.glasses | capitalizeFirst) || 'None' }}</td>
         </tr>
 
-        <tr *ngIf="traits.glasses !== 'None'">
+        <tr *ngIf="cat.glasses">
           <td><b ngbTooltip="All colors that are used to paint the glasses.">i</b>Gl Colors</td>
           <td>
-            <ng-container *ngFor="let color of traits.glassesColors; last as l">
+            <ng-container *ngFor="let color of cat.glassesColors; last as l">
               <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}<br *ngIf="!l">
             </ng-container>
           </td>

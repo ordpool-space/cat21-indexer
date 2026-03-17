@@ -5,8 +5,8 @@ import { Pipe, PipeTransform } from '@angular/core';
   standalone: true
 })
 export class ShortenStringPipe implements PipeTransform {
-  transform(str: string, length = 12) {
-    if (!str) { return; }
+  transform(str: string | null | undefined, length = 12): string {
+    if (!str) { return ''; }
     if (str.length <= length) {
       return str;
     }

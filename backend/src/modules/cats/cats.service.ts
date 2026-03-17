@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { count, eq, asc, max } from 'drizzle-orm';
+import { count, eq, desc, max } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
@@ -67,7 +67,7 @@ export class CatsService {
     const results = await this.drizzle.db
       .select()
       .from(cats)
-      .orderBy(asc(cats.catNumber))
+      .orderBy(desc(cats.catNumber))
       .limit(itemsPerPage)
       .offset(offset);
 
