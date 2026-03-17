@@ -1,4 +1,4 @@
-import { AsyncPipe, NgFor, NgIf } from '@angular/common';
+import { AsyncPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -9,12 +9,11 @@ import { Cat21ViewerComponent } from '../cat21-viewer/cat21-viewer.component';
 import { ApiService, CatsPaginatedResultDto } from '../openapi-client';
 
 @Component({
-  selector: 'app-start',
-  templateUrl: './start.component.html',
-  styleUrls: ['./start.component.scss'],
-  standalone: true,
-  imports: [NgFor, NgIf, RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, NgbPaginationPages, AsyncPipe, Cat21ViewerComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-start',
+    templateUrl: './start.component.html',
+    styleUrls: ['./start.component.scss'],
+    imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, NgbPaginationPages, AsyncPipe, Cat21ViewerComponent],
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StartComponent {
   private defaultItemsPerPage = 48;

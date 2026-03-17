@@ -1,39 +1,37 @@
-<ng-container *ngIf="{ state: catState$ | async, status: status$ | async } as c">
-
-<!-- Loading -->
-<div *ngIf="c.state?.loading" class="mt-4">
-  <span class="spinner-border" role="status" style="margin-bottom: -6px;"></span>
-  <span class="ms-3" style="font-size: 1.2em;">Loading...</span>
-</div>
-
-<!-- Error / Not Found -->
-<div *ngIf="c.state?.error" class="mt-4">
-  <strong>Cat not found.</strong>
-  <p class="mt-2">This cat does not exist (yet).</p>
-  <a routerLink="/" class="btn btn btn-primary fw-bold mt-2">« Back</a>
-</div>
-
-<!-- Cat loaded -->
-<ng-container *ngIf="c.state?.cat as cat">
-
-  <div class="clearfix">
-
-    <a *ngIf="c.status && cat.catNumber < c.status.lastSyncedCatNumber"
-      [routerLink]="['/cat', cat.catNumber + 1]"
-      class="fw-bold mt-4 mb-4 float-start">« Newer</a>
-
-    <a *ngIf="cat.catNumber > 0" [routerLink]="['/cat', cat.catNumber - 1]"
-      class="fw-bold mt-4 mb-4 float-end">Older »</a>
-
-  </div>
-
-  <div class="cat-box">
-    <app-cat21-viewer
-    [cat]="cat"
-    [showDetails]="true" />
-  </div>
-
-  <a routerLink="/" class="btn btn btn-primary fw-bold mt-4 mb-4">« Back</a>
-
-</ng-container>
-</ng-container>
+@if ({ state: catState$ | async, status: status$ | async }; as c) {
+  <!-- Loading -->
+  @if (c.state?.loading) {
+    <div class="mt-4">
+      <span class="spinner-border" role="status" style="margin-bottom: -6px;"></span>
+      <span class="ms-3" style="font-size: 1.2em;">Loading...</span>
+    </div>
+  }
+  <!-- Error / Not Found -->
+  @if (c.state?.error) {
+    <div class="mt-4">
+      <strong>Cat not found.</strong>
+      <p class="mt-2">This cat does not exist (yet).</p>
+      <a routerLink="/" class="btn btn btn-primary fw-bold mt-2">« Back</a>
+    </div>
+  }
+  <!-- Cat loaded -->
+  @if (c.state?.cat; as cat) {
+    <div class="clearfix">
+      @if (c.status && cat.catNumber < c.status.lastSyncedCatNumber) {
+        <a
+          [routerLink]="['/cat', cat.catNumber + 1]"
+        class="fw-bold mt-4 mb-4 float-start">« Newer</a>
+      }
+      @if (cat.catNumber > 0) {
+        <a [routerLink]="['/cat', cat.catNumber - 1]"
+        class="fw-bold mt-4 mb-4 float-end">Older »</a>
+      }
+    </div>
+    <div class="cat-box">
+      <app-cat21-viewer
+        [cat]="cat"
+        [showDetails]="true" />
+    </div>
+    <a routerLink="/" class="btn btn btn-primary fw-bold mt-4 mb-4">« Back</a>
+  }
+}

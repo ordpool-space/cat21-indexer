@@ -1,17 +1,20 @@
 <a [routerLink]="testnet ? '/testnet' : '/'" class="text-decoration-none">
 
-  <img
-    *ngIf="!smallHeader"
-    src="assets/genesis-cat.svg" width="400" height="400" class="mx-auto d-block" title="A rare cat"
-    style="margin-top: -100px; max-width: 100%;"
-  >
+  @if (!smallHeader) {
+    <img
+      src="assets/genesis-cat.svg" width="400" height="400" class="mx-auto d-block" title="A rare cat"
+      style="margin-top: -100px; max-width: 100%;"
+      >
+  }
 
-  <div *ngIf="smallHeader">
-    <h1 class="logo mx-auto d-block mt-3 mb-2">
-      CAT-21<img
+  @if (smallHeader) {
+    <div>
+      <h1 class="logo mx-auto d-block mt-3 mb-2">
+        CAT-21<img
         src="assets/genesis-cat.svg" width="100" height="100" title="A rare cat"
         style="margin-top: -45px; margin-bottom: 4px;">
-    </h1>
-  </div>
+      </h1>
+    </div>
+  }
 </a>
 

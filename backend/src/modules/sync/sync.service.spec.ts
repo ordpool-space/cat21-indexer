@@ -43,6 +43,20 @@ describe('deriveCategory', () => {
 });
 
 describe('SyncService', () => {
+  function makeCat(n: number, height = 800000 + n) {
+    return {
+      id: `hash${n}i0`,
+      number: n,
+      address: 'bc1p...',
+      sat: 100000 + n,
+      fee: 1000,
+      height,
+      timestamp: 1700000000 + n,
+      value: 546,
+      weight: 500,
+    };
+  }
+
   function createMocks(localMax: number | null = null, remoteMax = 5) {
     const insertMock = jest.fn().mockReturnValue({
       values: jest.fn().mockReturnValue({
@@ -61,60 +75,42 @@ describe('SyncService', () => {
 
     const ordClient = {
       getLatestCatNumber: jest.fn().mockResolvedValue(remoteMax),
-      getCat: jest.fn().mockImplementation((n: number) =>
-        Promise.resolve({
-          id: `hash${n}i0`,
-          number: n,
-          address: 'bc1p...',
-          sat: 100000 + n,
-          fee: 1000,
-          height: 800000 + n,
-          timestamp: 1700000000 + n,
-          value: 546,
-          weight: 500,
-        }),
-      ),
-      getBlockHash: jest.fn().mockImplementation((h: number) =>
-        Promise.resolve('0'.repeat(64)),
-      ),
+      getCat: jest.fn().mockImplementation((n: number) => Promise.resolve(makeCat(n))),
+      getBlockHash: jest.fn().mockImplementation(() => Promise.resolve('0'.repeat(64))),
     };
 
     const service = new SyncService(drizzle as any, ordClient as any);
     return { service, drizzle, ordClient, insertMock };
   }
 
+  // --- Basic sync algorithm ---
+
   it('should skip sync when already up to date', async () => {
     const { service, ordClient, insertMock } = createMocks(10, 10);
-
     await service.sync();
-
     expect(ordClient.getLatestCatNumber).toHaveBeenCalled();
     expect(insertMock).not.toHaveBeenCalled();
   });
 
   it('should skip sync when remote is behind local', async () => {
     const { service, insertMock } = createMocks(10, 5);
-
     await service.sync();
-
     expect(insertMock).not.toHaveBeenCalled();
   });
 
-  it('should sync missing cats', async () => {
+  it('should sync missing cats from localMax+1 to remoteMax', async () => {
     const { service, ordClient, insertMock } = createMocks(2, 5);
-
     await service.sync();
 
-    // Should fetch cats 3, 4, 5
     expect(ordClient.getCat).toHaveBeenCalledWith(3);
     expect(ordClient.getCat).toHaveBeenCalledWith(4);
     expect(ordClient.getCat).toHaveBeenCalledWith(5);
+    expect(ordClient.getCat).not.toHaveBeenCalledWith(2);
     expect(insertMock).toHaveBeenCalled();
   });
 
   it('should sync from 0 when database is empty', async () => {
     const { service, ordClient, insertMock } = createMocks(null, 2);
-
     await service.sync();
 
     expect(ordClient.getCat).toHaveBeenCalledWith(0);
@@ -123,83 +119,170 @@ describe('SyncService', () => {
     expect(insertMock).toHaveBeenCalled();
   });
 
-  it('should prevent concurrent syncs', async () => {
-    const { service, ordClient } = createMocks(0, 5);
+  it('should handle multi-batch sync (more cats than BATCH_SIZE)', async () => {
+    const { service, ordClient, insertMock } = createMocks(-1, 24);
+    await service.sync();
 
-    // Make getCat slow so sync takes time
-    ordClient.getCat.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({
-        id: 'xi0', number: 1, address: null, sat: null,
-        fee: 100, height: 800000, timestamp: 1700000000,
-        value: null, weight: 500,
-      }), 50)),
-    );
-
-    // Start two syncs simultaneously
-    const sync1 = service.sync();
-    const sync2 = service.sync();
-
-    await Promise.all([sync1, sync2]);
-
-    // getLatestCatNumber should only be called once (second sync skipped)
-    expect(ordClient.getLatestCatNumber).toHaveBeenCalledTimes(1);
+    // 25 cats (0-24), BATCH_SIZE=10 → 3 batches: [0-9], [10-19], [20-24]
+    expect(ordClient.getCat).toHaveBeenCalledTimes(25);
+    expect(ordClient.getCat).toHaveBeenCalledWith(0);
+    expect(ordClient.getCat).toHaveBeenCalledWith(10);
+    expect(ordClient.getCat).toHaveBeenCalledWith(20);
+    expect(ordClient.getCat).toHaveBeenCalledWith(24);
+    // Multiple insert calls (one per batch)
+    expect(insertMock).toHaveBeenCalledTimes(3);
   });
 
-  it('should handle partial batch failures gracefully', async () => {
-    const { service, ordClient, insertMock } = createMocks(-1, 3);
+  // --- Block hash dedup ---
 
-    // Cat 1 fails, cats 0 and 2 succeed
+  it('should fetch block hashes for unique heights only', async () => {
+    const { service, ordClient } = createMocks(-1, 1);
+
+    // Both cats in same block
     ordClient.getCat
-      .mockResolvedValueOnce({
-        id: 'h0i0', number: 0, address: null, sat: null,
-        fee: 100, height: 800000, timestamp: 1700000000,
-        value: null, weight: 500,
-      })
-      .mockRejectedValueOnce(new Error('timeout'))
-      .mockResolvedValueOnce({
-        id: 'h2i0', number: 2, address: null, sat: null,
-        fee: 100, height: 800002, timestamp: 1700000002,
-        value: null, weight: 500,
-      })
-      .mockResolvedValueOnce({
-        id: 'h3i0', number: 3, address: null, sat: null,
-        fee: 100, height: 800003, timestamp: 1700000003,
-        value: null, weight: 500,
-      });
+      .mockResolvedValueOnce(makeCat(0, 800000))
+      .mockResolvedValueOnce(makeCat(1, 800000));
 
     await service.sync();
 
-    // Should still insert the cats that succeeded
-    expect(insertMock).toHaveBeenCalled();
+    expect(ordClient.getBlockHash).toHaveBeenCalledWith(800000);
+    expect(ordClient.getBlockHash).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle sync errors without crashing', async () => {
-    const { service, ordClient } = createMocks(0, 5);
-    ordClient.getLatestCatNumber.mockRejectedValue(new Error('network down'));
-
-    // Should not throw
-    await service.sync();
-  });
-
-  it('should fetch block hashes for unique heights', async () => {
+  it('should fetch separate block hashes for different heights', async () => {
     const { service, ordClient } = createMocks(-1, 1);
 
     ordClient.getCat
-      .mockResolvedValueOnce({
-        id: 'h0i0', number: 0, address: null, sat: null,
-        fee: 100, height: 800000, timestamp: 1700000000,
-        value: null, weight: 500,
-      })
-      .mockResolvedValueOnce({
-        id: 'h1i0', number: 1, address: null, sat: null,
-        fee: 100, height: 800000, timestamp: 1700000000,
-        value: null, weight: 500,
-      });
+      .mockResolvedValueOnce(makeCat(0, 800000))
+      .mockResolvedValueOnce(makeCat(1, 800001));
 
     await service.sync();
 
-    // Same block height, should only fetch once
     expect(ordClient.getBlockHash).toHaveBeenCalledWith(800000);
+    expect(ordClient.getBlockHash).toHaveBeenCalledWith(800001);
+    expect(ordClient.getBlockHash).toHaveBeenCalledTimes(2);
+  });
+
+  // --- Concurrency ---
+
+  it('should prevent concurrent syncs', async () => {
+    const { service, ordClient } = createMocks(0, 5);
+    ordClient.getCat.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(makeCat(1)), 50)),
+    );
+
+    const sync1 = service.sync();
+    const sync2 = service.sync();
+    await Promise.all([sync1, sync2]);
+
+    expect(ordClient.getLatestCatNumber).toHaveBeenCalledTimes(1);
+  });
+
+  // --- Error handling & recovery ---
+
+  it('should handle partial batch failures gracefully (some cats fail)', async () => {
+    const { service, ordClient, insertMock } = createMocks(-1, 2);
+
+    ordClient.getCat
+      .mockResolvedValueOnce(makeCat(0))
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce(makeCat(2));
+
+    await service.sync();
+
+    // Should still insert the 2 cats that succeeded
+    expect(insertMock).toHaveBeenCalled();
+    const insertedValues = insertMock.mock.results[0].value.values.mock.calls[0][0];
+    expect(insertedValues).toHaveLength(2);
+  });
+
+  it('should break when entire batch fails (all cats return null or error)', async () => {
+    const { service, ordClient, insertMock } = createMocks(-1, 2);
+
+    // All 3 cats fail
+    ordClient.getCat
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(new Error('timeout'));
+
+    await service.sync();
+
+    // No inserts because details.length === 0 → break
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('should not throw when getLatestCatNumber fails (ord completely down)', async () => {
+    const { service, ordClient } = createMocks(0, 5);
+    ordClient.getLatestCatNumber.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    await expect(service.sync()).resolves.toBeUndefined();
+  });
+
+  it('should not throw when getBlockHash fails mid-sync', async () => {
+    const { service, ordClient } = createMocks(-1, 0);
+    ordClient.getBlockHash.mockRejectedValue(new Error('500 Internal Server Error'));
+
+    await expect(service.sync()).resolves.toBeUndefined();
+  });
+
+  it('should reset syncing flag after error (allows retry on next tick)', async () => {
+    const { service, ordClient } = createMocks(0, 5);
+    ordClient.getLatestCatNumber.mockRejectedValue(new Error('network down'));
+
+    await service.sync();
+
+    // syncing flag should be reset — second sync should proceed
+    ordClient.getLatestCatNumber.mockResolvedValue(0); // up to date
+    await service.sync();
+
+    // If flag wasn't reset, second call would skip and getLatestCatNumber would be called only once
+    expect(ordClient.getLatestCatNumber).toHaveBeenCalledTimes(2);
+  });
+
+  it('should clear blockHashCache after error (no stale data)', async () => {
+    const { service, ordClient } = createMocks(-1, 0);
+
+    // First sync: succeeds, caches block hash
+    await service.sync();
     expect(ordClient.getBlockHash).toHaveBeenCalledTimes(1);
+
+    // Second sync: if cache was cleared, getBlockHash will be called again
+    ordClient.getLatestCatNumber.mockResolvedValue(0);
+    ordClient.getCat.mockResolvedValue(makeCat(0));
+
+    // Simulate fresh DB state
+    (service as any).drizzle.db.select.mockReturnValue({
+      from: jest.fn().mockResolvedValue([{ maxCatNumber: -1 }]),
+    });
+
+    await service.sync();
+
+    // Block hash fetched again because cache was cleared after first sync
+    expect(ordClient.getBlockHash).toHaveBeenCalledTimes(2);
+  });
+
+  it('should recover after ord goes down and comes back', async () => {
+    const { service, ordClient, insertMock } = createMocks(0, 5);
+
+    // Tick 1: ord is down
+    ordClient.getLatestCatNumber.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    await service.sync();
+    expect(insertMock).not.toHaveBeenCalled();
+
+    // Tick 2: ord is back, 2 new cats
+    ordClient.getLatestCatNumber.mockResolvedValueOnce(2);
+    ordClient.getCat
+      .mockResolvedValueOnce(makeCat(1))
+      .mockResolvedValueOnce(makeCat(2));
+
+    await service.sync();
+    expect(insertMock).toHaveBeenCalled();
+  });
+
+  it('should handle getLatestCatNumber returning -1 (ord has no cats)', async () => {
+    const { service, insertMock } = createMocks(null, -1);
+    // remoteMax = -1, localMax = -1 → nothing to sync
+    await service.sync();
+    expect(insertMock).not.toHaveBeenCalled();
   });
 });

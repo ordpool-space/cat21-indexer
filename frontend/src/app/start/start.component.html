@@ -13,51 +13,50 @@
   <li><a href="https://github.com/ordpool-space/cat21/blob/main/HOWTO.md" target="_blank">or manually with Electrum</a></li>
 </ul>
 
-<ng-container *ngIf="catsPaginated$ | async as catsPaginated">
+@if (catsPaginated$ | async; as catsPaginated) {
   <h2 class="mt-5" id="latest">Minted cats</h2>
-
   <p class="mb-4">
     Here you see all {{ catsPaginated.total }} cats that have been minted so far.
   </p>
-
   <div class="row">
-
-    <div *ngFor="let cat of catsPaginated.cats" class="col-4 col-md-3 col-lg-2">
-
-      <!-- cat image -->
-      <a *ngIf="cat" [routerLink]="['/cat', cat.catNumber]">
-        <app-cat21-viewer [cat]="cat" />
-      </a>
-
-      <!-- loading text -->
-      <app-cat21-viewer *ngIf="!cat" [cat]="undefined" />
-
-    </div>
-
-    <div *ngIf="catsPaginated.total > 0">
-      <ngb-pagination
-        class="mt-4 d-flex justify-content-center"
-        [collectionSize]="catsPaginated.total"
-        [page]="catsPaginated.currentPage"
-        [pageSize]="catsPaginated.itemsPerPage"
-        aria-label="Page Cats"
-        [maxSize]="7"
-        [rotate]="true"
-        [ellipses]="true"
-        [boundaryLinks]="true"
-        (pageChange)="changePage(catsPaginated.total, catsPaginated.itemsPerPage, $event)">
-        <ng-template ngbPaginationEllipsis>&hellip;</ng-template>
-        <ng-template ngbPaginationFirst>&laquo;</ng-template>
-        <ng-template ngbPaginationPrevious>&lt;</ng-template>
-        <ng-template ngbPaginationNext>&gt;</ng-template>
-        <ng-template ngbPaginationLast>&raquo;</ng-template>
-      </ngb-pagination>
-
-      <a (click)="reload()" class="float-end" role="button">Reload</a>
-    </div>
-
+    @for (cat of catsPaginated.cats; track cat) {
+      <div class="col-4 col-md-3 col-lg-2">
+        <!-- cat image -->
+        @if (cat) {
+          <a [routerLink]="['/cat', cat.catNumber]">
+            <app-cat21-viewer [cat]="cat" />
+          </a>
+        }
+        <!-- loading text -->
+        @if (!cat) {
+          <app-cat21-viewer [cat]="undefined" />
+        }
+      </div>
+    }
+    @if (catsPaginated.total > 0) {
+      <div>
+        <ngb-pagination
+          class="mt-4 d-flex justify-content-center"
+          [collectionSize]="catsPaginated.total"
+          [page]="catsPaginated.currentPage"
+          [pageSize]="catsPaginated.itemsPerPage"
+          aria-label="Page Cats"
+          [maxSize]="7"
+          [rotate]="true"
+          [ellipses]="true"
+          [boundaryLinks]="true"
+          (pageChange)="changePage(catsPaginated.total, catsPaginated.itemsPerPage, $event)">
+          <ng-template ngbPaginationEllipsis>&hellip;</ng-template>
+          <ng-template ngbPaginationFirst>&laquo;</ng-template>
+          <ng-template ngbPaginationPrevious>&lt;</ng-template>
+          <ng-template ngbPaginationNext>&gt;</ng-template>
+          <ng-template ngbPaginationLast>&raquo;</ng-template>
+        </ngb-pagination>
+        <a (click)="reload()" class="float-end" role="button">Reload</a>
+      </div>
+    }
   </div>
-</ng-container>
+}
 
 <h2 class="mt-5">WTF?</h2>
 

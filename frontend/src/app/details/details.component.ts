@@ -1,4 +1,4 @@
-import { AsyncPipe, NgIf } from '@angular/common';
+import { AsyncPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -14,12 +14,11 @@ export interface CatState {
 }
 
 @Component({
-  selector: 'app-details',
-  templateUrl: './details.component.html',
-  styleUrls: ['./details.component.scss'],
-  standalone: true,
-  imports: [NgIf, RouterLink, Cat21ViewerComponent, AsyncPipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-details',
+    templateUrl: './details.component.html',
+    styleUrls: ['./details.component.scss'],
+    imports: [RouterLink, Cat21ViewerComponent, AsyncPipe],
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DetailsComponent {
   private api = inject(ApiService);

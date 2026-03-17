@@ -1,4 +1,4 @@
-import { DecimalPipe, NgFor, NgIf, NgStyle } from '@angular/common';
+import { DecimalPipe, NgStyle } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { NgbTooltip, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 
@@ -8,20 +8,17 @@ import { CapitalizeFirstPipe } from './capitalize-first.pipe';
 import { ShortenStringPipe } from './shorten-string.pipe';
 
 @Component({
-  selector: 'app-cat21-viewer',
-  templateUrl: './cat21-viewer.component.html',
-  styleUrls: ['./cat21-viewer.component.scss'],
-  imports: [
-    NgIf,
-    NgFor,
+    selector: 'app-cat21-viewer',
+    templateUrl: './cat21-viewer.component.html',
+    styleUrls: ['./cat21-viewer.component.scss'],
+    imports: [
     NgbTooltip,
     NgStyle,
     ShortenStringPipe,
     CapitalizeFirstPipe,
-    DecimalPipe,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
+    DecimalPipe
+],
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Cat21ViewerComponent {
   @Input() cat: CatDto | undefined = undefined;
