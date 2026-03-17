@@ -39,9 +39,11 @@ describe('OrdClientService', () => {
 
       const result = await service.getCat(0);
       expect(result).toEqual(mockCat);
-      expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/cat/0`, {
-        headers: { Accept: 'application/json' },
-      });
+      expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/cat/0`,
+        expect.objectContaining({
+          headers: { Accept: 'application/json' },
+        }),
+      );
     });
 
     it('should return null for 404', async () => {

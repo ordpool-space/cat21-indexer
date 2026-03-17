@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+const FETCH_TIMEOUT_MS = 30_000;
+
 export interface OrdCatDetail {
   id: string;
   number: number;
@@ -28,6 +30,7 @@ export class OrdClientService {
     const url = `${this.baseUrl}/cats`;
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -49,6 +52,7 @@ export class OrdClientService {
 
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (res.status === 404) {
@@ -67,6 +71,7 @@ export class OrdClientService {
 
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!res.ok) {

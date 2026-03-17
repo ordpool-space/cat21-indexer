@@ -79,9 +79,13 @@ export class SyncService {
         const batchEnd = Math.min(nextCatNumber + BATCH_SIZE, remoteMax + 1);
         const numbers = Array.from({ length: batchEnd - nextCatNumber }, (_, i) => nextCatNumber + i);
 
-        const details = (await Promise.all(
+        const settled = await Promise.allSettled(
           numbers.map((n) => this.ordClient.getCat(n)),
-        )).filter((d): d is OrdCatDetail => d !== null);
+        );
+        const details = settled
+          .filter((r): r is PromiseFulfilledResult<OrdCatDetail | null> => r.status === 'fulfilled')
+          .map((r) => r.value)
+          .filter((d): d is OrdCatDetail => d !== null);
 
         if (details.length === 0) break;
 
@@ -147,6 +151,7 @@ export class SyncService {
       }
 
       this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
+      this.blockHashCache.clear();
     } catch (error) {
       this.logger.error('Sync failed', error);
     } finally {

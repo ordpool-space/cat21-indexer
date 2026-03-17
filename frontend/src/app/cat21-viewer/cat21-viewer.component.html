@@ -33,24 +33,24 @@
 
   <div class="mt-2 cat-container" *ngIf="showDetails">
 
-    <table class="table table-borderless" class="mt-4">
+    <table class="table table-borderless mt-4">
       <tbody>
 
         <tr>
           <td><b ngbTooltip="The first cat owner (Address that received the first output of the mint transaction)">i</b>First Owner&nbsp;</td>
           <td>
-            <a href="https://ordpool.space/address/{{ cat.mintedBy }}" target="blank" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
+            <a href="https://ordpool.space/address/{{ cat.mintedBy }}" target="_blank" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
           </td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="The transactionId where the CAT-21 ordinal was created / minted">i</b>Txn</td>
-          <td><a href="https://ordpool.space/tx/{{ cat.txHash }}" target="blank" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
+          <td><a href="https://ordpool.space/tx/{{ cat.txHash }}" target="_blank" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
         </tr>
 
         <tr>
           <td><b ngbTooltip="The satoshi that is associated with the cat, according to the ordinal theory.">i</b>Sat</td>
-          <td><a href="https://ord.cat21.space/sat/{{ cat.sat }}" target="blank" class="text-white">{{ cat.sat }}</a></td>
+          <td><a href="https://ord.cat21.space/sat/{{ cat.sat }}" target="_blank" class="text-white">{{ cat.sat }}</a></td>
         </tr>
 
         <tr>

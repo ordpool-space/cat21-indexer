@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  InternalServerErrorException,
   NotFoundException,
   Param,
   ParseIntPipe,
@@ -91,16 +92,20 @@ export class CatsController {
       throw new NotFoundException(`Cat #${catNumber} not found`);
     }
 
-    const png = await sharp(Buffer.from(svg))
-      .resize(440, 440)
-      .png({ compressionLevel: 9, palette: true })
-      .toBuffer();
+    try {
+      const png = await sharp(Buffer.from(svg))
+        .resize(440, 440)
+        .png({ compressionLevel: 9, palette: true })
+        .toBuffer();
 
-    return reply
-      .header('Cache-Control', IMMUTABLE)
-      .header('Content-Type', 'image/png')
-      .header('Content-Disposition', `inline; filename="cat21-${catNumber}.png"`)
-      .send(png);
+      return reply
+        .header('Cache-Control', IMMUTABLE)
+        .header('Content-Type', 'image/png')
+        .header('Content-Disposition', `inline; filename="cat21-${catNumber}.png"`)
+        .send(png);
+    } catch {
+      throw new InternalServerErrorException(`Failed to render image for cat #${catNumber}`);
+    }
   }
 
   @Get('cat/:catNumber/image.gif')
@@ -115,16 +120,20 @@ export class CatsController {
       throw new NotFoundException(`Cat #${catNumber} not found`);
     }
 
-    const gif = await sharp(Buffer.from(svg))
-      .resize(440, 440)
-      .gif()
-      .toBuffer();
+    try {
+      const gif = await sharp(Buffer.from(svg))
+        .resize(440, 440)
+        .gif()
+        .toBuffer();
 
-    return reply
-      .header('Cache-Control', IMMUTABLE)
-      .header('Content-Type', 'image/gif')
-      .header('Content-Disposition', `inline; filename="cat21-${catNumber}.gif"`)
-      .send(gif);
+      return reply
+        .header('Cache-Control', IMMUTABLE)
+        .header('Content-Type', 'image/gif')
+        .header('Content-Disposition', `inline; filename="cat21-${catNumber}.gif"`)
+        .send(gif);
+    } catch {
+      throw new InternalServerErrorException(`Failed to render image for cat #${catNumber}`);
+    }
   }
 
   @Get('cats/:itemsPerPage/:currentPage')
@@ -134,6 +143,9 @@ export class CatsController {
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,
   ): Promise<CatsPaginatedResultDto> {
-    return this.catsService.getCats(Math.min(itemsPerPage, 100), currentPage);
+    return this.catsService.getCats(
+      Math.max(1, Math.min(itemsPerPage, 100)),
+      Math.max(1, currentPage),
+    );
   }
 }
