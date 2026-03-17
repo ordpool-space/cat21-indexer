@@ -19,5 +19,4 @@ import { RoutingStateService } from './services/routing-state.service';
 })
 export class AppComponent {
   smallHeader$ = inject(RoutingStateService).smallHeader$;
-  testnet$ = inject(RoutingStateService).testnet$;
 }

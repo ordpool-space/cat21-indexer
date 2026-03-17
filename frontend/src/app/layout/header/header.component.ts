@@ -1,5 +1,4 @@
-
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 @Component({
@@ -7,12 +6,9 @@ import { RouterLink } from '@angular/router';
     styleUrls: ['./header.component.scss'],
     // eslint-disable-next-line @angular-eslint/component-selector
     selector: 'header',
-    imports: [
-    RouterLink
-],
+    imports: [RouterLink],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class HeaderComponent {
-  @Input() testnet: boolean | null = false;
-  @Input() smallHeader: boolean | null = false;
+  readonly smallHeader = input<boolean | null>(false);
 }

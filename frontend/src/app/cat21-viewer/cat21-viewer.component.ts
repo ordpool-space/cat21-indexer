@@ -1,5 +1,5 @@
 import { DecimalPipe, NgStyle } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { NgbTooltip, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 
 import { environment } from '../../environments/environment';
@@ -21,23 +21,25 @@ import { ShortenStringPipe } from './shorten-string.pipe';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Cat21ViewerComponent {
-  @Input() cat: CatDto | undefined = undefined;
-  @Input() showDetails = false;
+  readonly cat = input<CatDto | undefined>(undefined);
+  readonly showDetails = input(false);
 
   constructor(tooltipConfig: NgbTooltipConfig) {
     tooltipConfig.animation = false;
   }
 
-  get imageUrl(): string | null {
-    if (!this.cat) return null;
-    const format = this.showDetails ? 'svg' : 'gif';
-    return `${environment.api}/api/cat/${this.cat.catNumber}/image.${format}`;
-  }
+  readonly imageUrl = computed(() => {
+    const cat = this.cat();
+    if (!cat) return null;
+    const format = this.showDetails() ? 'svg' : 'gif';
+    return `${environment.api}/api/cat/${cat.catNumber}/image.${format}`;
+  });
 
-  get gender(): string {
-    if (!this.cat) return '';
-    if (this.cat.male) return 'Male';
-    if (this.cat.female) return 'Female';
+  readonly gender = computed(() => {
+    const cat = this.cat();
+    if (!cat) return '';
+    if (cat.male) return 'Male';
+    if (cat.female) return 'Female';
     return 'Unknown';
-  }
+  });
 }

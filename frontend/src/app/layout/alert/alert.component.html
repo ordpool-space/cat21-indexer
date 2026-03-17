@@ -10,12 +10,12 @@
   </symbol>
 </svg>
 
-<div class="alert alert-primary d-flex align-items-center m-0" role="alert" [ngClass]="'alert-' + type">
-  <svg class="bi flex-shrink-0 me-3" width="24" height="24" role="img" [attr.aria-label]="type + ':'">
-    <use xlink:href="#info-fill"  *ngIf="type === 'primary'"/>
-    <use xlink:href="#check-circle-fill" *ngIf="type === 'success'"/>
-    <use xlink:href="#exclamation-triangle-fill"  *ngIf="type === 'warning'"/>
-    <use xlink:href="#exclamation-triangle-fill"  *ngIf="type === 'danger'"/>
+<div class="alert alert-primary d-flex align-items-center m-0" role="alert" [ngClass]="'alert-' + type()">
+  <svg class="bi flex-shrink-0 me-3" width="24" height="24" role="img" [attr.aria-label]="type() + ':'">
+    @if (type() === 'primary') { <use xlink:href="#info-fill"/> }
+    @if (type() === 'success') { <use xlink:href="#check-circle-fill"/> }
+    @if (type() === 'warning') { <use xlink:href="#exclamation-triangle-fill"/> }
+    @if (type() === 'danger') { <use xlink:href="#exclamation-triangle-fill"/> }
   </svg>
   <div>
     <ng-content></ng-content>

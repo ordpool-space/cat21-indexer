@@ -1,5 +1,5 @@
 <!-- placeholder to avoid page jumps-->
-@if (!cat) {
+@if (!cat()) {
   <div class="cat-container">
     <svg viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
       <rect x="0" y="0" width="22" height="22" fill="#555555" />
@@ -14,21 +14,21 @@
       </text>
     </svg>
   </div>
-  @if (showDetails) {
+  @if (showDetails()) {
     <br>
     }
     <strong>CAT ?</strong><br>
   }
 
-  @if (cat && imageUrl) {
+  @if (cat(); as cat) { @if (imageUrl(); as imageUrl) {
     <div class="cat-container">
       <img [src]="imageUrl" [alt]="'CAT #' + cat.catNumber" class="cat-image">
     </div>
-    @if (showDetails) {
+    @if (showDetails()) {
       <br>
       }
       <strong>CAT {{ cat.catNumber }}</strong><br>
-      @if (showDetails) {
+      @if (showDetails()) {
         <div class="mt-2 cat-container">
           <table class="table table-borderless mt-4">
             <tbody>
@@ -72,7 +72,7 @@
                 </tr>
                 <tr>
                   <td><b ngbTooltip="The gender (sex) of a cat. There is a 50% chance to receive a female cat.">i</b>Gender</td>
-                  <td>{{ gender }}</td>
+                  <td>{{ gender() }}</td>
                 </tr>
                 <tr>
                   <td><b ngbTooltip="Design pose of the cat: Standing, Sleeping, Pouncing or Stalking. Same chance for all traits (25%).">i</b>Pose</td>
@@ -146,4 +146,4 @@
             </table>
           </div>
         }
-      }
+      } }

@@ -2,7 +2,7 @@ import { AsyncPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationNext, NgbPaginationPages, NgbPaginationPrevious } from '@ng-bootstrap/ng-bootstrap';
+import { NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationNext, NgbPaginationPrevious } from '@ng-bootstrap/ng-bootstrap';
 import { filter, fromEvent, map, retry, startWith, Subject, switchMap, withLatestFrom } from 'rxjs';
 
 import { Cat21ViewerComponent } from '../cat21-viewer/cat21-viewer.component';
@@ -12,7 +12,7 @@ import { ApiService, CatsPaginatedResultDto } from '../openapi-client';
     selector: 'app-start',
     templateUrl: './start.component.html',
     styleUrls: ['./start.component.scss'],
-    imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, NgbPaginationPages, AsyncPipe, Cat21ViewerComponent],
+    imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, AsyncPipe, Cat21ViewerComponent],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StartComponent {
