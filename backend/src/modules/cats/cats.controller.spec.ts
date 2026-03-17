@@ -1,40 +1,9 @@
 import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CatsController } from './cats.controller';
 import { CatsService } from './cats.service';
-import { CatDto } from './dto/cat.dto';
+import { GENESIS_DTO } from './__fixtures__/genesis-cat';
 
-const GENESIS_TX = '98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892';
-
-const mockCat: CatDto = {
-  id: 'uuid-1',
-  catNumber: 0,
-  txHash: GENESIS_TX,
-  blockHash: '000000000000000000018e3ea447b11385e3330348010e1b2418d0d8ae4e0ac7',
-  blockHeight: 824205,
-  mintedAt: '2024-01-03T21:04:46.000Z',
-  mintedBy: 'bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh',
-  fee: 40834,
-  weight: 705,
-  feeRate: 231.67,
-  sat: 596964966600565,
-  value: 546,
-  category: 'sub1k',
-  genesis: true,
-  catColors: ['#000000'],
-  male: true,
-  female: false,
-  designIndex: 0,
-  designPose: 'standing',
-  designExpression: 'smile',
-  designPattern: 'solid',
-  designFacing: 'left',
-  laserEyes: null,
-  background: null,
-  backgroundColors: null,
-  crown: null,
-  glasses: null,
-  glassesColors: null,
-};
+const mockCat = GENESIS_DTO;
 
 function createMockReply() {
   const reply = {
@@ -104,7 +73,7 @@ describe('CatsController', () => {
       (service.getCatByTxHash as jest.Mock).mockResolvedValue(mockCat);
       const reply = createMockReply();
 
-      const result = await controller.getCatByTxHash(GENESIS_TX, reply);
+      const result = await controller.getCatByTxHash(mockCat.txHash, reply);
       expect(result).toEqual(mockCat);
       expect(reply.header).toHaveBeenCalledWith(
         'Cache-Control',
@@ -116,7 +85,7 @@ describe('CatsController', () => {
       (service.getCatByTxHash as jest.Mock).mockResolvedValue(null);
       const reply = createMockReply();
 
-      await expect(controller.getCatByTxHash(GENESIS_TX, reply)).rejects.toThrow(NotFoundException);
+      await expect(controller.getCatByTxHash(mockCat.txHash, reply)).rejects.toThrow(NotFoundException);
     });
 
     it('should reject invalid tx hash (too short)', async () => {
@@ -128,7 +97,7 @@ describe('CatsController', () => {
     it('should reject invalid tx hash (uppercase)', async () => {
       const reply = createMockReply();
       await expect(
-        controller.getCatByTxHash(GENESIS_TX.toUpperCase(), reply),
+        controller.getCatByTxHash(mockCat.txHash.toUpperCase(), reply),
       ).rejects.toThrow(NotFoundException);
       expect(service.getCatByTxHash).not.toHaveBeenCalled();
     });

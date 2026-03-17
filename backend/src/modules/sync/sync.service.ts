@@ -151,10 +151,10 @@ export class SyncService {
       }
 
       this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
-      this.blockHashCache.clear();
     } catch (error) {
       this.logger.error('Sync failed', error);
     } finally {
+      this.blockHashCache.clear();
       this.syncing = false;
     }
   }

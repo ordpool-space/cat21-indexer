@@ -23,39 +23,32 @@ export class OrdClientService {
     this.baseUrl = configService.getOrThrow<string>('ORD_API_URL');
   }
 
-  /**
-   * Fetch the latest cat number by checking the newest entry on /cats.
-   */
   async getLatestCatNumber(): Promise<number> {
-    const url = `${this.baseUrl}/cats`;
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-
-    if (!res.ok) {
-      throw new Error(`ord API error: ${res.status} ${res.statusText} for ${url}`);
-    }
-
-    const data = (await res.json()) as { ids: string[] };
+    const data = await this.fetchJson<{ ids: string[] }>(`${this.baseUrl}/cats`);
     if (data.ids.length === 0) return -1;
 
     const newest = await this.getCat(data.ids[0]);
     return newest?.number ?? -1;
   }
 
-  /**
-   * Fetch a cat by its cat number or inscription ID.
-   */
   async getCat(catNumberOrId: number | string): Promise<OrdCatDetail | null> {
-    const url = `${this.baseUrl}/cat/${catNumberOrId}`;
+    return this.fetchJson<OrdCatDetail>(`${this.baseUrl}/cat/${catNumberOrId}`, true);
+  }
 
+  async getBlockHash(height: number): Promise<string> {
+    const data = await this.fetchJson<{ hash: string }>(`${this.baseUrl}/block/${height}`);
+    return data.hash;
+  }
+
+  private async fetchJson<T>(url: string, allow404: true): Promise<T | null>;
+  private async fetchJson<T>(url: string, allow404?: false): Promise<T>;
+  private async fetchJson<T>(url: string, allow404 = false): Promise<T | null> {
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
-    if (res.status === 404) {
+    if (allow404 && res.status === 404) {
       return null;
     }
 
@@ -63,22 +56,6 @@ export class OrdClientService {
       throw new Error(`ord API error: ${res.status} ${res.statusText} for ${url}`);
     }
 
-    return res.json() as Promise<OrdCatDetail>;
-  }
-
-  async getBlockHash(height: number): Promise<string> {
-    const url = `${this.baseUrl}/block/${height}`;
-
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-
-    if (!res.ok) {
-      throw new Error(`ord API error: ${res.status} ${res.statusText} for ${url}`);
-    }
-
-    const data = (await res.json()) as { hash: string };
-    return data.hash;
+    return res.json() as Promise<T>;
   }
 }

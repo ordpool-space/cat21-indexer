@@ -1,6 +1,6 @@
-import { JsonPipe, NgIf } from '@angular/common';
+import { NgIf } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterLink } from '@angular/router';
 
 @Component({
   templateUrl: './header.component.html',
@@ -11,8 +11,6 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   imports: [
     NgIf,
     RouterLink,
-    RouterLinkActive,
-    JsonPipe
   ],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

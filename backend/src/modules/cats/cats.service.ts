@@ -60,16 +60,11 @@ export class CatsService {
   ): Promise<CatsPaginatedResultDto> {
     const offset = (currentPage - 1) * itemsPerPage;
 
-    const [totalResult] = await this.drizzle.db
-      .select({ count: count() })
-      .from(cats);
-
-    const results = await this.drizzle.db
-      .select()
-      .from(cats)
-      .orderBy(desc(cats.catNumber))
-      .limit(itemsPerPage)
-      .offset(offset);
+    const [totalQuery, results] = await Promise.all([
+      this.drizzle.db.select({ count: count() }).from(cats),
+      this.drizzle.db.select().from(cats).orderBy(desc(cats.catNumber)).limit(itemsPerPage).offset(offset),
+    ]);
+    const [totalResult] = totalQuery;
 
     return {
       cats: results.map((r) => this.mapToDto(r)),

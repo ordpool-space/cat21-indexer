@@ -1,8 +1,7 @@
-import { AsyncPipe, NgIf } from '@angular/common';
+import { AsyncPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
-import { FooterComponent } from './layout/footer/footer.component';
 import { HeaderComponent } from './layout/header/header.component';
 import { RoutingStateService } from './services/routing-state.service';
 
@@ -13,10 +12,8 @@ import { RoutingStateService } from './services/routing-state.service';
   styleUrls: ['./app.component.scss'],
   standalone: true,
   imports: [
-    FooterComponent,
     HeaderComponent,
     RouterOutlet,
-    NgIf,
     AsyncPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -24,15 +24,6 @@ export class EnvironmentVariables {
 
   @IsString()
   ORD_API_URL: string = 'https://ord.cat21.space';
-
-  @Transform(({ value }) => parseInt(value, 10))
-  @IsNumber()
-  @Min(1000)
-  SYNC_INTERVAL_MS: number = 60000;
-
-  @IsOptional()
-  @IsString()
-  CORS_ORIGINS: string = 'http://localhost:4200';
 }
 
 export function validate(config: Record<string, unknown>) {
