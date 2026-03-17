@@ -1,8 +1,9 @@
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationNext, NgbPaginationPages, NgbPaginationPrevious } from '@ng-bootstrap/ng-bootstrap';
-import { map, retry, startWith, Subject, switchMap } from 'rxjs';
+import { filter, fromEvent, map, retry, startWith, Subject, switchMap, withLatestFrom } from 'rxjs';
 
 import { Cat21ViewerComponent } from '../cat21-viewer/cat21-viewer.component';
 import { ApiService, CatsPaginatedResultDto } from '../openapi-client';
@@ -22,6 +23,23 @@ export class StartComponent {
   private api = inject(ApiService);
   private router = inject(Router);
   private reload$ = new Subject<void>();
+
+  constructor() {
+    fromEvent<KeyboardEvent>(window, 'keydown').pipe(
+      filter((e) => e.key === 'ArrowLeft' || e.key === 'ArrowRight'),
+      withLatestFrom(this.catsPaginated$),
+      takeUntilDestroyed(),
+    ).subscribe(([event, page]) => {
+      if (page.total === 0) return;
+      const last = this.lastPage(page.total, page.itemsPerPage);
+      if (event.key === 'ArrowLeft' && page.currentPage > 1) {
+        this.changePage(page.total, page.itemsPerPage, page.currentPage - 1);
+      }
+      if (event.key === 'ArrowRight' && page.currentPage < last) {
+        this.changePage(page.total, page.itemsPerPage, page.currentPage + 1);
+      }
+    });
+  }
 
   routing$ = inject(ActivatedRoute).paramMap.pipe(
     map((paramMap) => ({

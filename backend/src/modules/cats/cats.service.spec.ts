@@ -42,12 +42,23 @@ function createMockDrizzle(overrides: Record<string, any> = {}) {
     offset: jest.fn().mockReturnThis(),
     ...overrides,
   };
-  // Make select() return the chainable, but also make the chainable itself thenable
-  // so that `await db.select().from().where()` resolves to the mock data
   return { db: chainable };
 }
 
 describe('CatsService', () => {
+  describe('getHealth', () => {
+    it('should return status ok with uptime', () => {
+      const drizzle = createMockDrizzle();
+      const service = new CatsService(drizzle as any);
+
+      const result = service.getHealth();
+      expect(result.status).toBe('ok');
+      expect(result.uptimeSec).toBeGreaterThanOrEqual(0);
+      expect(result.version).toBeDefined();
+      expect(result.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+  });
+
   describe('getStatus', () => {
     it('should return totalCats and lastSyncedCatNumber', async () => {
       const drizzle = createMockDrizzle({
@@ -106,6 +117,89 @@ describe('CatsService', () => {
       const result = await service.getCatByTxHash('0'.repeat(64));
       expect(result).toBeNull();
     });
+
+    it('should return DTO when cat found', async () => {
+      const drizzle = createMockDrizzle({
+        where: jest.fn().mockResolvedValue([GENESIS_ROW]),
+      });
+      const service = new CatsService(drizzle as any);
+
+      const result = await service.getCatByTxHash(GENESIS_ROW.txHash);
+      expect(result).not.toBeNull();
+      expect(result!.catNumber).toBe(0);
+      expect(result!.blockHash).toBe(GENESIS_ROW.blockHash);
+    });
+  });
+
+  describe('getCats', () => {
+    it('should return paginated results', async () => {
+      const drizzle = createMockDrizzle();
+      // First call: count query
+      drizzle.db.from
+        .mockResolvedValueOnce([{ count: 100 }])
+        // Second call: data query
+        .mockReturnValueOnce({
+          orderBy: jest.fn().mockReturnValue({
+            limit: jest.fn().mockReturnValue({
+              offset: jest.fn().mockResolvedValue([GENESIS_ROW]),
+            }),
+          }),
+        });
+      const service = new CatsService(drizzle as any);
+
+      const result = await service.getCats(12, 1);
+      expect(result.total).toBe(100);
+      expect(result.currentPage).toBe(1);
+      expect(result.itemsPerPage).toBe(12);
+      expect(result.cats).toHaveLength(1);
+      expect(result.cats[0].catNumber).toBe(0);
+    });
+
+    it('should calculate correct offset for page 3', async () => {
+      const offsetMock = jest.fn().mockResolvedValue([]);
+      const drizzle = createMockDrizzle();
+      drizzle.db.from
+        .mockResolvedValueOnce([{ count: 100 }])
+        .mockReturnValueOnce({
+          orderBy: jest.fn().mockReturnValue({
+            limit: jest.fn().mockReturnValue({
+              offset: offsetMock,
+            }),
+          }),
+        });
+      const service = new CatsService(drizzle as any);
+
+      await service.getCats(10, 3);
+      expect(offsetMock).toHaveBeenCalledWith(20); // (3-1) * 10
+    });
+  });
+
+  describe('getCatSvg', () => {
+    it('should return null when cat not found', async () => {
+      const drizzle = createMockDrizzle({
+        where: jest.fn().mockResolvedValue([]),
+      });
+      const service = new CatsService(drizzle as any);
+
+      const result = await service.getCatSvg(999999);
+      expect(result).toBeNull();
+    });
+
+    it('should return SVG string for existing cat', async () => {
+      const drizzle = createMockDrizzle({
+        where: jest.fn().mockResolvedValue([{
+          txHash: GENESIS_ROW.txHash,
+          weight: GENESIS_ROW.weight,
+          fee: GENESIS_ROW.fee,
+          blockHash: GENESIS_ROW.blockHash,
+        }]),
+      });
+      const service = new CatsService(drizzle as any);
+
+      const result = await service.getCatSvg(0);
+      expect(result).not.toBeNull();
+      expect(result).toContain('<svg');
+    });
   });
 
   describe('mapToDto', () => {
@@ -118,6 +212,45 @@ describe('CatsService', () => {
 
       const result = await service.getCatByNumber(0);
       expect(result!.mintedAt).toBeNull();
+    });
+
+    it('should map all 25 DTO fields', async () => {
+      const drizzle = createMockDrizzle({
+        where: jest.fn().mockResolvedValue([GENESIS_ROW]),
+      });
+      const service = new CatsService(drizzle as any);
+
+      const result = await service.getCatByNumber(0);
+      expect(result).toEqual({
+        id: 'uuid-1',
+        catNumber: 0,
+        txHash: GENESIS_ROW.txHash,
+        blockHash: GENESIS_ROW.blockHash,
+        blockHeight: 824205,
+        mintedAt: '2024-01-03T21:04:46.000Z',
+        mintedBy: GENESIS_ROW.mintedBy,
+        fee: 40834,
+        weight: 705,
+        feeRate: 231.67,
+        sat: 596964966600565,
+        value: 546,
+        category: 'sub1k',
+        genesis: true,
+        catColors: ['#000000'],
+        male: true,
+        female: false,
+        designIndex: 0,
+        designPose: 'standing',
+        designExpression: 'smile',
+        designPattern: 'solid',
+        designFacing: 'left',
+        laserEyes: null,
+        background: null,
+        backgroundColors: null,
+        crown: null,
+        glasses: null,
+        glassesColors: null,
+      });
     });
   });
 });
