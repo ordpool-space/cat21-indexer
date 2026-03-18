@@ -6,6 +6,9 @@
   width: 100%;
   height: auto;
   image-rendering: pixelated;
+  aspect-ratio: 1 / 1;
+
+  background: url("/assets/placeholder-cat.svg") center / cover no-repeat;
 }
 
 table {

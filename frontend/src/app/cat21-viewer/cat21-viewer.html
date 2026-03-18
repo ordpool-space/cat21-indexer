@@ -1,28 +1,16 @@
-<!-- placeholder to avoid page jumps-->
 @if (!cat()) {
   <div class="cat-container">
-    <svg viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="22" height="22" fill="#555555" />
-      <text x="3" y="12" font-size="0.1em" fill="white">Loading...
-        <animate
-          attributeName="fill"
-          values="white;transparent"
-          begin="0s"
-          dur="1s"
-          calcMode="discrete"
-          repeatCount="indefinite" />
-      </text>
-    </svg>
+    <img src="assets/placeholder-cat.svg" alt="" width="440" height="440" class="cat-image">
   </div>
   @if (showDetails()) {
     <br>
-    }
-    <strong>CAT ?</strong><br>
   }
+  <strong>CAT ?</strong><br>
+}
 
   @if (cat(); as cat) { @if (ngSrc(); as src) {
     <div class="cat-container">
-      <img [ngSrc]="src" [alt]="'CAT #' + cat.catNumber" width="440" height="440" class="cat-image" disableOptimizedSrcset>
+      <img [ngSrc]="src" [alt]="'CAT #' + cat.catNumber" width="440" height="440" class="cat-image" disableOptimizedSrcset (load)="$event.target.style.background='none'">
     </div>
     @if (showDetails()) {
       <br>
@@ -35,16 +23,16 @@
               <tr>
                 <td><b ngbTooltip="The first cat owner (Address that received the first output of the mint transaction)">i</b>First Owner&nbsp;</td>
                 <td>
-                  <a href="{{ env.ordpoolExplorer }}/address/{{ cat.mintedBy }}" target="_blank" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
+                  <a href="{{ env.ordpoolExplorer }}/address/{{ cat.mintedBy }}" target="_blank" rel="noopener" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
                 </td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The transactionId where the CAT-21 ordinal was created / minted">i</b>Txn</td>
-                <td><a href="{{ env.ordpoolExplorer }}/tx/{{ cat.txHash }}" target="_blank" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
+                <td><a href="{{ env.ordpoolExplorer }}/tx/{{ cat.txHash }}" target="_blank" rel="noopener" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The satoshi that is associated with the cat, according to the ordinal theory.">i</b>Sat</td>
-                <td><a href="{{ env.ordExplorer }}/sat/{{ cat.sat }}" target="_blank" class="text-white">{{ cat.sat }}</a></td>
+                <td><a href="{{ env.ordExplorer }}/sat/{{ cat.sat }}" target="_blank" rel="noopener" class="text-white">{{ cat.sat }}</a></td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The paid fee rate that determines the color of the cat.">i</b>Fee Rate</td>

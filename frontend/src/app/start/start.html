@@ -7,11 +7,13 @@
 
 <h2 class="mt-5" id="mint">Mint a cat</h2>
 
-<ul type="square">
-  <li><a href="https://ordpool.space/cat21-mint" target="_blank">with ordpool.space</a></li>
-  <!-- <li><a href="https://ordimint.com/inscribe/cat-21" target="_blank">with Ordimint</a></li> -->
-  <li><a href="https://github.com/ordpool-space/cat21/blob/main/HOWTO.md" target="_blank">or manually with Electrum</a></li>
-</ul>
+<nav aria-label="Minting options">
+  <ul type="square">
+    <li><a href="https://ordpool.space/cat21-mint" target="_blank" rel="noopener">with ordpool.space</a></li>
+    <!-- <li><a href="https://ordimint.com/inscribe/cat-21" target="_blank" rel="noopener">with Ordimint</a></li> -->
+    <li><a href="https://github.com/ordpool-space/cat21/blob/main/HOWTO.md" target="_blank" rel="noopener">or manually with Electrum</a></li>
+  </ul>
+</nav>
 
 <h2 class="mt-5" id="latest">Minted cats</h2>
 
@@ -19,10 +21,10 @@
   <p class="mb-4">
     Here you see all {{ data.total }} cats that have been minted so far.
   </p>
-  <div class="row">
+  <div class="row" role="list" aria-label="Cat gallery">
     @for (cat of data.cats; track cat.catNumber) {
-      <div class="col-4 col-md-3 col-lg-2">
-        <a [routerLink]="['/cat', cat.catNumber]">
+      <div class="col-4 col-md-3 col-lg-2" role="listitem">
+        <a [routerLink]="['/cat', cat.catNumber]" [attr.aria-label]="'View CAT #' + cat.catNumber">
           <app-cat21-viewer [cat]="cat" />
         </a>
       </div>
@@ -34,7 +36,7 @@
           [collectionSize]="data.total"
           [page]="data.currentPage"
           [pageSize]="data.itemsPerPage"
-          aria-label="Page Cats"
+          aria-label="Cat gallery pagination"
           [maxSize]="7"
           [rotate]="true"
           [ellipses]="true"
@@ -46,26 +48,26 @@
           <ng-template ngbPaginationNext>&gt;</ng-template>
           <ng-template ngbPaginationLast>&raquo;</ng-template>
         </ngb-pagination>
-        <a (click)="reload()" class="float-end" role="button">Reload</a>
+        <a (click)="reload()" class="float-end" role="button" aria-label="Reload cat gallery">Reload</a>
       </div>
     }
   </div>
 } @else if (catsResource.isLoading()) {
-  <p class="mb-4">Loading cats...</p>
-  <div class="row">
+  <p class="mb-4" aria-live="polite">Loading cats...</p>
+  <div class="row" role="list" aria-label="Loading placeholders">
     @for (placeholder of placeholders(); track $index) {
-      <div class="col-4 col-md-3 col-lg-2">
+      <div class="col-4 col-md-3 col-lg-2" role="listitem">
         <app-cat21-viewer [cat]="undefined" />
       </div>
     }
   </div>
 } @else if (catsResource.error()) {
-  <p class="mb-4">Failed to load cats. <a (click)="catsResource.reload()" role="button">Retry</a></p>
+  <p class="mb-4" role="alert">Failed to load cats. <a (click)="catsResource.reload()" role="button">Retry</a></p>
 }
 
 <h2 class="mt-5">WTF?</h2>
 
 <p class="mb-3">
-  Please read the official <a href="https://github.com/ordpool-space/cat21" target="_blank">Specification</a>!
+  Please read the official <a href="https://github.com/ordpool-space/cat21" target="_blank" rel="noopener">Specification</a>!
   Meow!
 </p>

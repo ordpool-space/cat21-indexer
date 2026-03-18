@@ -1,35 +1,36 @@
-<!-- Loading -->
-@if (catResource.isLoading()) {
-  <div class="mt-4">
-    <span class="spinner-border" role="status" style="margin-bottom: -6px;"></span>
-    <span class="ms-3" style="font-size: 1.2em;">Loading...</span>
-  </div>
-}
-<!-- Error / Not Found -->
 @if (catResource.error()) {
-  <div class="mt-4">
+  <div class="mt-4" role="alert">
     <strong>Cat not found.</strong>
     <p class="mt-2">This cat does not exist (yet).</p>
-    <a routerLink="/" class="btn btn btn-primary fw-bold mt-2">« Back</a>
+    <a routerLink="/" class="btn btn-primary fw-bold mt-2">« Back</a>
   </div>
-}
-<!-- Cat loaded -->
-@if (catResource.value(); as cat) {
-  <div class="clearfix">
+} @else if (catResource.isLoading()) {
+  <!-- Placeholder: same structure as loaded state to prevent layout shift -->
+  <nav class="clearfix" aria-label="Cat navigation">
+    <span class="fw-bold mt-4 mb-4 float-start">&nbsp;</span>
+  </nav>
+  <article class="cat-box" aria-live="polite">
+    <app-cat21-viewer [cat]="undefined" [showDetails]="true" />
+  </article>
+  <a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">« Back</a>
+} @else if (catResource.value(); as cat) {
+  <nav class="clearfix" aria-label="Cat navigation">
     @if (cat.catNumber < lastSynced()) {
       <a
         [routerLink]="['/cat', cat.catNumber + 1]"
-      class="fw-bold mt-4 mb-4 float-start">« Newer</a>
+        class="fw-bold mt-4 mb-4 float-start"
+        [attr.aria-label]="'Newer: CAT #' + (cat.catNumber + 1)">« Newer</a>
     }
     @if (cat.catNumber > 0) {
       <a [routerLink]="['/cat', cat.catNumber - 1]"
-      class="fw-bold mt-4 mb-4 float-end">Older »</a>
+        class="fw-bold mt-4 mb-4 float-end"
+        [attr.aria-label]="'Older: CAT #' + (cat.catNumber - 1)">Older »</a>
     }
-  </div>
-  <div class="cat-box">
+  </nav>
+  <article class="cat-box">
     <app-cat21-viewer
       [cat]="cat"
       [showDetails]="true" />
-  </div>
-  <a routerLink="/" class="btn btn btn-primary fw-bold mt-4 mb-4">« Back</a>
+  </article>
+  <a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">« Back</a>
 }

@@ -1,8 +1,25 @@
+.cover-container:focus {
+  outline: none;
+}
+
 .cover-container {
-  // max-width: 42em;
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
   padding: 1em;
   padding-top: 0;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  z-index: 1000;
+  padding: 0.5rem 1rem;
+  background: #000;
+  color: #fff;
+
+  &:focus {
+    top: 0;
+  }
 }

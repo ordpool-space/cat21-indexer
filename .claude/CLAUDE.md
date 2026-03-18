@@ -275,6 +275,49 @@ constructor() {
 - Prefer type inference when the type is obvious
 - Use bracket notation for dynamic properties: `data['property']`
 
+### Accessibility (a11y)
+
+Follow semantic HTML and ARIA best practices. This improves accessibility AND SEO.
+
+**Landmarks — use HTML5 structural elements:**
+- `<header>` for the site header
+- `<main>` for the primary content area (one per page)
+- `<nav aria-label="...">` for navigation sections
+- `<article>` for self-contained content (e.g., a single cat detail)
+- Never use `<div>` where a semantic element exists
+
+**Headings — maintain correct hierarchy:**
+- One `<h1>` per page
+- Never skip levels (h1 → h3 without h2 is invalid)
+- Never use headings just for visual styling
+
+**Images:**
+- Always set `alt` on informative images
+- Use `alt=""` on decorative images (tells screen readers to skip)
+
+**Links and buttons:**
+- Use `<a>` for navigation, `<button>` for actions — never interchange
+- Add `rel="noopener"` to all `target="_blank"` links
+- Add `aria-label` when link text alone is not descriptive (e.g., gallery thumbnails)
+
+**Loading states:**
+- Use `aria-live="polite"` on containers that update asynchronously
+- Use `role="status"` on spinners with `<span class="visually-hidden">Loading...</span>`
+- Use `role="alert"` on error messages
+
+**Focus management:**
+- Never remove focus outlines on interactive elements (buttons, links, inputs). Exception: non-interactive elements that receive programmatic focus (e.g., `<main tabindex="-1">`) should have `outline: none` — they're focused for screen readers, not for visual feedback
+- After route navigation, programmatically focus `<main>` (implemented in `app.ts`)
+- Provide a "Skip to content" link as the first focusable element
+
+**Page titles:**
+- Every route must have a `title` property for the browser tab and screen readers
+
+**Scroll behavior:**
+- Use `SmartScrollService` (in `shared/smart-scroll.service.ts`) instead of Angular's built-in `scrollPositionRestoration`
+- It scrolls to top on forward navigation, restores position on back/forward, and handles anchor links
+- Angular's `withInMemoryScrolling` is set to `disabled` so it only emits `Scroll` events without doing its own scrolling
+
 ---
 
 ## Dependency: ordpool-parser
