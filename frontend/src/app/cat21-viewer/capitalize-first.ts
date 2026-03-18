@@ -8,7 +8,7 @@ import { Pipe, PipeTransform } from '@angular/core';
   name: 'capitalizeFirst',
   standalone: true
 })
-export class CapitalizeFirstPipe implements PipeTransform {
+export class CapitalizeFirst implements PipeTransform {
 
   /**
    * Transforms the input string by capitalizing its first letter.

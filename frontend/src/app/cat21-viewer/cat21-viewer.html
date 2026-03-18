@@ -64,7 +64,7 @@
                   <td><b ngbTooltip="All colors used to paint the cat, excluding the colors of the laser eyes and other traits.">i</b>Cat Colors</td>
                   <td>
                     @for (color of cat.catColors; track color; let l = $last) {
-                      <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}@if (!l) {
+                      <i class="colorBlock mr-2" [ngbTooltip]="color" [style.background-color]="color"></i>{{ color }}@if (!l) {
                       <br>
                       }
                     }
@@ -109,7 +109,7 @@
                   <td><b ngbTooltip="All colors that are used to generate the background.">i</b>Bg Colors</td>
                   <td>
                     @for (color of cat.backgroundColors; track color; let l = $last) {
-                      <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}@if (!l) {
+                      <i class="colorBlock mr-2" [ngbTooltip]="color" [style.background-color]="color"></i>{{ color }}@if (!l) {
                       <br>
                       }
                     }
@@ -135,7 +135,7 @@
                     <td><b ngbTooltip="All colors that are used to paint the glasses.">i</b>Gl Colors</td>
                     <td>
                       @for (color of cat.glassesColors; track color; let l = $last) {
-                        <i class="colorBlock mr-2" [ngbTooltip]="color" [ngStyle]="{'background-color': color }"></i>{{ color }}@if (!l) {
+                        <i class="colorBlock mr-2" [ngbTooltip]="color" [style.background-color]="color"></i>{{ color }}@if (!l) {
                         <br>
                         }
                       }

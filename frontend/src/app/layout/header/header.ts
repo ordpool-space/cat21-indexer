@@ -2,13 +2,13 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 @Component({
-    templateUrl: './header.component.html',
-    styleUrls: ['./header.component.scss'],
+    templateUrl: './header.html',
+    styleUrl: './header.scss',
     // eslint-disable-next-line @angular-eslint/component-selector
     selector: 'header',
     imports: [RouterLink],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class HeaderComponent {
+export class Header {
   readonly smallHeader = input<boolean | null>(false);
 }

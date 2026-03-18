@@ -1,6 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { ApplicationConfig, importProvidersFrom, provideBrowserGlobalErrorListeners } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
 
 import { environment } from '../environments/environment';
 import { ApiModule, Configuration } from './openapi-client';
@@ -13,6 +13,6 @@ export const appConfig: ApplicationConfig = {
     importProvidersFrom(
       ApiModule.forRoot(() => new Configuration({ basePath: environment.api })),
     ),
-    provideRouter(routes),
+    provideRouter(routes, withComponentInputBinding()),
   ],
 };

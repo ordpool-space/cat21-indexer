@@ -157,6 +157,25 @@ export class MyFeature {
 
 This project has no forms yet. When forms are added, use **Signal Forms** (Angular's new signal-based form API). Do NOT use Reactive Forms or Template-driven Forms.
 
+### Route Params via `withComponentInputBinding()`
+
+Route parameters flow directly into component `input()` signals — no `ActivatedRoute` needed. Enabled via `withComponentInputBinding()` in `app.config.ts`.
+
+```typescript
+// Route: /cat/:catNumber
+@Component({ ... })
+export class Details {
+  readonly catNumber = input(0, { transform: numberAttribute });
+
+  catResource = rxResourceFixed({
+    params: () => ({ catNumber: this.catNumber() }),
+    stream: ({ params }) => this.api.getCat(params.catNumber),
+  });
+}
+```
+
+The input name must match the route param name exactly. Use `numberAttribute` transform for numeric params. This eliminates `ActivatedRoute`, `paramMap`, `toSignal`, and `map` boilerplate entirely.
+
 ### Async Data: Use `rxResourceFixed()` ONLY
 
 **CRITICAL**: Use `rxResourceFixed` from `src/app/shared/utils/rx-resource-fixed.ts` for all async data loading. It fixes three bugs in Angular's built-in `rxResource`:

@@ -1,20 +1,20 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
-import { HeaderComponent } from './layout/header/header.component';
+import { Header } from './layout/header/header';
 import { RoutingStateService } from './services/routing-state.service';
 
 @Component({
     // eslint-disable-next-line @angular-eslint/component-selector
     selector: 'body',
-    templateUrl: './app.component.html',
-    styleUrls: ['./app.component.scss'],
+    templateUrl: './app.html',
+    styleUrl: './app.scss',
     imports: [
-        HeaderComponent,
+        Header,
         RouterOutlet,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class AppComponent {
+export class App {
   smallHeader = inject(RoutingStateService).smallHeader;
 }

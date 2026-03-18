@@ -1,48 +1,37 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute } from '@angular/core';
 import { rxResourceFixed } from '../shared/utils/rx-resource-fixed';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationNext, NgbPaginationPrevious } from '@ng-bootstrap/ng-bootstrap';
-import { map } from 'rxjs';
 
-import { Cat21ViewerComponent } from '../cat21-viewer/cat21-viewer.component';
-import { ApiService, CatsPaginatedResultDto } from '../openapi-client';
+import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
+import { ApiService } from '../openapi-client';
 
 @Component({
     selector: 'app-start',
-    templateUrl: './start.component.html',
-    styleUrls: ['./start.component.scss'],
-    imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, Cat21ViewerComponent],
+    templateUrl: './start.html',
+    styleUrl: './start.scss',
+    imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, Cat21Viewer],
     changeDetection: ChangeDetectionStrategy.OnPush,
     host: {
       '(window:keydown.ArrowLeft)': 'navigatePrev()',
       '(window:keydown.ArrowRight)': 'navigateNext()',
     }
 })
-export class StartComponent {
-  private defaultItemsPerPage = 48;
+export class Start {
   private api = inject(ApiService);
   private router = inject(Router);
 
-  private routing = toSignal(
-    inject(ActivatedRoute).paramMap.pipe(
-      map((paramMap) => ({
-        itemsPerPage: parseInt(paramMap.get('itemsPerPage') || '') || this.defaultItemsPerPage,
-        currentPage: parseInt(paramMap.get('currentPage') || '') || 1,
-      })),
-    ),
-    { initialValue: { itemsPerPage: this.defaultItemsPerPage, currentPage: 1 } }
-  );
+  readonly itemsPerPage = input(48, { transform: numberAttribute });
+  readonly currentPage = input(1, { transform: numberAttribute });
 
   catsResource = rxResourceFixed({
-    params: () => this.routing(),
+    params: () => ({ itemsPerPage: this.itemsPerPage(), currentPage: this.currentPage() }),
     stream: ({ params }) => this.api.catsControllerGetCats(params.itemsPerPage, params.currentPage),
   });
 
   cats = computed(() => this.catsResource.value());
 
-  // Placeholder array for loading skeleton
-  placeholders = computed(() => new Array(this.routing().itemsPerPage));
+  placeholders = computed(() => new Array(this.itemsPerPage()));
 
   changePage(total: number, itemsPerPage: number, currentPage: number) {
     this.router.navigate(['/', 'cats', itemsPerPage, currentPage]);
