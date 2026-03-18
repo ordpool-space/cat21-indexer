@@ -41,7 +41,7 @@
           [rotate]="true"
           [ellipses]="true"
           [boundaryLinks]="true"
-          (pageChange)="changePage(data.total, data.itemsPerPage, $event)">
+          (pageChange)="changePage(data.itemsPerPage, $event)">
           <ng-template ngbPaginationEllipsis>&hellip;</ng-template>
           <ng-template ngbPaginationFirst>&laquo;</ng-template>
           <ng-template ngbPaginationPrevious>&lt;</ng-template>

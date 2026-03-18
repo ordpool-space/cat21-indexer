@@ -6,10 +6,6 @@
 
 @import "assets/public-pixel.scss";
 
-code {
-  font-size: $font-size-base;
-}
-
 hr {
   border-top: 4px solid white;
 }
@@ -24,57 +20,10 @@ h1, h2, h3, h4 {
   font-weight: 700;
 }
 
-/* text-justify has been removed in Bootstrap 5 */
-.text-justify {
-  text-align: justify;
-}
-
 a {
   text-decoration: none;
 }
 
 a:hover {
   text-decoration: underline;
-}
-
-p, app-alert {
-  a {
-    text-decoration: underline;
-  }
-}
-
-button:disabled {
-  cursor: not-allowed;
-  pointer-events: all !important;
-}
-
-
-// https://codepen.io/danielmariveles/pen/jPrwxv
-
-.btn-labeled {
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.btn-label {
-  position: relative;
-  left: -0.75rem;
-  display: inline-block;
-  padding: 0.5rem 0.60rem 0.275rem 0.60rem;
-  background: rgba(0, 0, 0);
-  color: $primary;
-}
-
-.btn-label-text {
-  position: relative;
-  top: -1px;
-  display: inline-block;
-}
-
-.blocky-inline-ml {
-  width: 1.1em;
-  border-radius: 50% !important;
-  vertical-align: middle;
-  display: inline-block;
-  margin-bottom: 0.1em;
 }

@@ -1,20 +1,20 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { rxResourceFixed } from '../shared/utils/rx-resource-fixed';
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
-import { ApiService } from '../openapi-client';
+import { ApiService } from '../shared/cat21-api';
+import { rxResourceFixed } from '../shared/rx-resource-fixed';
 
 @Component({
-    selector: 'app-details',
-    templateUrl: './details.html',
-    styleUrl: './details.scss',
-    imports: [RouterLink, Cat21Viewer],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    host: {
-      '(window:keydown.ArrowLeft)': 'navigateNewer()',
-      '(window:keydown.ArrowRight)': 'navigateOlder()',
-    }
+  selector: 'app-details',
+  templateUrl: './details.html',
+  styleUrl: './details.scss',
+  imports: [RouterLink, Cat21Viewer],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(window:keydown.ArrowLeft)': 'navigateNewer()',
+    '(window:keydown.ArrowRight)': 'navigateOlder()',
+  }
 })
 export class Details {
   private api = inject(ApiService);

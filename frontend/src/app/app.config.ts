@@ -1,10 +1,16 @@
 import { provideHttpClient } from '@angular/common/http';
-import { ApplicationConfig, importProvidersFrom, inject, provideBrowserGlobalErrorListeners, provideEnvironmentInitializer } from '@angular/core';
+import {
+  ApplicationConfig,
+  importProvidersFrom,
+  inject,
+  provideBrowserGlobalErrorListeners,
+  provideEnvironmentInitializer,
+} from '@angular/core';
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
 
 import { environment } from '../environments/environment';
-import { ApiModule, Configuration } from './openapi-client';
 import { routes } from './app.routes';
+import { ApiModule, Configuration } from './shared/cat21-api';
 import { SmartScrollService } from './shared/smart-scroll.service';
 
 export const appConfig: ApplicationConfig = {

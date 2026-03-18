@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 
-import { Start } from './start/start';
 import { Details } from './details/details';
+import { Start } from './start/start';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', component: Start, title: 'CAT-21 - Rescue the cats!' },

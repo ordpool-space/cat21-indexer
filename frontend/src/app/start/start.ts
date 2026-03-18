@@ -1,21 +1,27 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute } from '@angular/core';
-import { rxResourceFixed } from '../shared/utils/rx-resource-fixed';
 import { Router, RouterLink } from '@angular/router';
-import { NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationNext, NgbPaginationPrevious } from '@ng-bootstrap/ng-bootstrap';
+import {
+  NgbPagination,
+  NgbPaginationEllipsis,
+  NgbPaginationFirst,
+  NgbPaginationLast,
+  NgbPaginationNext,
+  NgbPaginationPrevious,
+} from '@ng-bootstrap/ng-bootstrap';
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
-import { ApiService } from '../openapi-client';
+import { ApiService } from '../shared/cat21-api';
+import { rxResourceFixed } from '../shared/rx-resource-fixed';
 
 @Component({
-    selector: 'app-start',
-    templateUrl: './start.html',
-    styleUrl: './start.scss',
-    imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, Cat21Viewer],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    host: {
-      '(window:keydown.ArrowLeft)': 'navigatePrev()',
-      '(window:keydown.ArrowRight)': 'navigateNext()',
-    }
+  selector: 'app-start',
+  templateUrl: './start.html',
+  imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, Cat21Viewer],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(window:keydown.ArrowLeft)': 'navigatePrev()',
+    '(window:keydown.ArrowRight)': 'navigateNext()',
+  }
 })
 export class Start {
   private api = inject(ApiService);
@@ -31,19 +37,20 @@ export class Start {
 
   placeholders = computed(() => new Array(this.itemsPerPage() || 48));
 
-  changePage(total: number, itemsPerPage: number, currentPage: number) {
+  changePage(itemsPerPage: number, currentPage: number) {
     this.router.navigate(['/', 'cats', itemsPerPage, currentPage]);
   }
 
-  reload() {
-    this.router.navigate(['/']).then(() => this.catsResource.reload());
+  async reload() {
+    await this.router.navigate(['/']);
+    this.catsResource.reload();
   }
 
   navigatePrev() {
     const data = this.catsResource.value();
     if (!data || data.total === 0) return;
     if (data.currentPage > 1) {
-      this.changePage(data.total, data.itemsPerPage, data.currentPage - 1);
+      this.changePage(data.itemsPerPage, data.currentPage - 1);
     }
   }
 
@@ -52,7 +59,7 @@ export class Start {
     if (!data || data.total === 0) return;
     const last = Math.ceil(data.total / data.itemsPerPage);
     if (data.currentPage < last) {
-      this.changePage(data.total, data.itemsPerPage, data.currentPage + 1);
+      this.changePage(data.itemsPerPage, data.currentPage + 1);
     }
   }
 }
