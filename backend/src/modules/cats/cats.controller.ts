@@ -15,13 +15,6 @@ import { CatDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.
 
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
-type ImageFormat = 'png' | 'gif';
-
-const IMAGE_CONFIG: Record<ImageFormat, { contentType: string; convert: (s: sharp.Sharp) => sharp.Sharp }> = {
-  png: { contentType: 'image/png', convert: (s) => s.png({ compressionLevel: 9, palette: true }) },
-  gif: { contentType: 'image/gif', convert: (s) => s.gif() },
-};
-
 @ApiTags('api')
 @Controller('api')
 export class CatsController {
@@ -94,17 +87,25 @@ export class CatsController {
     @Param('catNumber', ParseIntPipe) catNumber: number,
     @Res() reply: FastifyReply,
   ) {
-    return this.renderImage(catNumber, 'png', reply);
-  }
+    const svg = await this.catsService.getCatSvg(catNumber);
+    if (!svg) {
+      throw new NotFoundException(`Cat #${catNumber} not found`);
+    }
 
-  @Get('cat/:catNumber/image.gif')
-  @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)' })
-  @ApiProduces('image/gif')
-  async getCatGif(
-    @Param('catNumber', ParseIntPipe) catNumber: number,
-    @Res() reply: FastifyReply,
-  ) {
-    return this.renderImage(catNumber, 'gif', reply);
+    try {
+      const png = await sharp(Buffer.from(svg))
+        .resize(440, 440)
+        .png({ compressionLevel: 9, palette: true })
+        .toBuffer();
+
+      return reply
+        .header('Cache-Control', IMMUTABLE)
+        .header('Content-Type', 'image/png')
+        .header('Content-Disposition', `inline; filename="cat21-${catNumber}.png"`)
+        .send(png);
+    } catch {
+      throw new InternalServerErrorException(`Failed to render image for cat #${catNumber}`);
+    }
   }
 
   @Get('cats/:itemsPerPage/:currentPage')
@@ -118,26 +119,5 @@ export class CatsController {
       Math.max(1, Math.min(itemsPerPage, 100)),
       Math.max(1, currentPage),
     );
-  }
-
-  private async renderImage(catNumber: number, format: ImageFormat, reply: FastifyReply) {
-    const svg = await this.catsService.getCatSvg(catNumber);
-    if (!svg) {
-      throw new NotFoundException(`Cat #${catNumber} not found`);
-    }
-
-    const { contentType, convert } = IMAGE_CONFIG[format];
-
-    try {
-      const buffer = await convert(sharp(Buffer.from(svg)).resize(440, 440)).toBuffer();
-
-      return reply
-        .header('Cache-Control', IMMUTABLE)
-        .header('Content-Type', contentType)
-        .header('Content-Disposition', `inline; filename="cat21-${catNumber}.${format}"`)
-        .send(buffer);
-    } catch {
-      throw new InternalServerErrorException(`Failed to render image for cat #${catNumber}`);
-    }
   }
 }

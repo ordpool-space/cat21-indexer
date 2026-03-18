@@ -33,7 +33,7 @@ export class Cat21Viewer {
   readonly imageUrl = computed(() => {
     const cat = this.cat();
     if (!cat) return null;
-    const format = this.showDetails() ? 'svg' : 'gif';
+    const format = this.showDetails() ? 'svg' : 'png';
     return `${environment.api}/api/cat/${cat.catNumber}/image.${format}`;
   });
 

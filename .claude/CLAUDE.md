@@ -58,7 +58,6 @@ npm run test           # Jest tests
 - `GET /api/cats/:itemsPerPage/:currentPage` — Paginated list
 - `GET /api/cat/:catNumber/image.svg` — Cat SVG image
 - `GET /api/cat/:catNumber/image.png` — Cat PNG image
-- `GET /api/cat/:catNumber/image.gif` — Cat GIF image
 
 ## Frontend
 

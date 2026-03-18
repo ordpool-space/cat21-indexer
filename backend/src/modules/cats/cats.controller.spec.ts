@@ -202,34 +202,4 @@ describe('CatsController', () => {
     });
   });
 
-  describe('getCatGif', () => {
-    it('should throw NotFoundException for unknown cat', async () => {
-      (service.getCatSvg as jest.Mock).mockResolvedValue(null);
-      const reply = createMockReply();
-
-      await expect(controller.getCatGif(999999, reply)).rejects.toThrow(NotFoundException);
-    });
-
-    it('should send GIF with correct headers for valid cat', async () => {
-      (service.getCatSvg as jest.Mock).mockResolvedValue(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect width="22" height="22" fill="red"/></svg>',
-      );
-      const reply = createMockReply();
-
-      await controller.getCatGif(0, reply);
-      expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/gif');
-      expect(reply.header).toHaveBeenCalledWith(
-        'Content-Disposition',
-        'inline; filename="cat21-0.gif"',
-      );
-      expect(reply.send).toHaveBeenCalledWith(expect.any(Buffer));
-    });
-
-    it('should throw InternalServerErrorException for invalid SVG', async () => {
-      (service.getCatSvg as jest.Mock).mockResolvedValue('not-valid-svg');
-      const reply = createMockReply();
-
-      await expect(controller.getCatGif(0, reply)).rejects.toThrow(InternalServerErrorException);
-    });
-  });
 });
