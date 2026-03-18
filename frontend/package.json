@@ -26,7 +26,6 @@
     "@ng-bootstrap/ng-bootstrap": "^20.0.0",
     "@popperjs/core": "^2.11.8",
     "bootstrap": "^5.3.1",
-    "canvas-confetti": "^1.6.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
@@ -42,7 +41,6 @@
     "@angular/language-service": "21.2.4",
     "@openapitools/openapi-generator-cli": "^2.23.4",
     "@schematics/angular": "16.2.1",
-    "@types/canvas-confetti": "^1.6.0",
     "@types/jest": "29.5.4",
     "assert": "^2.0.0",
     "buffer": "^6.0.3",
