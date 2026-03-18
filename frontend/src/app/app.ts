@@ -27,7 +27,7 @@ export class App {
       skip(1),
       takeUntilDestroyed(),
     ).subscribe(() => {
-      this.mainRef().nativeElement.focus();
+      this.mainRef().nativeElement.focus({ preventScroll: true });
     });
   }
 }

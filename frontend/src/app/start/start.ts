@@ -36,11 +36,7 @@ export class Start {
   }
 
   reload() {
-    if (this.currentPage() !== 1) {
-      this.router.navigate(['/']); // param change triggers refetch
-    } else {
-      this.catsResource.reload(); // same params, force reload
-    }
+    this.router.navigate(['/']).then(() => this.catsResource.reload());
   }
 
   navigatePrev() {
