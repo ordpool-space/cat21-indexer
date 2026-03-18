@@ -1,16 +1,16 @@
-<a routerLink="/" class="text-decoration-none">
+<a routerLink="/cat/0" class="text-decoration-none">
   @if (smallHeader()) {
     <div>
       <h1 class="logo mx-auto d-block mt-3 mb-2">
         CAT-21<img
-        ngSrc="assets/genesis-cat.svg" width="100" height="100" title="A rare cat" priority
-        style="margin-top: -45px; margin-bottom: 4px;">
+        ngSrc="assets/genesis-cat.svg" width="100" height="100" title="The Genesis Cat" priority
+        class="mt-n5">
       </h1>
     </div>
   } @else {
     <img
-      ngSrc="assets/genesis-cat.svg" width="400" height="400" class="mx-auto d-block" title="A rare cat" priority
-      style="margin-top: -100px; max-width: 100%;"
+      ngSrc="assets/genesis-cat.svg" width="400" height="400" class="mx-auto d-block mt-n5" title="The Genesis Cat" priority
+      style="max-width: 100%;"
       >
   }
 </a>
