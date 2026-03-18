@@ -1,4 +1,5 @@
 import { inject, Injectable } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter, map, switchMap } from 'rxjs';
 
@@ -6,11 +7,10 @@ import { filter, map, switchMap } from 'rxjs';
   providedIn: 'root'
 })
 export class RoutingStateService {
+  private router = inject(Router);
 
-  router = inject(Router);
-
-  navigation$ = this.router.events.pipe(
-    filter((event: any) => event instanceof NavigationEnd),
+  private navigation$ = this.router.events.pipe(
+    filter((event): event is NavigationEnd => event instanceof NavigationEnd),
     switchMap(() => {
       let route = this.router.routerState.root;
       while (route.firstChild) {
@@ -20,7 +20,8 @@ export class RoutingStateService {
     })
   );
 
-  smallHeader$ = this.navigation$.pipe(
-    map(data => !!data.smallHeader)
+  smallHeader = toSignal(
+    this.navigation$.pipe(map(data => !!data['smallHeader'])),
+    { initialValue: false }
   );
 }

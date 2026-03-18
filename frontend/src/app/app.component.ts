@@ -1,4 +1,3 @@
-import { AsyncPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
@@ -13,10 +12,9 @@ import { RoutingStateService } from './services/routing-state.service';
     imports: [
         HeaderComponent,
         RouterOutlet,
-        AsyncPipe,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AppComponent {
-  smallHeader$ = inject(RoutingStateService).smallHeader$;
+  smallHeader = inject(RoutingStateService).smallHeader;
 }
