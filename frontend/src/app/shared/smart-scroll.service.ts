@@ -35,6 +35,7 @@ export class SmartScrollService {
 
   /** Position to restore on BACK from anchor */
   #positionBeforeAnchor: [number, number] | null = null;
+  #previousComponent: unknown = undefined;
 
   constructor() {
     if (isPlatformBrowser(this.#platformId)) {
@@ -59,15 +60,29 @@ export class SmartScrollService {
         // BACK/FORWARD: use Angular's stored position
         this.#pendingPosition = event.position;
       } else {
-        // Forward navigation: scroll to top
-        this.#viewportScroller.scrollToPosition([0, 0]);
+        // Forward navigation: scroll to top only if component changed
+        const curr = this.#activeComponent();
+        const changed = this.#previousComponent !== undefined && curr !== this.#previousComponent;
+        this.#previousComponent = curr;
+        if (changed) {
+          this.#viewportScroller.scrollToPosition([0, 0]);
+        }
         return;
       }
+      this.#previousComponent = this.#activeComponent();
       this.#tryScroll();
     });
 
     // Retry for async content
     afterEveryRender(() => this.#tryScroll());
+  }
+
+  #activeComponent(): unknown {
+    let route = this.#router.routerState.root;
+    while (route.firstChild) {
+      route = route.firstChild;
+    }
+    return route.component;
   }
 
   #tryScroll(): void {

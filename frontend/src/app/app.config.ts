@@ -17,10 +17,8 @@ export const appConfig: ApplicationConfig = {
     provideRouter(
       routes,
       withComponentInputBinding(),
-      // Track scroll positions & emit Scroll events, but don't scroll (SmartScrollService handles it)
       withInMemoryScrolling({ scrollPositionRestoration: 'disabled', anchorScrolling: 'disabled' }),
     ),
-    // Initialize SmartScrollService (replaces Angular's built-in scroll restoration)
     provideEnvironmentInitializer(() => inject(SmartScrollService)),
   ],
 };

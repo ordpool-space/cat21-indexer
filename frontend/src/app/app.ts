@@ -1,7 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, viewChild } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
-import { filter, skip } from 'rxjs';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 
 import { Header } from './layout/header/header';
 import { RoutingStateService } from './services/routing-state.service';
@@ -19,15 +17,4 @@ import { RoutingStateService } from './services/routing-state.service';
 })
 export class App {
   smallHeader = inject(RoutingStateService).smallHeader;
-  private mainRef = viewChild.required<ElementRef<HTMLElement>>('mainRef');
-
-  constructor() {
-    inject(Router).events.pipe(
-      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
-      skip(1),
-      takeUntilDestroyed(),
-    ).subscribe(() => {
-      this.mainRef().nativeElement.focus({ preventScroll: true });
-    });
-  }
 }

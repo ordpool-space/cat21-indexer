@@ -306,8 +306,7 @@ Follow semantic HTML and ARIA best practices. This improves accessibility AND SE
 - Use `role="alert"` on error messages
 
 **Focus management:**
-- Never remove focus outlines on interactive elements (buttons, links, inputs). Exception: non-interactive elements that receive programmatic focus (e.g., `<main tabindex="-1">`) should have `outline: none` — they're focused for screen readers, not for visual feedback
-- After route navigation, programmatically focus `<main>` (implemented in `app.ts`)
+- Never remove focus outlines on interactive elements (buttons, links, inputs)
 - Provide a "Skip to content" link as the first focusable element
 
 **Page titles:**
