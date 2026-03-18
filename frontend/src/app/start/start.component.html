@@ -13,39 +13,33 @@
   <li><a href="https://github.com/ordpool-space/cat21/blob/main/HOWTO.md" target="_blank">or manually with Electrum</a></li>
 </ul>
 
-@if (catsPaginated$ | async; as catsPaginated) {
-  <h2 class="mt-5" id="latest">Minted cats</h2>
+<h2 class="mt-5" id="latest">Minted cats</h2>
+
+@if (cats(); as data) {
   <p class="mb-4">
-    Here you see all {{ catsPaginated.total }} cats that have been minted so far.
+    Here you see all {{ data.total }} cats that have been minted so far.
   </p>
   <div class="row">
-    @for (cat of catsPaginated.cats; track cat) {
+    @for (cat of data.cats; track cat.catNumber) {
       <div class="col-4 col-md-3 col-lg-2">
-        <!-- cat image -->
-        @if (cat) {
-          <a [routerLink]="['/cat', cat.catNumber]">
-            <app-cat21-viewer [cat]="cat" />
-          </a>
-        }
-        <!-- loading text -->
-        @if (!cat) {
-          <app-cat21-viewer [cat]="undefined" />
-        }
+        <a [routerLink]="['/cat', cat.catNumber]">
+          <app-cat21-viewer [cat]="cat" />
+        </a>
       </div>
     }
-    @if (catsPaginated.total > 0) {
+    @if (data.total > 0) {
       <div>
         <ngb-pagination
           class="mt-4 d-flex justify-content-center"
-          [collectionSize]="catsPaginated.total"
-          [page]="catsPaginated.currentPage"
-          [pageSize]="catsPaginated.itemsPerPage"
+          [collectionSize]="data.total"
+          [page]="data.currentPage"
+          [pageSize]="data.itemsPerPage"
           aria-label="Page Cats"
           [maxSize]="7"
           [rotate]="true"
           [ellipses]="true"
           [boundaryLinks]="true"
-          (pageChange)="changePage(catsPaginated.total, catsPaginated.itemsPerPage, $event)">
+          (pageChange)="changePage(data.total, data.itemsPerPage, $event)">
           <ng-template ngbPaginationEllipsis>&hellip;</ng-template>
           <ng-template ngbPaginationFirst>&laquo;</ng-template>
           <ng-template ngbPaginationPrevious>&lt;</ng-template>
@@ -56,6 +50,17 @@
       </div>
     }
   </div>
+} @else if (catsResource.isLoading()) {
+  <p class="mb-4">Loading cats...</p>
+  <div class="row">
+    @for (placeholder of placeholders(); track $index) {
+      <div class="col-4 col-md-3 col-lg-2">
+        <app-cat21-viewer [cat]="undefined" />
+      </div>
+    }
+  </div>
+} @else if (catsResource.error()) {
+  <p class="mb-4">Failed to load cats. <a (click)="catsResource.reload()" role="button">Retry</a></p>
 }
 
 <h2 class="mt-5">WTF?</h2>

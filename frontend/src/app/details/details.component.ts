@@ -1,62 +1,56 @@
-import { AsyncPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { catchError, filter, fromEvent, map, Observable, of, retry, shareReplay, startWith, switchMap, withLatestFrom } from 'rxjs';
+import { rxResourceFixed } from '../shared/utils/rx-resource-fixed';
+import { map } from 'rxjs';
 
 import { Cat21ViewerComponent } from '../cat21-viewer/cat21-viewer.component';
-import { ApiService, CatDto, StatusDto } from '../openapi-client';
-
-export interface CatState {
-  cat: CatDto | null;
-  loading: boolean;
-  error: boolean;
-}
+import { ApiService } from '../openapi-client';
 
 @Component({
     selector: 'app-details',
     templateUrl: './details.component.html',
     styleUrls: ['./details.component.scss'],
-    imports: [RouterLink, Cat21ViewerComponent, AsyncPipe],
-    changeDetection: ChangeDetectionStrategy.OnPush
+    imports: [RouterLink, Cat21ViewerComponent],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    host: {
+      '(window:keydown.ArrowLeft)': 'navigateNewer()',
+      '(window:keydown.ArrowRight)': 'navigateOlder()',
+    }
 })
 export class DetailsComponent {
   private api = inject(ApiService);
   private router = inject(Router);
 
-  catNumber$ = inject(ActivatedRoute).paramMap.pipe(
-    map((paramMap) => parseInt(paramMap.get('catNumber') || '0', 10)),
-  );
-
-  status$: Observable<StatusDto | null> = this.api.catsControllerGetStatus().pipe(
-    retry({ count: 3, delay: 1000 }),
-    catchError(() => of(null)),
-    shareReplay({ bufferSize: 1, refCount: true }),
-  );
-
-  catState$: Observable<CatState> = this.catNumber$.pipe(
-    switchMap((catNumber) =>
-      this.api.catsControllerGetCatByNumber(catNumber).pipe(
-        map((cat) => ({ cat, loading: false, error: false }) as CatState),
-        retry({ count: 3, delay: 1000 }),
-        catchError(() => of({ cat: null, loading: false, error: true } as CatState)),
-        startWith({ cat: null, loading: true, error: false } as CatState),
-      ),
+  catNumber = toSignal(
+    inject(ActivatedRoute).paramMap.pipe(
+      map((paramMap) => parseInt(paramMap.get('catNumber') || '0', 10)),
     ),
+    { initialValue: 0 }
   );
 
-  constructor() {
-    fromEvent<KeyboardEvent>(window, 'keydown').pipe(
-      filter((e) => e.key === 'ArrowLeft' || e.key === 'ArrowRight'),
-      withLatestFrom(this.catNumber$, this.status$),
-      takeUntilDestroyed(),
-    ).subscribe(([event, catNumber, status]) => {
-      if (event.key === 'ArrowLeft' && status && catNumber < status.lastSyncedCatNumber) {
-        this.router.navigate(['/cat', catNumber + 1]);
-      }
-      if (event.key === 'ArrowRight' && catNumber > 0) {
-        this.router.navigate(['/cat', catNumber - 1]);
-      }
-    });
+  catResource = rxResourceFixed({
+    params: () => ({ catNumber: this.catNumber() }),
+    stream: ({ params }) => this.api.catsControllerGetCatByNumber(params.catNumber),
+  });
+
+  statusResource = rxResourceFixed({
+    stream: () => this.api.catsControllerGetStatus(),
+  });
+
+  lastSynced = computed(() => this.statusResource.value()?.lastSyncedCatNumber ?? 0);
+
+  navigateNewer() {
+    const n = this.catNumber();
+    if (n < this.lastSynced()) {
+      this.router.navigate(['/cat', n + 1]);
+    }
+  }
+
+  navigateOlder() {
+    const n = this.catNumber();
+    if (n > 0) {
+      this.router.navigate(['/cat', n - 1]);
+    }
   }
 }
