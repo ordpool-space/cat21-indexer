@@ -15,7 +15,7 @@
 
 <h2 class="mt-5" id="latest">Minted cats</h2>
 
-@if (cats(); as data) {
+@if (catsResource.value(); as data) {
   <p class="mb-4">
     Here you see all {{ data.total }} cats that have been minted so far.
   </p>

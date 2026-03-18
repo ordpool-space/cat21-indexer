@@ -35,16 +35,16 @@
               <tr>
                 <td><b ngbTooltip="The first cat owner (Address that received the first output of the mint transaction)">i</b>First Owner&nbsp;</td>
                 <td>
-                  <a href="https://ordpool.space/address/{{ cat.mintedBy }}" target="_blank" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
+                  <a href="{{ env.ordpoolExplorer }}/address/{{ cat.mintedBy }}" target="_blank" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
                 </td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The transactionId where the CAT-21 ordinal was created / minted">i</b>Txn</td>
-                <td><a href="https://ordpool.space/tx/{{ cat.txHash }}" target="_blank" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
+                <td><a href="{{ env.ordpoolExplorer }}/tx/{{ cat.txHash }}" target="_blank" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The satoshi that is associated with the cat, according to the ordinal theory.">i</b>Sat</td>
-                <td><a href="https://ord.cat21.space/sat/{{ cat.sat }}" target="_blank" class="text-white">{{ cat.sat }}</a></td>
+                <td><a href="{{ env.ordExplorer }}/sat/{{ cat.sat }}" target="_blank" class="text-white">{{ cat.sat }}</a></td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The paid fee rate that determines the color of the cat.">i</b>Fee Rate</td>
@@ -63,11 +63,7 @@
                 <tr>
                   <td><b ngbTooltip="All colors used to paint the cat, excluding the colors of the laser eyes and other traits.">i</b>Cat Colors</td>
                   <td>
-                    @for (color of cat.catColors; track color; let l = $last) {
-                      <i class="colorBlock mr-2" [ngbTooltip]="color" [style.background-color]="color"></i>{{ color }}@if (!l) {
-                      <br>
-                      }
-                    }
+                    <app-color-list [colors]="cat.catColors" />
                   </td>
                 </tr>
                 <tr>
@@ -108,11 +104,7 @@
                 <tr>
                   <td><b ngbTooltip="All colors that are used to generate the background.">i</b>Bg Colors</td>
                   <td>
-                    @for (color of cat.backgroundColors; track color; let l = $last) {
-                      <i class="colorBlock mr-2" [ngbTooltip]="color" [style.background-color]="color"></i>{{ color }}@if (!l) {
-                      <br>
-                      }
-                    }
+                    <app-color-list [colors]="cat.backgroundColors" />
                   </td>
                 </tr>
                 <tr>
@@ -134,11 +126,7 @@
                   <tr>
                     <td><b ngbTooltip="All colors that are used to paint the glasses.">i</b>Gl Colors</td>
                     <td>
-                      @for (color of cat.glassesColors; track color; let l = $last) {
-                        <i class="colorBlock mr-2" [ngbTooltip]="color" [style.background-color]="color"></i>{{ color }}@if (!l) {
-                        <br>
-                        }
-                      }
+                      <app-color-list [colors]="cat.glassesColors" />
                     </td>
                   </tr>
                 }

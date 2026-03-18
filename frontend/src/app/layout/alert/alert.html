@@ -10,7 +10,7 @@
   </symbol>
 </svg>
 
-<div class="alert alert-primary d-flex align-items-center m-0" role="alert" [ngClass]="'alert-' + type()">
+<div [class]="alertClass()" role="alert">
   <svg class="bi flex-shrink-0 me-3" width="24" height="24" role="img" [attr.aria-label]="type() + ':'">
     @if (type() === 'primary') { <use xlink:href="#info-fill"/> }
     @if (type() === 'success') { <use xlink:href="#check-circle-fill"/> }

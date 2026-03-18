@@ -1,10 +1,11 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { NgbTooltip, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 
 import { environment } from '../../environments/environment';
 import { CatDto } from '../openapi-client';
 import { CapitalizeFirst } from './capitalize-first';
+import { ColorList } from './color-list';
 import { ShortenString } from './shorten-string';
 
 @Component({
@@ -15,6 +16,7 @@ import { ShortenString } from './shorten-string';
     NgbTooltip,
     ShortenString,
     CapitalizeFirst,
+    ColorList,
     DecimalPipe
 ],
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -22,9 +24,10 @@ import { ShortenString } from './shorten-string';
 export class Cat21Viewer {
   readonly cat = input<CatDto | undefined>(undefined);
   readonly showDetails = input(false);
+  readonly env = environment;
 
-  constructor(tooltipConfig: NgbTooltipConfig) {
-    tooltipConfig.animation = false;
+  constructor() {
+    inject(NgbTooltipConfig).animation = false;
   }
 
   readonly imageUrl = computed(() => {

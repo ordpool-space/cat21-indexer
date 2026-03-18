@@ -25,29 +25,26 @@ export class Start {
   readonly currentPage = input(1, { transform: numberAttribute });
 
   catsResource = rxResourceFixed({
-    params: () => ({ itemsPerPage: this.itemsPerPage(), currentPage: this.currentPage() }),
+    params: () => ({ itemsPerPage: this.itemsPerPage() || 48, currentPage: this.currentPage() || 1 }),
     stream: ({ params }) => this.api.catsControllerGetCats(params.itemsPerPage, params.currentPage),
   });
 
-  cats = computed(() => this.catsResource.value());
-
-  placeholders = computed(() => new Array(this.itemsPerPage()));
+  placeholders = computed(() => new Array(this.itemsPerPage() || 48));
 
   changePage(total: number, itemsPerPage: number, currentPage: number) {
     this.router.navigate(['/', 'cats', itemsPerPage, currentPage]);
   }
 
-  lastPage(total: number, itemsPerPage: number): number {
-    return Math.ceil(total / itemsPerPage);
-  }
-
   reload() {
-    this.router.navigate(['/']);
-    this.catsResource.reload();
+    if (this.currentPage() !== 1) {
+      this.router.navigate(['/']); // param change triggers refetch
+    } else {
+      this.catsResource.reload(); // same params, force reload
+    }
   }
 
   navigatePrev() {
-    const data = this.cats();
+    const data = this.catsResource.value();
     if (!data || data.total === 0) return;
     if (data.currentPage > 1) {
       this.changePage(data.total, data.itemsPerPage, data.currentPage - 1);
@@ -55,9 +52,9 @@ export class Start {
   }
 
   navigateNext() {
-    const data = this.cats();
+    const data = this.catsResource.value();
     if (!data || data.total === 0) return;
-    const last = this.lastPage(data.total, data.itemsPerPage);
+    const last = Math.ceil(data.total / data.itemsPerPage);
     if (data.currentPage < last) {
       this.changePage(data.total, data.itemsPerPage, data.currentPage + 1);
     }

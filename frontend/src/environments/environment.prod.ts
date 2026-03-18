@@ -1,5 +1,6 @@
 export const environment = {
   production: true,
   api: 'https://backend.cat21.space',
-  ordinalsExplorer: 'https://explorer.ordinalsbot.com/'
+  ordpoolExplorer: 'https://ordpool.space',
+  ordExplorer: 'https://ord.cat21.space',
 };
