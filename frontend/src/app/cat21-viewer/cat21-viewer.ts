@@ -1,9 +1,10 @@
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, NgOptimizedImage } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { NgbTooltip, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 
-import { environment } from '../../environments/environment';
 import { CatDto } from '../openapi-client';
+import { catImageLoader } from '../shared/cat-image-loader';
+import { environment } from '../../environments/environment';
 import { CapitalizeFirst } from './capitalize-first';
 import { ColorList } from './color-list';
 import { ShortenString } from './shorten-string';
@@ -14,11 +15,13 @@ import { ShortenString } from './shorten-string';
     styleUrl: './cat21-viewer.scss',
     imports: [
     NgbTooltip,
+    NgOptimizedImage,
     ShortenString,
     CapitalizeFirst,
     ColorList,
     DecimalPipe
 ],
+    providers: [catImageLoader],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Cat21Viewer {
@@ -30,11 +33,11 @@ export class Cat21Viewer {
     inject(NgbTooltipConfig).animation = false;
   }
 
-  readonly imageUrl = computed(() => {
+  readonly ngSrc = computed(() => {
     const cat = this.cat();
     if (!cat) return null;
-    const format = this.showDetails() ? 'svg' : 'png';
-    return `${environment.api}/api/cat/${cat.catNumber}/image.${format}`;
+    const format = this.showDetails() ? 'svg' : 'webp';
+    return `cat/${cat.catNumber}/image.${format}`;
   });
 
   readonly gender = computed(() => {

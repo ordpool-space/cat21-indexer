@@ -80,10 +80,10 @@ export class CatsController {
       .send(svg);
   }
 
-  @Get('cat/:catNumber/image.png')
+  @Get('cat/:catNumber/image.webp')
   @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)' })
-  @ApiProduces('image/png')
-  async getCatPng(
+  @ApiProduces('image/webp')
+  async getCatWebp(
     @Param('catNumber', ParseIntPipe) catNumber: number,
     @Res() reply: FastifyReply,
   ) {
@@ -93,16 +93,16 @@ export class CatsController {
     }
 
     try {
-      const png = await sharp(Buffer.from(svg))
+      const webp = await sharp(Buffer.from(svg))
         .resize(440, 440)
-        .png({ compressionLevel: 9, palette: true })
+        .webp({ lossless: true })
         .toBuffer();
 
       return reply
         .header('Cache-Control', IMMUTABLE)
-        .header('Content-Type', 'image/png')
-        .header('Content-Disposition', `inline; filename="cat21-${catNumber}.png"`)
-        .send(png);
+        .header('Content-Type', 'image/webp')
+        .header('Content-Disposition', `inline; filename="cat21-${catNumber}.webp"`)
+        .send(webp);
     } catch {
       throw new InternalServerErrorException(`Failed to render image for cat #${catNumber}`);
     }

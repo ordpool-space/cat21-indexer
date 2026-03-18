@@ -1,3 +1,4 @@
+import { NgOptimizedImage } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
@@ -6,7 +7,7 @@ import { RouterLink } from '@angular/router';
     styleUrl: './header.scss',
     // eslint-disable-next-line @angular-eslint/component-selector
     selector: 'header',
-    imports: [RouterLink],
+    imports: [RouterLink, NgOptimizedImage],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Header {

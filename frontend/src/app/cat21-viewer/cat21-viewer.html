@@ -20,9 +20,9 @@
     <strong>CAT ?</strong><br>
   }
 
-  @if (cat(); as cat) { @if (imageUrl(); as imageUrl) {
+  @if (cat(); as cat) { @if (ngSrc(); as src) {
     <div class="cat-container">
-      <img [src]="imageUrl" [alt]="'CAT #' + cat.catNumber" class="cat-image">
+      <img [ngSrc]="src" [alt]="'CAT #' + cat.catNumber" width="440" height="440" class="cat-image" disableOptimizedSrcset>
     </div>
     @if (showDetails()) {
       <br>

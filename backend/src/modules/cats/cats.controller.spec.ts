@@ -170,26 +170,25 @@ describe('CatsController', () => {
     });
   });
 
-  describe('getCatPng', () => {
+  describe('getCatWebp', () => {
     it('should throw NotFoundException for unknown cat', async () => {
       (service.getCatSvg as jest.Mock).mockResolvedValue(null);
       const reply = createMockReply();
 
-      await expect(controller.getCatPng(999999, reply)).rejects.toThrow(NotFoundException);
+      await expect(controller.getCatWebp(999999, reply)).rejects.toThrow(NotFoundException);
     });
 
-    it('should send PNG with correct headers for valid cat', async () => {
-      // Minimal valid SVG
+    it('should send WebP with correct headers for valid cat', async () => {
       (service.getCatSvg as jest.Mock).mockResolvedValue(
         '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><rect width="22" height="22" fill="red"/></svg>',
       );
       const reply = createMockReply();
 
-      await controller.getCatPng(0, reply);
-      expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/png');
+      await controller.getCatWebp(0, reply);
+      expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/webp');
       expect(reply.header).toHaveBeenCalledWith(
         'Content-Disposition',
-        'inline; filename="cat21-0.png"',
+        'inline; filename="cat21-0.webp"',
       );
       expect(reply.send).toHaveBeenCalledWith(expect.any(Buffer));
     });
@@ -198,7 +197,7 @@ describe('CatsController', () => {
       (service.getCatSvg as jest.Mock).mockResolvedValue('not-valid-svg');
       const reply = createMockReply();
 
-      await expect(controller.getCatPng(0, reply)).rejects.toThrow(InternalServerErrorException);
+      await expect(controller.getCatWebp(0, reply)).rejects.toThrow(InternalServerErrorException);
     });
   });
 

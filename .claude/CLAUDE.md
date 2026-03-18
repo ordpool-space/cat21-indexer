@@ -57,7 +57,7 @@ npm run test           # Jest tests
 - `GET /api/tx/:txHash` — Single cat by transaction hash
 - `GET /api/cats/:itemsPerPage/:currentPage` — Paginated list
 - `GET /api/cat/:catNumber/image.svg` — Cat SVG image
-- `GET /api/cat/:catNumber/image.png` — Cat PNG image
+- `GET /api/cat/:catNumber/image.webp` — Cat WebP image
 
 ## Frontend
 
