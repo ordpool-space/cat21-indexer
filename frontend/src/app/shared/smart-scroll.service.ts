@@ -1,14 +1,12 @@
 import { Injectable, inject } from '@angular/core';
-import { Router, Scroll } from '@angular/router';
+import { NavigationEnd, Router, Scroll } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
-import { filter } from 'rxjs';
+import { filter, pairwise } from 'rxjs';
 
 /**
- * Smart scroll service: scrolls to top on forward navigation,
- * restores position on back/forward browser navigation.
- *
- * Replaces Angular's built-in scrollPositionRestoration which
- * scrolls to top on every navigation (including pagination).
+ * Smart scroll service: scrolls to top on route changes,
+ * but NOT on param-only changes (e.g., pagination).
+ * Restores position on back/forward browser navigation.
  */
 @Injectable({ providedIn: 'root' })
 export class SmartScrollService {
@@ -17,18 +15,29 @@ export class SmartScrollService {
 
   constructor() {
     this.#router.events.pipe(
-      filter((e): e is Scroll => e instanceof Scroll)
-    ).subscribe(event => {
-      if (event.position) {
+      filter((e): e is Scroll => e instanceof Scroll),
+      pairwise(),
+    ).subscribe(([prev, curr]) => {
+      if (curr.position) {
         // Back/forward: restore saved position
-        this.#viewportScroller.scrollToPosition(event.position);
-      } else if (event.anchor) {
+        this.#viewportScroller.scrollToPosition(curr.position);
+      } else if (curr.anchor) {
         // Anchor link
-        this.#viewportScroller.scrollToAnchor(event.anchor);
+        this.#viewportScroller.scrollToAnchor(curr.anchor);
       } else {
-        // Forward navigation: scroll to top
-        this.#viewportScroller.scrollToPosition([0, 0]);
+        // Forward navigation: only scroll to top if route path changed
+        const prevRoute = this.#routePath((prev.routerEvent as NavigationEnd).urlAfterRedirects);
+        const currRoute = this.#routePath((curr.routerEvent as NavigationEnd).urlAfterRedirects);
+        if (currRoute !== prevRoute) {
+          this.#viewportScroller.scrollToPosition([0, 0]);
+        }
       }
     });
+  }
+
+  /** Extract the first path segment (route) ignoring params */
+  #routePath(url: string): string {
+    const segments = url.split('/').filter(Boolean);
+    return segments[0] ?? '';
   }
 }
