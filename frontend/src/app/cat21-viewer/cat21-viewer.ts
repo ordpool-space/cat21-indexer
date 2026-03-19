@@ -27,6 +27,8 @@ import { ShortenString } from './shorten-string';
 export class Cat21Viewer {
   readonly cat = input<CatDto | undefined>(undefined);
   readonly showDetails = input(false);
+  readonly currentOwner = input<string | null | undefined>(undefined);
+  readonly currentOwnerState = input<'loading' | 'address' | 'free' | 'error'>('loading');
   readonly env = environment;
 
   constructor() {

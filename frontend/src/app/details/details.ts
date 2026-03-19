@@ -3,6 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
 import { ApiService } from '../shared/cat21-api';
+import { OrdApiService } from '../shared/ord-api.service';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 
 @Component({
@@ -18,6 +19,7 @@ import { rxResourceFixed } from '../shared/rx-resource-fixed';
 })
 export class Details {
   private api = inject(ApiService);
+  private ordApi = inject(OrdApiService);
   private router = inject(Router);
 
   readonly catNumber = input(0, { transform: numberAttribute });
@@ -25,6 +27,20 @@ export class Details {
   catResource = rxResourceFixed({
     params: () => ({ catNumber: this.catNumber() }),
     stream: ({ params }) => this.api.catsControllerGetCatByNumber(params.catNumber),
+  });
+
+  currentOwnerResource = rxResourceFixed({
+    params: () => ({ catNumber: this.catNumber() }),
+    stream: ({ params }) => this.ordApi.getCurrentOwner(params.catNumber),
+  });
+
+  currentOwnerState = computed(() => {
+    if (this.currentOwnerResource.error()) return 'error' as const;
+    if (this.currentOwnerResource.isLoading()) return 'loading' as const;
+    const address = this.currentOwnerResource.value();
+    if (address === undefined) return 'loading' as const;
+    if (address === null) return 'free' as const;
+    return 'address' as const;
   });
 
   statusResource = rxResourceFixed({

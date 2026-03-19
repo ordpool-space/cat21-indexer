@@ -115,10 +115,10 @@ export class SyncService {
             blockHash,
             blockHeight: detail.height,
             mintedAt: new Date(detail.timestamp * 1000),
-            mintedBy: detail.minted_by,
+            mintedBy: detail.minted_by ?? detail.address, // fallback until new ord is deployed
             fee: detail.fee,
             weight: detail.weight,
-            size: detail.size,
+            size: detail.size ?? 0, // fallback until new ord is deployed
             feeRate,
             sat: detail.sat,
             value: detail.value,

@@ -30,7 +30,9 @@
   <article class="cat-box">
     <app-cat21-viewer
       [cat]="cat"
-      [showDetails]="true" />
+      [showDetails]="true"
+      [currentOwner]="currentOwnerResource.value()"
+      [currentOwnerState]="currentOwnerState()" />
   </article>
   <a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">« Back</a>
 }

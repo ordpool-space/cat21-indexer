@@ -35,7 +35,24 @@
               <tr>
                 <td><b ngbTooltip="The first cat owner (Address that received the first output of the mint transaction)">i</b>First Owner&nbsp;</td>
                 <td>
-                  <a href="{{ env.ordpoolExplorer }}/address/{{ cat.mintedBy }}" target="_blank" rel="noopener" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
+                  @if (cat.mintedBy) {
+                    <a href="{{ env.ordpoolExplorer }}/address/{{ cat.mintedBy }}" target="_blank" rel="noopener" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
+                  } @else {
+                    This cat is free!
+                  }
+                </td>
+              </tr>
+              <tr>
+                <td><b ngbTooltip="The current holder of the sat associated with this cat. This can change when the cat is transferred.">i</b>Current Owner&nbsp;</td>
+                <td>
+                  @switch (currentOwnerState()) {
+                    @case ('loading') { }
+                    @case ('address') {
+                      <a href="{{ env.ordExplorer }}/address/{{ currentOwner() }}" target="_blank" rel="noopener" class="text-white">» {{ currentOwner() | shortenString }}</a>
+                    }
+                    @case ('free') { This cat is free! }
+                    @case ('error') { unavailable }
+                  }
                 </td>
               </tr>
               <tr>
