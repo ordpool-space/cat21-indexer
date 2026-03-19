@@ -172,15 +172,15 @@ describe('CatsService', () => {
   });
 
   describe('mapToDto', () => {
-    it('should handle null mintedAt', async () => {
-      const row = { ...GENESIS_ROW, mintedAt: null };
+    it('should handle null mintedBy', async () => {
+      const row = { ...GENESIS_ROW, mintedBy: null };
       const drizzle = createMockDrizzle({
         where: jest.fn().mockResolvedValue([row]),
       });
       const service = new CatsService(drizzle as any);
 
       const result = await service.getCatByNumber(0);
-      expect(result!.mintedAt).toBeNull();
+      expect(result!.mintedBy).toBeNull();
     });
 
     it('should map all 25 DTO fields', async () => {

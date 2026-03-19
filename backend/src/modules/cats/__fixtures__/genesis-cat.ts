@@ -11,6 +11,7 @@ export const GENESIS_ROW = {
   mintedBy: 'bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh',
   fee: 40834,
   weight: 705,
+  size: 195,
   feeRate: 231.67,
   sat: 596964966600565,
   value: 546,
@@ -20,20 +21,20 @@ export const GENESIS_ROW = {
   male: true,
   female: false,
   designIndex: 0,
-  designPose: 'standing',
-  designExpression: 'smile',
-  designPattern: 'solid',
-  designFacing: 'left',
-  laserEyes: null,
-  background: null,
-  backgroundColors: null,
-  crown: null,
-  glasses: null,
-  glassesColors: null,
+  designPose: 'Standing',
+  designExpression: 'Smile',
+  designPattern: 'Solid',
+  designFacing: 'Left',
+  laserEyes: 'Red',
+  background: 'Orange',
+  backgroundColors: ['#ff9900'],
+  crown: 'None',
+  glasses: 'None',
+  glassesColors: [],
 };
 
 /** Genesis cat DTO shape (ISO string for mintedAt) */
 export const GENESIS_DTO: CatDto = {
   ...GENESIS_ROW,
   mintedAt: '2024-01-03T21:04:46.000Z',
-};
+} as CatDto;

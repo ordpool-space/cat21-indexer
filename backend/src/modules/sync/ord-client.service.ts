@@ -6,13 +6,15 @@ const FETCH_TIMEOUT_MS = 30_000;
 export interface OrdCatDetail {
   id: string;
   number: number;
-  address: string | null;
-  sat: number | null;
+  address: string | null;      // current holder — NOT stored in our DB
+  minted_by: string | null;    // first owner from mint tx output 0
+  sat: number;
   fee: number;
   height: number;
   timestamp: number;
-  value: number | null;
+  value: number;
   weight: number;
+  size: number;
 }
 
 @Injectable()

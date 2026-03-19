@@ -6,29 +6,30 @@ export class CatDto {
   @ApiProperty() txHash!: string;
   @ApiProperty() blockHash!: string;
   @ApiProperty() blockHeight!: number;
-  @ApiPropertyOptional() mintedAt!: string | null;
-  @ApiPropertyOptional() mintedBy!: string | null;
+  @ApiProperty() mintedAt!: string;
+  @ApiPropertyOptional() mintedBy!: string | null; // null for OP_RETURN outputs (cat is free)
   @ApiProperty() fee!: number;
   @ApiProperty() weight!: number;
+  @ApiProperty() size!: number;
   @ApiProperty() feeRate!: number;
-  @ApiPropertyOptional() sat!: number | null;
-  @ApiPropertyOptional() value!: number | null;
-  @ApiPropertyOptional() category!: string | null;
+  @ApiProperty() sat!: number;
+  @ApiProperty() value!: number;
+  @ApiProperty() category!: string;
   @ApiProperty() genesis!: boolean;
-  @ApiPropertyOptional() catColors!: string[] | null;
-  @ApiPropertyOptional() male!: boolean | null;
-  @ApiPropertyOptional() female!: boolean | null;
-  @ApiPropertyOptional() designIndex!: number | null;
-  @ApiPropertyOptional() designPose!: string | null;
-  @ApiPropertyOptional() designExpression!: string | null;
-  @ApiPropertyOptional() designPattern!: string | null;
-  @ApiPropertyOptional() designFacing!: string | null;
-  @ApiPropertyOptional() laserEyes!: string | null;
-  @ApiPropertyOptional() background!: string | null;
-  @ApiPropertyOptional() backgroundColors!: string[] | null;
-  @ApiPropertyOptional() crown!: string | null;
-  @ApiPropertyOptional() glasses!: string | null;
-  @ApiPropertyOptional() glassesColors!: string[] | null;
+  @ApiProperty() catColors!: string[];
+  @ApiProperty() male!: boolean;
+  @ApiProperty() female!: boolean;
+  @ApiProperty() designIndex!: number;
+  @ApiProperty() designPose!: string;
+  @ApiProperty() designExpression!: string;
+  @ApiProperty() designPattern!: string;
+  @ApiProperty() designFacing!: string;
+  @ApiProperty() laserEyes!: string;
+  @ApiProperty() background!: string;
+  @ApiProperty() backgroundColors!: string[];
+  @ApiProperty() crown!: string;
+  @ApiProperty() glasses!: string;
+  @ApiProperty() glassesColors!: string[];
 }
 
 export class CatsPaginatedResultDto {

@@ -90,7 +90,7 @@
           <td><b ngbTooltip="The gorgeous laser eyes trait.
             There is a 20% chance to receive a cat with orange laser eyes, 20% chance for red, 20% chance for green, 20% chance for blue.
             There is a 20% chance to receive no laser eyes at all.">i</b>Laser Eyes</td>
-                  <td>{{ (cat.laserEyes | capitalizeFirst) || 'None' }}</td>
+                  <td>{{ cat.laserEyes | capitalizeFirst }}</td>
                 </tr>
                 <tr>
           <td><b ngbTooltip="The background trait. All images have a background.
@@ -99,7 +99,7 @@
             There is a 25% chance to receive a cat with a background of the Bitcoin Whitepaper.
             There is a 25% chance to receive a cat with an orange background.
             The orange color is #ff9900.">i</b>Back&shy;ground</td>
-                  <td>{{ (cat.background | capitalizeFirst) || 'None' }}</td>
+                  <td>{{ cat.background | capitalizeFirst }}</td>
                 </tr>
                 <tr>
                   <td><b ngbTooltip="All colors that are used to generate the background.">i</b>Bg Colors</td>
@@ -112,7 +112,7 @@
             There is a 10% chance to receive a cat with a crown.
             The crown is golden when the background is not orange.
             The crown is made of diamonds if the background is orange.">i</b>Crown</td>
-                  <td>{{ (cat.crown | capitalizeFirst) || 'None' }}</td>
+                  <td>{{ cat.crown | capitalizeFirst }}</td>
                 </tr>
                 <tr>
           <td><b ngbTooltip="The glasses trait.
@@ -120,9 +120,9 @@
             There is a 10% chance to receive a cat with cool sunglasses.
             There is a 10% chance to receive a cat with 3D glasses - but ONLY if the cat has no laser eyes!
             There is a 10% chance to receive a cat with nouns glasses - but ONLY if the cat has no laser eyes!">i</b>Glasses</td>
-                  <td>{{ (cat.glasses | capitalizeFirst) || 'None' }}</td>
+                  <td>{{ cat.glasses | capitalizeFirst }}</td>
                 </tr>
-                @if (cat.glasses) {
+                @if (cat.glasses !== 'None') {
                   <tr>
                     <td><b ngbTooltip="All colors that are used to paint the glasses.">i</b>Gl Colors</td>
                     <td>
