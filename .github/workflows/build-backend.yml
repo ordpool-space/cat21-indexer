@@ -1,0 +1,45 @@
+name: Build Backend
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/build-backend.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Install dependencies
+      working-directory: backend
+      run: npm ci
+
+    - name: Run tests
+      working-directory: backend
+      run: npm test
+
+    - name: Build production
+      working-directory: backend
+      run: npm run build
+
+    - name: Deploy to ordpool-space/cat21-backend-build
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      working-directory: backend
+      run: |
+        npx angular-cli-ghpages \
+          --repo=https://github.com/ordpool-space/cat21-backend-build.git \
+          --branch=main \
+          --dir=dist \
+          --name="The Buildbot" \
+          --email=noreply@haushoppe.art \
+          --no-notfound \
+          --no-nojekyll
