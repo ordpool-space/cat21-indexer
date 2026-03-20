@@ -30,6 +30,17 @@ jobs:
       working-directory: backend
       run: npm run build
 
+    - name: Prepare deploy artifact
+      working-directory: backend
+      run: |
+        cp package.json dist/
+        cp package-lock.json dist/
+        cd dist && node -e "
+          const pkg = require('./package.json');
+          pkg.scripts = { start: 'node main.js' };
+          require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+        "
+
     - name: Deploy to ordpool-space/cat21-backend-build
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
