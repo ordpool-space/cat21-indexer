@@ -13,7 +13,8 @@ import * as sharp from 'sharp';
 import { CatsService } from './cats.service';
 import { CatDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.dto';
 
-const IMMUTABLE = 'public, max-age=31536000, immutable';
+// Browser: 1 day (immutable), Cloudflare edge: 1 year (purgeable)
+const CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable';
 
 @ApiTags('api')
 @Controller('api')
@@ -40,7 +41,7 @@ export class CatsController {
     if (!cat) {
       throw new NotFoundException(`Cat #${catNumber} not found`);
     }
-    reply.header('Cache-Control', IMMUTABLE);
+    reply.header('Cache-Control', CACHE_CONTROL);
     return cat;
   }
 
@@ -57,7 +58,7 @@ export class CatsController {
     if (!cat) {
       throw new NotFoundException(`Cat with tx ${txHash} not found`);
     }
-    reply.header('Cache-Control', IMMUTABLE);
+    reply.header('Cache-Control', CACHE_CONTROL);
     return cat;
   }
 
@@ -74,7 +75,7 @@ export class CatsController {
     }
 
     return reply
-      .header('Cache-Control', IMMUTABLE)
+      .header('Cache-Control', CACHE_CONTROL)
       .header('Content-Type', 'image/svg+xml')
       .header('Content-Disposition', `inline; filename="cat21-${catNumber}.svg"`)
       .send(svg);
@@ -99,7 +100,7 @@ export class CatsController {
         .toBuffer();
 
       return reply
-        .header('Cache-Control', IMMUTABLE)
+        .header('Cache-Control', CACHE_CONTROL)
         .header('Content-Type', 'image/webp')
         .header('Content-Disposition', `inline; filename="cat21-${catNumber}.webp"`)
         .send(webp);
