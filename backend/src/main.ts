@@ -6,8 +6,13 @@ import {
 import { ValidationPipe } from '@nestjs/common';
 import helmet from '@fastify/helmet';
 import { ConfigService } from '@nestjs/config';
+import * as sharp from 'sharp';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger';
+
+// Minimize Sharp memory usage on low-memory environments (512MB)
+sharp.cache(false);
+sharp.concurrency(1);
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
