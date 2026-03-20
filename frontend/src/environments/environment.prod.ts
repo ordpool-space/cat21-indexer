@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  api: 'https://cat21-backend.koyeb.app',
+  api: 'https://backend2.cat21.space',
   ordpoolExplorer: 'https://ordpool.space',
   ordExplorer: 'https://ord.cat21.space',
 };
