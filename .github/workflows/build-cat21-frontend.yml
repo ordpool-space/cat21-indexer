@@ -1,0 +1,40 @@
+name: Build Cat21 Frontend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/build-cat21-frontend.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci --legacy-peer-deps
+
+    - name: Build production
+      working-directory: frontend
+      run: npm run build
+
+    - name: Deploy to ordpool-space/cat21-frontend-build
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      working-directory: frontend
+      run: |
+        npx angular-cli-ghpages \
+          --repo=https://github.com/ordpool-space/cat21-frontend-build.git \
+          --branch=main \
+          --dir=dist/browser \
+          --name="The Buildbot" \
+          --email=noreply@haushoppe.art \
+          --no-notfound \
+          --no-nojekyll
