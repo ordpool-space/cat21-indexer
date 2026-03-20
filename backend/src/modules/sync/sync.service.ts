@@ -30,7 +30,7 @@ export class SyncService {
     private readonly ordClient: OrdClientService,
   ) {}
 
-  @Interval(10_000)
+  @Interval(60_000)
   async handleSync() {
     await this.sync();
   }
