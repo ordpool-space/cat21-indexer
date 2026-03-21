@@ -59,6 +59,15 @@ npm run test           # Jest tests
 - `GET /api/cat/:catNumber/image.svg` — Cat SVG image
 - `GET /api/cat/:catNumber/image.webp` — Cat WebP image
 
+### OpenAPI Documentation (HARD RULE)
+
+Every backend endpoint and every DTO field MUST have comprehensive Swagger documentation. This API is public — third-party developers and the ecosystem depend on it.
+
+- **Every `@Get`/`@Post` endpoint**: Use `@ApiOperation({ summary, description })`, `@ApiOkResponse`, `@ApiNotFoundResponse`, `@ApiParam` with examples
+- **Every DTO field**: Use `@ApiProperty({ description, example })` — include meaningful examples (real genesis cat data preferred)
+- **Enum fields**: Use `enum: [...]` to list all possible values
+- **Optional fields**: Use `@ApiPropertyOptional` with explanation of when it's null
+
 ### Cache-Control Headers (HARD RULE)
 
 Cloudflare edge caching is configured to **respect origin headers**:
