@@ -7,7 +7,14 @@ import {
   ParseIntPipe,
   Res,
 } from '@nestjs/common';
-import { ApiParam, ApiProduces, ApiTags } from '@nestjs/swagger';
+import {
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiProduces,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
 import { CatsService } from './cats.service';
@@ -22,17 +29,24 @@ export class CatsController {
   constructor(private readonly catsService: CatsService) {}
 
   @Get('health')
+  @ApiOperation({ summary: 'Health check', description: 'Returns service health info including uptime and version.' })
+  @ApiOkResponse({ type: HealthDto })
   getHealth(): HealthDto {
     return this.catsService.getHealth();
   }
 
   @Get('status')
+  @ApiOperation({ summary: 'Sync status', description: 'Returns the total number of indexed cats and the last synced cat number.' })
+  @ApiOkResponse({ type: StatusDto })
   async getStatus(): Promise<StatusDto> {
     return this.catsService.getStatus();
   }
 
   @Get('cat/:catNumber')
-  @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)' })
+  @ApiOperation({ summary: 'Get cat by number', description: 'Returns a single CAT-21 cat with all traits by its cat number (0-based).' })
+  @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)', example: 0 })
+  @ApiOkResponse({ type: CatDto, description: 'The cat with all computed traits' })
+  @ApiNotFoundResponse({ description: 'No cat found with this number' })
   async getCatByNumber(
     @Param('catNumber', ParseIntPipe) catNumber: number,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -47,7 +61,10 @@ export class CatsController {
   }
 
   @Get('tx/:txHash')
-  @ApiParam({ name: 'txHash', description: 'Transaction hash (64-char hex)' })
+  @ApiOperation({ summary: 'Get cat by transaction hash', description: 'Returns a single CAT-21 cat by the mint transaction hash (64-char hex).' })
+  @ApiParam({ name: 'txHash', description: 'Transaction hash (64-char hex)', example: '98316dcb21daaa221865208fe0323616ee6dd84e6020b78bc6908e914ac03892' })
+  @ApiOkResponse({ type: CatDto, description: 'The cat with all computed traits' })
+  @ApiNotFoundResponse({ description: 'No cat found with this transaction hash' })
   async getCatByTxHash(
     @Param('txHash') txHash: string,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -66,8 +83,11 @@ export class CatsController {
   }
 
   @Get('cat/:catNumber/image.svg')
-  @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)' })
+  @ApiOperation({ summary: 'Get cat SVG image', description: 'Returns the cat as an SVG image. The image is deterministically generated from the transaction and block hash.' })
+  @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)', example: 0 })
   @ApiProduces('image/svg+xml')
+  @ApiOkResponse({ description: 'SVG image of the cat' })
+  @ApiNotFoundResponse({ description: 'No cat found with this number' })
   async getCatSvg(
     @Param('catNumber', ParseIntPipe) catNumber: number,
     @Res() reply: FastifyReply,
@@ -86,8 +106,11 @@ export class CatsController {
   }
 
   @Get('cat/:catNumber/image.webp')
-  @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)' })
+  @ApiOperation({ summary: 'Get cat WebP image', description: 'Returns the cat as a lossless WebP image (440x440). Optimized for gallery thumbnails.' })
+  @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)', example: 0 })
   @ApiProduces('image/webp')
+  @ApiOkResponse({ description: 'WebP image of the cat' })
+  @ApiNotFoundResponse({ description: 'No cat found with this number' })
   async getCatWebp(
     @Param('catNumber', ParseIntPipe) catNumber: number,
     @Res() reply: FastifyReply,
@@ -116,8 +139,10 @@ export class CatsController {
   }
 
   @Get('cats/:itemsPerPage/:currentPage')
-  @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)' })
-  @ApiParam({ name: 'currentPage', description: 'Page number (1-based)' })
+  @ApiOperation({ summary: 'Get paginated cat list', description: 'Returns a paginated list of cats, sorted by newest first. Max 100 items per page.' })
+  @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
+  @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
+  @ApiOkResponse({ type: CatsPaginatedResultDto, description: 'Paginated list of cats with total count' })
   async getCats(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,
