@@ -39,6 +39,7 @@ export class CatsController {
   ): Promise<CatDto> {
     const cat = await this.catsService.getCatByNumber(catNumber);
     if (!cat) {
+      reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Cat #${catNumber} not found`);
     }
     reply.header('Cache-Control', CACHE_CONTROL);
@@ -52,10 +53,12 @@ export class CatsController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<CatDto> {
     if (!/^[a-f0-9]{64}$/.test(txHash)) {
+      reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Invalid tx hash`);
     }
     const cat = await this.catsService.getCatByTxHash(txHash);
     if (!cat) {
+      reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Cat with tx ${txHash} not found`);
     }
     reply.header('Cache-Control', CACHE_CONTROL);
@@ -71,6 +74,7 @@ export class CatsController {
   ) {
     const svg = await this.catsService.getCatSvg(catNumber);
     if (!svg) {
+      reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Cat #${catNumber} not found`);
     }
 
@@ -90,6 +94,7 @@ export class CatsController {
   ) {
     const svg = await this.catsService.getCatSvg(catNumber);
     if (!svg) {
+      reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Cat #${catNumber} not found`);
     }
 
