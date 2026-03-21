@@ -110,6 +110,7 @@ export class CatsController {
         .header('Content-Disposition', `inline; filename="cat21-${catNumber}.webp"`)
         .send(webp);
     } catch {
+      reply.header('Cache-Control', 'no-store');
       throw new InternalServerErrorException(`Failed to render image for cat #${catNumber}`);
     }
   }

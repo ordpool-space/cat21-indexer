@@ -59,6 +59,23 @@ npm run test           # Jest tests
 - `GET /api/cat/:catNumber/image.svg` — Cat SVG image
 - `GET /api/cat/:catNumber/image.webp` — Cat WebP image
 
+### Cache-Control Headers (HARD RULE)
+
+Cloudflare edge caching is configured to **respect origin headers**:
+- **Edge TTL**: "Use cache-control header if present, bypass cache if not"
+- **Browser TTL**: "Respect origin TTL"
+
+This means **every backend route controls its own caching via `Cache-Control` headers**. When adding or modifying any endpoint, you MUST set the appropriate header:
+
+- **Immutable data** (single cat, images): `Cache-Control: public, max-age=86400, s-maxage=31536000, immutable`
+  - `max-age=86400` → browser caches 1 day
+  - `s-maxage=31536000` → Cloudflare edge caches 1 year (purgeable)
+  - `immutable` → no revalidation requests
+- **Dynamic data** (status, paginated lists, health): No `Cache-Control` header → Cloudflare bypasses cache
+- **Errors** (404, 500): `Cache-Control: no-store` → prevents cache poisoning (e.g., 404 for a cat not yet synced getting cached at the edge)
+
+**NEVER expose a route without considering its caching behavior.** A missing header on a 404 response is a cache poisoning vulnerability.
+
 ## Frontend
 
 ### Tech Stack
