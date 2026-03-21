@@ -56,7 +56,7 @@ describe('CatsController', () => {
       expect(result).toEqual(mockCat);
       expect(reply.header).toHaveBeenCalledWith(
         'Cache-Control',
-        'public, max-age=31536000, immutable',
+        'public, max-age=86400, s-maxage=31536000, immutable',
       );
     });
 
@@ -77,7 +77,7 @@ describe('CatsController', () => {
       expect(result).toEqual(mockCat);
       expect(reply.header).toHaveBeenCalledWith(
         'Cache-Control',
-        'public, max-age=31536000, immutable',
+        'public, max-age=86400, s-maxage=31536000, immutable',
       );
     });
 
@@ -164,7 +164,7 @@ describe('CatsController', () => {
       );
       expect(reply.header).toHaveBeenCalledWith(
         'Cache-Control',
-        'public, max-age=31536000, immutable',
+        'public, max-age=86400, s-maxage=31536000, immutable',
       );
       expect(reply.send).toHaveBeenCalledWith('<svg>test</svg>');
     });
