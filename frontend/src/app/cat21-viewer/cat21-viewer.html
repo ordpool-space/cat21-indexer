@@ -68,6 +68,20 @@
                 <td>{{ cat.feeRate | number: '1.1-1' }} sat/vB</td>
               </tr>
               <tr>
+                <td><b ngbTooltip="The block height where this cat was minted.">i</b>Block</td>
+                <td><a href="{{ env.ordExplorer }}/block/{{ cat.blockHeight }}" target="_blank" rel="noopener" class="text-white">{{ cat.blockHeight }}</a></td>
+              </tr>
+              <tr>
+                <td><b ngbTooltip="The date and time when this cat was minted.">i</b>Minted</td>
+                <td>{{ cat.mintedAt | date: 'yyyy-MM-dd' }}</td>
+              </tr>
+              @if (cat.category) {
+                <tr>
+                  <td><b ngbTooltip="Rarity category based on cat number: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M">i</b>Category</td>
+                  <td>{{ cat.category }}</td>
+                </tr>
+              }
+              <tr>
                 <td colspan="2">
                   <hr>
                     <strong>Traits</strong><br><br>

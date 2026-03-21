@@ -1,4 +1,4 @@
-import { DecimalPipe, NgOptimizedImage } from '@angular/common';
+import { DatePipe, DecimalPipe, NgOptimizedImage } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { NgbTooltip, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 
@@ -19,7 +19,8 @@ import { ShortenString } from './shorten-string';
     ShortenString,
     CapitalizeFirst,
     ColorList,
-    DecimalPipe
+    DecimalPipe,
+    DatePipe
   ],
   providers: [catImageLoader],
   changeDetection: ChangeDetectionStrategy.OnPush
