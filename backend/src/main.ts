@@ -21,18 +21,10 @@ async function bootstrap() {
   );
 
   // Public read-only API — permissive CORP so <img> tags work cross-origin
-  // CSP relaxed for Swagger UI (inline scripts + connect to self)
+  // CSP disabled: not needed for API backend, breaks Swagger UI
   await app.register(helmet, {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'"],
-      },
-    },
+    contentSecurityPolicy: false,
   });
 
   app.enableCors();
