@@ -11,10 +11,10 @@ export function setupSwagger(app: INestApplication): void {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
-      defaultModelsExpandDepth: -1,    // hide schemas section at bottom
-      defaultModelExpandDepth: 1,     // collapse nested models in responses
-      docExpansion: 'list',           // collapse all endpoints by default
-      tryItOutEnabled: true,          // enable "Try it out" by default
+      defaultModelsExpandDepth: -1,
+      defaultModelExpandDepth: 1,
+      docExpansion: 'list',
+      tryItOutEnabled: true,
     },
   });
 }
