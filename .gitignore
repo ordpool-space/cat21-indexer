@@ -33,3 +33,5 @@ Thumbs.db
 
 # Drizzle
 backend/migrations/meta
+frontend/playwright-report/
+frontend/test-results/

@@ -1,5 +1,6 @@
 import { DatePipe, DecimalPipe, NgOptimizedImage } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NgbTooltip, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 
 import { environment } from '../../environments/environment';
@@ -16,6 +17,7 @@ import { ShortenString } from './shorten-string';
   imports: [
     NgbTooltip,
     NgOptimizedImage,
+    RouterLink,
     ShortenString,
     CapitalizeFirst,
     ColorList,

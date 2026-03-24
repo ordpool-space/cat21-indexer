@@ -36,7 +36,7 @@
                 <td><b ngbTooltip="The first cat owner (Address that received the first output of the mint transaction)">i</b>First Owner&nbsp;</td>
                 <td>
                   @if (cat.mintedBy) {
-                    <a href="{{ env.ordpoolExplorer }}/address/{{ cat.mintedBy }}" target="_blank" rel="noopener" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
+                    <a [routerLink]="['/address', cat.mintedBy]" class="text-white">» {{ cat.mintedBy | shortenString }}</a>
                   } @else {
                     This cat is free!
                   }
@@ -48,7 +48,7 @@
                   @switch (currentOwnerState()) {
                     @case ('loading') { }
                     @case ('address') {
-                      <a href="{{ env.ordExplorer }}/address/{{ currentOwner() }}" target="_blank" rel="noopener" class="text-white">» {{ currentOwner() | shortenString }}</a>
+                      <a [routerLink]="['/address', currentOwner()]" class="text-white">» {{ currentOwner() | shortenString }}</a>
                     }
                     @case ('free') { This cat is free! }
                     @case ('error') { unavailable }
@@ -56,12 +56,12 @@
                 </td>
               </tr>
               <tr>
-                <td><b ngbTooltip="The transactionId where the CAT-21 ordinal was created / minted">i</b>Txn</td>
+                <td><b ngbTooltip="The transactionId where the CAT-21 ordinal was created / minted">i</b>Mint Txn</td>
                 <td><a href="{{ env.ordpoolExplorer }}/tx/{{ cat.txHash }}" target="_blank" rel="noopener" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The satoshi that is associated with the cat, according to the ordinal theory.">i</b>Sat</td>
-                <td><a href="{{ env.ordExplorer }}/sat/{{ cat.sat }}" target="_blank" rel="noopener" class="text-white">{{ cat.sat }}</a></td>
+                <td><a [routerLink]="['/sat', cat.sat]" class="text-white">{{ cat.sat }}</a></td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The paid fee rate that determines the color of the cat.">i</b>Fee Rate</td>
@@ -69,7 +69,7 @@
               </tr>
               <tr>
                 <td><b ngbTooltip="The block height where this cat was minted.">i</b>Block</td>
-                <td><a href="{{ env.ordExplorer }}/block/{{ cat.blockHeight }}" target="_blank" rel="noopener" class="text-white">{{ cat.blockHeight }}</a></td>
+                <td><a [routerLink]="['/block', cat.blockHeight]" class="text-white">{{ cat.blockHeight }}</a></td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The date and time when this cat was minted.">i</b>Minted</td>

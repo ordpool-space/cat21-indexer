@@ -103,6 +103,20 @@ export class CatsPaginatedResultDto {
   itemsPerPage!: number;
 }
 
+export class CatNumbersPaginatedResultDto {
+  @ApiProperty({ type: [Number], description: 'Array of cat numbers for the current page', example: [63731, 63730, 63729] })
+  catNumbers!: number[];
+
+  @ApiProperty({ description: 'Total number of cats across all pages', example: 63732 })
+  total!: number;
+
+  @ApiProperty({ description: 'Current page number (1-based)', example: 1 })
+  currentPage!: number;
+
+  @ApiProperty({ description: 'Number of cats per page', example: 48 })
+  itemsPerPage!: number;
+}
+
 export class StatusDto {
   @ApiProperty({ description: 'Total number of indexed cats', example: 63732 })
   totalCats!: number;

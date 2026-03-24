@@ -7,14 +7,13 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { CatDto } from './catDto';
 
 
-export interface CatsPaginatedResultDto { 
+export interface CatNumbersPaginatedResultDto { 
     /**
-     * Array of cats for the current page
+     * Array of cat numbers for the current page
      */
-    cats: Array<CatDto>;
+    catNumbers: Array<number>;
     /**
      * Total number of cats across all pages
      */

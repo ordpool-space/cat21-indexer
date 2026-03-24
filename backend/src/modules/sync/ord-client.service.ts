@@ -6,7 +6,6 @@ const FETCH_TIMEOUT_MS = 30_000;
 export interface OrdCatDetail {
   id: string;
   number: number;
-  address: string | null;      // current holder — NOT stored in our DB
   minted_by: string | null;    // first owner from mint tx output 0
   sat: number;
   fee: number;

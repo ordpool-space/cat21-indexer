@@ -11,6 +11,9 @@
     "build:production": "ng build --configuration=production",
     "test": "ng test",
     "lint": "ng lint",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui",
     "generate:api-client": "openapi-generator-cli generate -i http://localhost:3333/docs-json -g typescript-angular -o ./src/app/shared/cat21-api"
   },
   "dependencies": {
@@ -40,6 +43,7 @@
     "@angular/compiler-cli": "21.2.4",
     "@angular/language-service": "21.2.4",
     "@openapitools/openapi-generator-cli": "^2.23.4",
+    "@playwright/test": "^1.58.2",
     "@schematics/angular": "16.2.1",
     "@types/jest": "29.5.4",
     "assert": "^2.0.0",

@@ -10,7 +10,13 @@
 
 
 export interface StatusDto { 
+    /**
+     * Total number of indexed cats
+     */
     totalCats: number;
+    /**
+     * Cat number of the last synced cat (-1 if none)
+     */
     lastSyncedCatNumber: number;
 }
 

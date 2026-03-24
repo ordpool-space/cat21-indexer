@@ -3,7 +3,7 @@ import { count, eq, desc, max } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
-import { CatDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.dto';
+import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 @Injectable()
 export class CatsService {
@@ -68,6 +68,26 @@ export class CatsService {
 
     return {
       cats: results.map((r) => this.mapToDto(r)),
+      total: totalResult.count,
+      currentPage,
+      itemsPerPage,
+    };
+  }
+
+  async getCatNumbers(
+    itemsPerPage: number,
+    currentPage: number,
+  ): Promise<CatNumbersPaginatedResultDto> {
+    const offset = (currentPage - 1) * itemsPerPage;
+
+    const [totalQuery, results] = await Promise.all([
+      this.drizzle.db.select({ count: count() }).from(cats),
+      this.drizzle.db.select({ catNumber: cats.catNumber }).from(cats).orderBy(desc(cats.catNumber)).limit(itemsPerPage).offset(offset),
+    ]);
+    const [totalResult] = totalQuery;
+
+    return {
+      catNumbers: results.map((r) => r.catNumber),
       total: totalResult.count,
       currentPage,
       itemsPerPage,

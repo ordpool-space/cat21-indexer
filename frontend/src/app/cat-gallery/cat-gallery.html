@@ -1,0 +1,19 @@
+@if (catNumbers().length > 0) {
+  <div class="row" role="list" aria-label="Cat gallery" data-testid="gallery-grid">
+    @for (catNumber of catNumbers(); track catNumber) {
+      <div class="col-4 col-md-3 col-lg-2" role="listitem">
+        <a [routerLink]="['/cat', catNumber]" [attr.aria-label]="'View CAT #' + catNumber"
+           [attr.data-testid]="'gallery-link-cat-' + catNumber">
+          <div class="cat-container">
+            <img [ngSrc]="'cat/' + catNumber + '/image.webp'" [alt]="'CAT #' + catNumber"
+                 width="440" height="440" class="cat-image" disableOptimizedSrcset
+                 (load)="$event.target.style.background='none'">
+          </div>
+          <strong>CAT {{ catNumber }}</strong>
+        </a>
+      </div>
+    }
+  </div>
+} @else {
+  <p data-testid="gallery-empty">{{ emptyMessage() }}</p>
+}

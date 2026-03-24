@@ -1,0 +1,26 @@
+<h1 data-testid="block-heading">Block {{ blockHeight() | number }}</h1>
+
+<p class="mb-4">
+  <a href="{{ env.ordpoolExplorer }}/block/{{ blockHeight() }}" target="_blank" rel="noopener">View on ordpool</a>
+</p>
+
+@if (blockResource.value(); as data) {
+  <app-cat-gallery [catNumbers]="catNumbers()" emptyMessage="No cats minted in this block." />
+
+  @if (currentPage() > 0 || hasMore()) {
+    <nav class="clearfix mt-4" aria-label="Page navigation" data-testid="block-pagination">
+      @if (currentPage() > 0) {
+        <a [routerLink]="['/block', blockHeight(), currentPage() - 1]" class="fw-bold float-start" data-testid="block-nav-prev">&laquo; Previous</a>
+      }
+      @if (hasMore()) {
+        <a [routerLink]="['/block', blockHeight(), currentPage() + 1]" class="fw-bold float-end" data-testid="block-nav-next">Next &raquo;</a>
+      }
+    </nav>
+  }
+} @else if (blockResource.isLoading()) {
+  <p aria-live="polite" data-testid="block-loading">Loading cats for this block...</p>
+} @else if (blockResource.error()) {
+  <p role="alert" data-testid="block-error">Failed to load block data. <a (click)="blockResource.reload()" role="button">Retry</a></p>
+}
+
+<a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">&laquo; Back</a>

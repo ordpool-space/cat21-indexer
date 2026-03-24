@@ -9,14 +9,14 @@ import {
   NgbPaginationPrevious,
 } from '@ng-bootstrap/ng-bootstrap';
 
-import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
+import { CatGallery } from '../cat-gallery/cat-gallery';
 import { ApiService } from '../shared/cat21-api';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 
 @Component({
   selector: 'app-start',
   templateUrl: './start.html',
-  imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, Cat21Viewer],
+  imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, CatGallery],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:keydown.ArrowLeft)': 'navigatePrev()',
@@ -32,9 +32,10 @@ export class Start {
 
   catsResource = rxResourceFixed({
     params: () => ({ itemsPerPage: this.itemsPerPage() || 48, currentPage: this.currentPage() || 1 }),
-    stream: ({ params }) => this.api.catsControllerGetCats(params.itemsPerPage, params.currentPage),
+    stream: ({ params }) => this.api.catsControllerGetCatNumbers(params.itemsPerPage, params.currentPage),
   });
 
+  catNumbers = computed(() => this.catsResource.value()?.catNumbers ?? []);
   placeholders = computed(() => new Array(this.itemsPerPage() || 48));
 
   changePage(itemsPerPage: number, currentPage: number) {

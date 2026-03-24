@@ -1,0 +1,11 @@
+.cat-container {
+  max-width: 600px;
+}
+
+.cat-image {
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  aspect-ratio: 1 / 1;
+  background: url("/assets/placeholder-cat.svg") center / cover no-repeat;
+}

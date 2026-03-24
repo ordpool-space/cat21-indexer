@@ -10,9 +10,21 @@
 
 
 export interface HealthDto { 
+    /**
+     * Service status
+     */
     status: string;
+    /**
+     * Current server time (ISO 8601)
+     */
     timestamp: string;
+    /**
+     * Server uptime in seconds
+     */
     uptimeSec: number;
+    /**
+     * Backend version
+     */
     version: string;
 }
 

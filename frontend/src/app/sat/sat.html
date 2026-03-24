@@ -1,0 +1,30 @@
+<h1 data-testid="sat-heading">Sat {{ sat() | number }}</h1>
+
+<p class="mb-4">
+  <a href="{{ env.ordpoolExplorer }}/sat/{{ sat() }}" target="_blank" rel="noopener">View on ordpool</a>
+</p>
+
+@if (satResource.value(); as data) {
+  <table class="table table-borderless mt-3 mb-4" data-testid="sat-metadata">
+    <tbody>
+      <tr><td><strong>Name</strong></td><td data-testid="sat-name">{{ data.name }}</td></tr>
+      <tr><td><strong>Rarity</strong></td><td data-testid="sat-rarity">{{ data.rarity }}</td></tr>
+      <tr><td><strong>Block</strong></td><td><a [routerLink]="['/block', data.block]" data-testid="sat-block-link">{{ data.block | number }}</a></td></tr>
+      @if (data.address) {
+        <tr><td><strong>Owner</strong></td><td><a [routerLink]="['/address', data.address]" class="text-break" data-testid="sat-owner-link">{{ data.address }}</a></td></tr>
+      }
+      @if (data.charms.length > 0) {
+        <tr><td><strong>Charms</strong></td><td data-testid="sat-charms">{{ data.charms.join(', ') }}</td></tr>
+      }
+    </tbody>
+  </table>
+
+  <h2>Cats</h2>
+  <app-cat-gallery [catNumbers]="catNumbers()" emptyMessage="No cats associated with this sat." />
+} @else if (satResource.isLoading()) {
+  <p aria-live="polite" data-testid="sat-loading">Loading sat data...</p>
+} @else if (satResource.error()) {
+  <p role="alert" data-testid="sat-error">Failed to load sat data. <a (click)="satResource.reload()" role="button">Retry</a></p>
+}
+
+<a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">&laquo; Back</a>

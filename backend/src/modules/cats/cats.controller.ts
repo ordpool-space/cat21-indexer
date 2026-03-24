@@ -18,7 +18,7 @@ import {
 import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
 import { CatsService } from './cats.service';
-import { CatDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.dto';
+import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Browser: 1 day (immutable), Cloudflare edge: 1 year (purgeable)
 const CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable';
@@ -139,7 +139,7 @@ export class CatsController {
   }
 
   @Get('cats/:itemsPerPage/:currentPage')
-  @ApiOperation({ summary: 'Get paginated cat list', description: 'Returns a paginated list of cats, sorted by newest first. Max 100 items per page.' })
+  @ApiOperation({ summary: 'Get paginated cat list', description: 'Returns a paginated list of cats with all traits, sorted by newest first. Max 100 items per page. Use /api/cats/numbers/ for a lightweight alternative.' })
   @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
   @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
   @ApiOkResponse({ type: CatsPaginatedResultDto, description: 'Paginated list of cats with total count' })
@@ -148,6 +148,21 @@ export class CatsController {
     @Param('currentPage', ParseIntPipe) currentPage: number,
   ): Promise<CatsPaginatedResultDto> {
     return this.catsService.getCats(
+      Math.max(1, Math.min(itemsPerPage, 100)),
+      Math.max(1, currentPage),
+    );
+  }
+
+  @Get('cats/numbers/:itemsPerPage/:currentPage')
+  @ApiOperation({ summary: 'Get paginated cat numbers', description: 'Returns only cat numbers (no traits), sorted by newest first. Max 100 items per page. Ideal for gallery views where only thumbnails are needed.' })
+  @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
+  @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
+  @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of cat numbers with total count' })
+  async getCatNumbers(
+    @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
+    @Param('currentPage', ParseIntPipe) currentPage: number,
+  ): Promise<CatNumbersPaginatedResultDto> {
+    return this.catsService.getCatNumbers(
       Math.max(1, Math.min(itemsPerPage, 100)),
       Math.max(1, currentPage),
     );

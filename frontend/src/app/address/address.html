@@ -1,0 +1,17 @@
+<h1 data-testid="address-heading">Address</h1>
+<p class="text-break mb-2" data-testid="address-value">{{ address() }}</p>
+
+<p class="mb-4">
+  <a href="{{ env.ordpoolExplorer }}/address/{{ address() }}" target="_blank" rel="noopener">View on ordpool</a>
+</p>
+
+@if (addressResource.value(); as data) {
+  <h2 data-testid="address-cat-count">Cats ({{ catNumbers().length }})</h2>
+  <app-cat-gallery [catNumbers]="catNumbers()" emptyMessage="This address has no cats." />
+} @else if (addressResource.isLoading()) {
+  <p aria-live="polite" data-testid="address-loading">Loading cats for this address...</p>
+} @else if (addressResource.error()) {
+  <p role="alert" data-testid="address-error">Failed to load address data. <a (click)="addressResource.reload()" role="button">Retry</a></p>
+}
+
+<a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">&laquo; Back</a>

@@ -10,34 +10,179 @@
 
 
 export interface CatDto { 
+    /**
+     * Internal database ID (UUID)
+     */
     id: string;
+    /**
+     * The incremented number of the cat. Cat #0 is the genesis cat.
+     */
     catNumber: number;
+    /**
+     * Transaction hash (hex) where the CAT-21 ordinal was minted
+     */
     txHash: string;
+    /**
+     * Block hash (hex) of the block containing the mint transaction
+     */
     blockHash: string;
+    /**
+     * Block height where the CAT-21 ordinal was minted
+     */
     blockHeight: number;
+    /**
+     * Timestamp when the cat was minted (ISO 8601)
+     */
     mintedAt: string;
+    /**
+     * Address that received the first output of the mint transaction. Null for OP_RETURN outputs (cat is free).
+     */
     mintedBy?: string | null;
+    /**
+     * Total fees paid to process the mint transaction (Unit: sats)
+     */
     fee: number;
+    /**
+     * Weight of the mint transaction (Unit: WU — weight units)
+     */
     weight: number;
+    /**
+     * Total size of the mint transaction (Unit: bytes)
+     */
     size: number;
+    /**
+     * Fee rate paid to mint this cat (Unit: sat/vB). Determines the color of the cat.
+     */
     feeRate: number;
+    /**
+     * The ordinal satoshi number associated with this cat
+     */
     sat: number;
+    /**
+     * Value of the first output of the mint transaction (Unit: sats)
+     */
     value: number;
+    /**
+     * Category based on cat number: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M, or empty
+     */
     category: string;
+    /**
+     * Whether this is a genesis cat (white or black, probability 0.4%)
+     */
     genesis: boolean;
+    /**
+     * All colors used to paint the cat (excluding laser eyes and other trait colors)
+     */
     catColors: Array<string>;
+    /**
+     * Whether the cat is male (50% chance)
+     */
     male: boolean;
+    /**
+     * Whether the cat is female (50% chance)
+     */
     female: boolean;
+    /**
+     * Design index (0-127), combination of pose, expression, pattern, and facing
+     */
     designIndex: number;
-    designPose: string;
-    designExpression: string;
-    designPattern: string;
-    designFacing: string;
-    laserEyes: string;
-    background: string;
+    /**
+     * Pose of the cat
+     */
+    designPose: CatDto.DesignPoseEnum;
+    /**
+     * Expression of the cat
+     */
+    designExpression: CatDto.DesignExpressionEnum;
+    /**
+     * Pattern of the cat
+     */
+    designPattern: CatDto.DesignPatternEnum;
+    /**
+     * Facing direction of the cat
+     */
+    designFacing: CatDto.DesignFacingEnum;
+    /**
+     * Laser eyes color (20% chance each), or None
+     */
+    laserEyes: CatDto.LaserEyesEnum;
+    /**
+     * Background type (25% chance each)
+     */
+    background: CatDto.BackgroundEnum;
+    /**
+     * Colors used to generate the background
+     */
     backgroundColors: Array<string>;
-    crown: string;
-    glasses: string;
+    /**
+     * Crown type (10% chance to have one)
+     */
+    crown: CatDto.CrownEnum;
+    /**
+     * Glasses type (10% chance each, 3D and Nouns only without laser eyes)
+     */
+    glasses: CatDto.GlassesEnum;
+    /**
+     * Colors used to paint the glasses (empty if no glasses)
+     */
     glassesColors: Array<string>;
 }
+export namespace CatDto {
+    export const DesignPoseEnum = {
+        Standing: 'Standing',
+        Sleeping: 'Sleeping',
+        Pouncing: 'Pouncing',
+        Stalking: 'Stalking'
+    } as const;
+    export type DesignPoseEnum = typeof DesignPoseEnum[keyof typeof DesignPoseEnum];
+    export const DesignExpressionEnum = {
+        Smile: 'Smile',
+        Grumpy: 'Grumpy',
+        Pouting: 'Pouting',
+        Shy: 'Shy'
+    } as const;
+    export type DesignExpressionEnum = typeof DesignExpressionEnum[keyof typeof DesignExpressionEnum];
+    export const DesignPatternEnum = {
+        Solid: 'Solid',
+        Striped: 'Striped',
+        Eyepatch: 'Eyepatch',
+        HalfHalf: 'Half/Half'
+    } as const;
+    export type DesignPatternEnum = typeof DesignPatternEnum[keyof typeof DesignPatternEnum];
+    export const DesignFacingEnum = {
+        Left: 'Left',
+        Right: 'Right'
+    } as const;
+    export type DesignFacingEnum = typeof DesignFacingEnum[keyof typeof DesignFacingEnum];
+    export const LaserEyesEnum = {
+        Orange: 'Orange',
+        Red: 'Red',
+        Green: 'Green',
+        Blue: 'Blue',
+        None: 'None'
+    } as const;
+    export type LaserEyesEnum = typeof LaserEyesEnum[keyof typeof LaserEyesEnum];
+    export const BackgroundEnum = {
+        Block9: 'Block9',
+        Cyberpunk: 'Cyberpunk',
+        Whitepaper: 'Whitepaper',
+        Orange: 'Orange'
+    } as const;
+    export type BackgroundEnum = typeof BackgroundEnum[keyof typeof BackgroundEnum];
+    export const CrownEnum = {
+        Gold: 'Gold',
+        Diamond: 'Diamond',
+        None: 'None'
+    } as const;
+    export type CrownEnum = typeof CrownEnum[keyof typeof CrownEnum];
+    export const GlassesEnum = {
+        Black: 'Black',
+        Cool: 'Cool',
+        _3D: '3D',
+        Nouns: 'Nouns',
+        None: 'None'
+    } as const;
+    export type GlassesEnum = typeof GlassesEnum[keyof typeof GlassesEnum];
+}
+
 

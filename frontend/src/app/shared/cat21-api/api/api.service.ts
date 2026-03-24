@@ -19,6 +19,8 @@ import { OpenApiHttpParams, QueryParamStyle } from '../query.params';
 // @ts-ignore
 import { CatDto } from '../model/catDto';
 // @ts-ignore
+import { CatNumbersPaginatedResultDto } from '../model/catNumbersPaginatedResultDto';
+// @ts-ignore
 import { CatsPaginatedResultDto } from '../model/catsPaginatedResultDto';
 // @ts-ignore
 import { HealthDto } from '../model/healthDto';
@@ -42,6 +44,8 @@ export class ApiService extends BaseService {
     }
 
     /**
+     * Get cat by number
+     * Returns a single CAT-21 cat with all traits by its cat number (0-based).
      * @endpoint get /api/cat/{catNumber}
      * @param catNumber Cat number (0-based)
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
@@ -97,6 +101,8 @@ export class ApiService extends BaseService {
     }
 
     /**
+     * Get cat by transaction hash
+     * Returns a single CAT-21 cat by the mint transaction hash (64-char hex).
      * @endpoint get /api/tx/{txHash}
      * @param txHash Transaction hash (64-char hex)
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
@@ -152,6 +158,69 @@ export class ApiService extends BaseService {
     }
 
     /**
+     * Get paginated cat numbers
+     * Returns only cat numbers (no traits), sorted by newest first. Max 100 items per page. Ideal for gallery views where only thumbnails are needed.
+     * @endpoint get /api/cats/numbers/{itemsPerPage}/{currentPage}
+     * @param itemsPerPage Number of cats per page (max 100)
+     * @param currentPage Page number (1-based)
+     * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
+     * @param reportProgress flag to report request and response progress.
+     * @param options additional options
+     */
+    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatNumbersPaginatedResultDto>;
+    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatNumbersPaginatedResultDto>>;
+    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatNumbersPaginatedResultDto>>;
+    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+        if (itemsPerPage === null || itemsPerPage === undefined) {
+            throw new Error('Required parameter itemsPerPage was null or undefined when calling catsControllerGetCatNumbers.');
+        }
+        if (currentPage === null || currentPage === undefined) {
+            throw new Error('Required parameter currentPage was null or undefined when calling catsControllerGetCatNumbers.');
+        }
+
+        let localVarHeaders = this.defaultHeaders;
+
+        const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
+            'application/json'
+        ]);
+        if (localVarHttpHeaderAcceptSelected !== undefined) {
+            localVarHeaders = localVarHeaders.set('Accept', localVarHttpHeaderAcceptSelected);
+        }
+
+        const localVarHttpContext: HttpContext = options?.context ?? new HttpContext();
+
+        const localVarTransferCache: boolean = options?.transferCache ?? true;
+
+
+        let responseType_: 'text' | 'json' | 'blob' = 'json';
+        if (localVarHttpHeaderAcceptSelected) {
+            if (localVarHttpHeaderAcceptSelected.startsWith('text')) {
+                responseType_ = 'text';
+            } else if (this.configuration.isJsonMime(localVarHttpHeaderAcceptSelected)) {
+                responseType_ = 'json';
+            } else {
+                responseType_ = 'blob';
+            }
+        }
+
+        let localVarPath = `/api/cats/numbers/${this.configuration.encodeParam({name: "itemsPerPage", value: itemsPerPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}/${this.configuration.encodeParam({name: "currentPage", value: currentPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}`;
+        const { basePath, withCredentials } = this.configuration;
+        return this.httpClient.request<CatNumbersPaginatedResultDto>('get', `${basePath}${localVarPath}`,
+            {
+                context: localVarHttpContext,
+                responseType: <any>responseType_,
+                ...(withCredentials ? { withCredentials } : {}),
+                headers: localVarHeaders,
+                observe: observe,
+                ...(localVarTransferCache !== undefined ? { transferCache: localVarTransferCache } : {}),
+                reportProgress: reportProgress
+            }
+        );
+    }
+
+    /**
+     * Get cat SVG image
+     * Returns the cat as an SVG image. The image is deterministically generated from the transaction and block hash.
      * @endpoint get /api/cat/{catNumber}/image.svg
      * @param catNumber Cat number (0-based)
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
@@ -206,6 +275,8 @@ export class ApiService extends BaseService {
     }
 
     /**
+     * Get cat WebP image
+     * Returns the cat as a lossless WebP image (440x440). Optimized for gallery thumbnails.
      * @endpoint get /api/cat/{catNumber}/image.webp
      * @param catNumber Cat number (0-based)
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
@@ -260,6 +331,8 @@ export class ApiService extends BaseService {
     }
 
     /**
+     * Get paginated cat list
+     * Returns a paginated list of cats with all traits, sorted by newest first. Max 100 items per page. Use /api/cats/numbers/ for a lightweight alternative.
      * @endpoint get /api/cats/{itemsPerPage}/{currentPage}
      * @param itemsPerPage Number of cats per page (max 100)
      * @param currentPage Page number (1-based)
@@ -319,6 +392,8 @@ export class ApiService extends BaseService {
     }
 
     /**
+     * Health check
+     * Returns service health info including uptime and version.
      * @endpoint get /api/health
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
@@ -370,6 +445,8 @@ export class ApiService extends BaseService {
     }
 
     /**
+     * Sync status
+     * Returns the total number of indexed cats and the last synced cat number.
      * @endpoint get /api/status
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
