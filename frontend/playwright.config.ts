@@ -8,7 +8,7 @@ export default defineConfig({
   retries: 0,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:4200',
+    baseURL: 'http://localhost:4221',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -22,7 +22,7 @@ export default defineConfig({
     },
     {
       command: 'npm start',
-      url: 'http://localhost:4200',
+      url: 'http://localhost:4221',
       reuseExistingServer: true,
       timeout: 60_000,
     },

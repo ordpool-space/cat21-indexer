@@ -1,6 +1,6 @@
 @if (!cat()) {
   <div class="cat-container">
-    <img src="assets/placeholder-cat.svg" alt="" width="440" height="440" class="cat-image">
+    <img src="placeholder-cat.svg" alt="" width="440" height="440" class="cat-image">
   </div>
   @if (showDetails()) {
     <br>
@@ -56,7 +56,7 @@
                 </td>
               </tr>
               <tr>
-                <td><b ngbTooltip="The transactionId where the CAT-21 ordinal was created / minted">i</b>Mint Txn</td>
+                <td><b ngbTooltip="The transaction hash where the CAT-21 ordinal was minted">i</b>Mint Txn</td>
                 <td><a href="{{ env.ordpoolExplorer }}/tx/{{ cat.txHash }}" target="_blank" rel="noopener" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
               </tr>
               <tr>

@@ -19,7 +19,10 @@
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
             "assets": [
-              "src/assets"
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
             ],
             "styles": [
               "src/styles.scss"
@@ -64,7 +67,7 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "options": {
-            "port": 4200
+            "port": 4221
           },
           "configurations": {
             "production": {

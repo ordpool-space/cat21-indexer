@@ -6,7 +6,7 @@ import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { OrdCatDetail, OrdClientService } from './ord-client.service';
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 50;
 
 export function deriveCategory(catNumber: number): string {
   if (catNumber < 1000) return 'sub1k';
@@ -23,6 +23,7 @@ export function deriveCategory(catNumber: number): string {
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
   private syncing = false;
+  private localMax = -1;
   private readonly blockHashCache = new Map<number, string>();
 
   constructor(
@@ -53,25 +54,26 @@ export class SyncService {
     this.syncing = true;
 
     try {
-      // 1. Check what we have locally
-      const [result] = await this.drizzle.db
-        .select({ maxCatNumber: max(cats.catNumber) })
-        .from(cats);
+      // 1. On first run, check DB. After that, use cached localMax (saves a query per tick).
+      if (this.localMax < 0) {
+        const [result] = await this.drizzle.db
+          .select({ maxCatNumber: max(cats.catNumber) })
+          .from(cats);
+        this.localMax = result.maxCatNumber ?? -1;
+      }
 
-      const localMax = result.maxCatNumber ?? -1;
-
-      // 2. Check what ord has (one request to /cats, one to get the newest cat's number)
+      // 2. Check what ord has (HTTP call, no DB query)
       const remoteMax = await this.ordClient.getLatestCatNumber();
 
-      if (remoteMax <= localMax) {
-        this.logger.debug(`Already up to date (local: #${localMax}, remote: #${remoteMax})`);
+      if (remoteMax <= this.localMax) {
+        this.logger.debug(`Already up to date (local: #${this.localMax}, remote: #${remoteMax})`);
         return;
       }
 
-      const totalToSync = remoteMax - localMax;
-      this.logger.log(`Syncing cats #${localMax + 1} to #${remoteMax} (${totalToSync} cats)`);
+      const totalToSync = remoteMax - this.localMax;
+      this.logger.log(`Syncing cats #${this.localMax + 1} to #${remoteMax} (${totalToSync} cats)`);
 
-      let nextCatNumber = localMax + 1;
+      let nextCatNumber = this.localMax + 1;
       let insertedCount = 0;
 
       while (nextCatNumber <= remoteMax) {
@@ -151,6 +153,7 @@ export class SyncService {
         }
       }
 
+      this.localMax = remoteMax;
       this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
     } catch (error) {
       this.logger.error('Sync failed', error);

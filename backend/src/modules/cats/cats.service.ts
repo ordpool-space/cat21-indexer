@@ -8,6 +8,9 @@ import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, HealthDto
 @Injectable()
 export class CatsService {
   private readonly startedAt = Date.now();
+  private statusCache: StatusDto | null = null;
+  private statusCacheTime = 0;
+  private readonly STATUS_CACHE_TTL = 30_000; // 30 seconds
 
   constructor(private readonly drizzle: DrizzleService) {}
 
@@ -21,6 +24,10 @@ export class CatsService {
   }
 
   async getStatus(): Promise<StatusDto> {
+    if (this.statusCache && Date.now() - this.statusCacheTime < this.STATUS_CACHE_TTL) {
+      return this.statusCache;
+    }
+
     const [result] = await this.drizzle.db
       .select({
         totalCats: count(),
@@ -28,10 +35,12 @@ export class CatsService {
       })
       .from(cats);
 
-    return {
+    this.statusCache = {
       totalCats: result.totalCats,
       lastSyncedCatNumber: result.lastSyncedCatNumber ?? -1,
     };
+    this.statusCacheTime = Date.now();
+    return this.statusCache;
   }
 
   async getCatByNumber(catNumber: number): Promise<CatDto | null> {

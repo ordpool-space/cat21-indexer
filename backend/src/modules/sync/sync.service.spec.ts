@@ -123,14 +123,13 @@ describe('SyncService', () => {
     const { service, ordClient, insertMock } = createMocks(-1, 24);
     await service.sync();
 
-    // 25 cats (0-24), BATCH_SIZE=10 → 3 batches: [0-9], [10-19], [20-24]
+    // 25 cats (0-24), BATCH_SIZE=50 → 1 batch: [0-24]
     expect(ordClient.getCat).toHaveBeenCalledTimes(25);
     expect(ordClient.getCat).toHaveBeenCalledWith(0);
     expect(ordClient.getCat).toHaveBeenCalledWith(10);
     expect(ordClient.getCat).toHaveBeenCalledWith(20);
     expect(ordClient.getCat).toHaveBeenCalledWith(24);
-    // Multiple insert calls (one per batch)
-    expect(insertMock).toHaveBeenCalledTimes(3);
+    expect(insertMock).toHaveBeenCalledTimes(1);
   });
 
   // --- Block hash dedup ---
@@ -246,18 +245,14 @@ describe('SyncService', () => {
     await service.sync();
     expect(ordClient.getBlockHash).toHaveBeenCalledTimes(1);
 
-    // Second sync: if cache was cleared, getBlockHash will be called again
-    ordClient.getLatestCatNumber.mockResolvedValue(0);
-    ordClient.getCat.mockResolvedValue(makeCat(0));
-
-    // Simulate fresh DB state
-    (service as any).drizzle.db.select.mockReturnValue({
-      from: jest.fn().mockResolvedValue([{ maxCatNumber: -1 }]),
-    });
+    // Second sync: localMax is now 0 (cached in memory after first sync).
+    // Set remoteMax to 1 so there's a new cat to sync, triggering block hash fetch.
+    ordClient.getLatestCatNumber.mockResolvedValue(1);
+    ordClient.getCat.mockResolvedValue(makeCat(1));
 
     await service.sync();
 
-    // Block hash fetched again because cache was cleared after first sync
+    // Block hash fetched again because blockHashCache was cleared after first sync
     expect(ordClient.getBlockHash).toHaveBeenCalledTimes(2);
   });
 
