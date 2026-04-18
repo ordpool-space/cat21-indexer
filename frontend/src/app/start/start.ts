@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import {
   NgbPagination,
@@ -21,6 +21,7 @@ import { rxResourceFixed } from '../shared/rx-resource-fixed';
   host: {
     '(window:keydown.ArrowLeft)': 'navigatePrev()',
     '(window:keydown.ArrowRight)': 'navigateNext()',
+    '(window:resize)': 'updateWindowWidth()',
   }
 })
 export class Start {
@@ -37,6 +38,21 @@ export class Start {
 
   catNumbers = computed(() => this.catsResource.value()?.catNumbers ?? []);
   placeholders = computed(() => new Array(this.itemsPerPage() || 48));
+
+  private readonly windowWidth = signal(typeof window === 'undefined' ? 1200 : window.innerWidth);
+  // Narrower screens show fewer page numbers to prevent horizontal overflow.
+  readonly pagerMaxSize = computed(() => {
+    const w = this.windowWidth();
+    if (w < 400) return 3;
+    if (w < 600) return 5;
+    return 7;
+  });
+
+  updateWindowWidth() {
+    if (typeof window !== 'undefined') {
+      this.windowWidth.set(window.innerWidth);
+    }
+  }
 
   changePage(itemsPerPage: number, currentPage: number) {
     this.router.navigate(['/', 'cats', itemsPerPage, currentPage]);

@@ -25,12 +25,12 @@
   @if (data.total > 0) {
     <div>
       <ngb-pagination
-        class="mt-4 d-flex justify-content-center"
+        class="mt-4 d-flex justify-content-center flex-wrap"
         [collectionSize]="data.total"
         [page]="data.currentPage"
         [pageSize]="data.itemsPerPage"
         aria-label="Cat gallery pagination"
-        [maxSize]="7"
+        [maxSize]="pagerMaxSize()"
         [rotate]="true"
         [ellipses]="true"
         [boundaryLinks]="true"
