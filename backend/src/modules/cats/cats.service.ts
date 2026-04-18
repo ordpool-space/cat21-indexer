@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { count, eq, desc, max } from 'drizzle-orm';
+import { count, eq, inArray, max } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
@@ -90,26 +90,50 @@ export class CatsService {
     itemsPerPage: number,
     currentPage: number,
   ): Promise<CatsPaginatedResultDto> {
-    const offset = (currentPage - 1) * itemsPerPage;
-    const cachedTotal = this.cache.getTotalCatCount();
+    // Ensure we know the total before computing page boundaries.
+    await this.ensureTotalsPrimed();
 
-    const [totalQuery, results] = await Promise.all([
-      cachedTotal > 0
-        ? Promise.resolve([{ count: cachedTotal }])
-        : this.drizzle.db.select({ count: count() }).from(cats),
-      this.drizzle.db.select().from(cats).orderBy(desc(cats.catNumber)).limit(itemsPerPage).offset(offset),
-    ]);
-    const [totalResult] = totalQuery;
+    const catNumbers = this.cache.computeCatNumbersForPage(itemsPerPage, currentPage);
+    const total = this.cache.getTotalCatCount();
 
-    const dtos = results.map((r) => {
-      const dto = this.mapToDto(r);
-      this.cache.setCachedCat(dto);
-      return dto;
-    });
+    if (catNumbers.length === 0) {
+      return { cats: [], total, currentPage, itemsPerPage };
+    }
+
+    // Cache-first lookup: find which cat numbers are missing.
+    const catsFromCache = new Map<number, CatDto>();
+    const missingNumbers: number[] = [];
+    for (const n of catNumbers) {
+      const cached = this.cache.getCachedCat(n);
+      if (cached) {
+        catsFromCache.set(n, cached);
+      } else {
+        missingNumbers.push(n);
+      }
+    }
+
+    // Batch-fetch ONLY misses.
+    if (missingNumbers.length > 0) {
+      const rows = await this.drizzle.db
+        .select()
+        .from(cats)
+        .where(inArray(cats.catNumber, missingNumbers));
+
+      for (const row of rows) {
+        const dto = this.mapToDto(row);
+        this.cache.setCachedCat(dto);
+        catsFromCache.set(dto.catNumber, dto);
+      }
+    }
+
+    // Assemble in page order (DESC by catNumber, as given by computeCatNumbersForPage).
+    const dtos = catNumbers
+      .map((n) => catsFromCache.get(n))
+      .filter((c): c is CatDto => c !== undefined);
 
     return {
       cats: dtos,
-      total: totalResult.count,
+      total,
       currentPage,
       itemsPerPage,
     };
@@ -119,37 +143,35 @@ export class CatsService {
     itemsPerPage: number,
     currentPage: number,
   ): Promise<CatNumbersPaginatedResultDto> {
-    const cachedTotal = this.cache.getTotalCatCount();
-    const cachedNumbers = this.cache.getCachedCatNumbers(itemsPerPage, currentPage);
+    // Ensure we know the total before computing page boundaries.
+    await this.ensureTotalsPrimed();
 
-    if (cachedNumbers && cachedTotal > 0) {
-      return {
-        catNumbers: cachedNumbers,
-        total: cachedTotal,
-        currentPage,
-        itemsPerPage,
-      };
-    }
-
-    const offset = (currentPage - 1) * itemsPerPage;
-
-    const [totalQuery, results] = await Promise.all([
-      cachedTotal > 0
-        ? Promise.resolve([{ count: cachedTotal }])
-        : this.drizzle.db.select({ count: count() }).from(cats),
-      this.drizzle.db.select({ catNumber: cats.catNumber }).from(cats).orderBy(desc(cats.catNumber)).limit(itemsPerPage).offset(offset),
-    ]);
-    const [totalResult] = totalQuery;
-    const catNumbers = results.map((r) => r.catNumber);
-
-    this.cache.setCachedCatNumbers(itemsPerPage, currentPage, catNumbers);
+    const catNumbers = this.cache.computeCatNumbersForPage(itemsPerPage, currentPage);
+    const total = this.cache.getTotalCatCount();
 
     return {
       catNumbers,
-      total: totalResult.count,
+      total,
       currentPage,
       itemsPerPage,
     };
+  }
+
+  /**
+   * On cold start, one DB query primes `totalCatCount` and `lastSyncedCatNumber`.
+   * Subsequent calls use cached totals (maintained by auto-bump + sync notifications).
+   */
+  private async ensureTotalsPrimed(): Promise<void> {
+    if (this.cache.getLastSyncedCatNumber() >= 0) return;
+
+    const [result] = await this.drizzle.db
+      .select({
+        totalCats: count(),
+        lastSyncedCatNumber: max(cats.catNumber),
+      })
+      .from(cats);
+
+    this.cache.setTotals(result.totalCats, result.lastSyncedCatNumber ?? -1);
   }
 
   async getCatSvg(catNumber: number): Promise<string | null> {

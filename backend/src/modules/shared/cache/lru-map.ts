@@ -5,12 +5,17 @@
 export class LruMap<K, V> {
   private readonly map = new Map<K, V>();
   private readonly onEvict?: (key: K, value: V) => void;
+  private readonly isPinned?: (key: K) => boolean;
 
   constructor(
     private maxSize: number,
-    options?: { onEvict?: (key: K, value: V) => void },
+    options?: {
+      onEvict?: (key: K, value: V) => void;
+      isPinned?: (key: K) => boolean;
+    },
   ) {
     this.onEvict = options?.onEvict;
+    this.isPinned = options?.isPinned;
   }
 
   get size(): number {
@@ -66,6 +71,19 @@ export class LruMap<K, V> {
   }
 
   private evictOldest(): void {
+    // Iterate insertion-ordered keys. Skip pinned ones. Evict first non-pinned.
+    if (this.isPinned) {
+      for (const key of this.map.keys()) {
+        if (this.isPinned(key)) continue;
+        if (this.onEvict) {
+          this.onEvict(key, this.map.get(key)!);
+        }
+        this.map.delete(key);
+        return;
+      }
+      // All entries pinned: fall back to evicting the oldest anyway.
+      // Caller should prevent this via capacity clamping.
+    }
     const oldest = this.map.keys().next().value;
     if (oldest !== undefined) {
       if (this.onEvict) {

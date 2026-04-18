@@ -92,4 +92,44 @@ describe('LruMap', () => {
     expect(map.has('a')).toBe(true);
     expect(map.has('b')).toBe(false);
   });
+
+  it('should skip pinned entries on eviction', () => {
+    const map = new LruMap<number, string>(3, {
+      isPinned: (k) => k === 1, // key 1 is always pinned
+    });
+    map.set(1, 'pinned');
+    map.set(2, 'a');
+    map.set(3, 'b');
+    map.set(4, 'c'); // triggers eviction, must skip 1
+    expect(map.get(1)).toBe('pinned'); // pinned survives
+    expect(map.get(2)).toBeUndefined(); // evicted (first non-pinned)
+    expect(map.get(3)).toBe('b');
+    expect(map.get(4)).toBe('c');
+  });
+
+  it('should pin multiple entries across the range', () => {
+    const map = new LruMap<number, string>(3, {
+      isPinned: (k) => k < 10, // keys < 10 pinned (oldest range)
+    });
+    map.set(1, 'a');
+    map.set(2, 'b');
+    map.set(20, 'c');
+    map.set(30, 'd'); // evicts key 20 (only non-pinned at head)
+    expect(map.get(1)).toBe('a');
+    expect(map.get(2)).toBe('b');
+    expect(map.get(20)).toBeUndefined();
+    expect(map.get(30)).toBe('d');
+  });
+
+  it('should fall back to oldest when all entries pinned (safety)', () => {
+    const map = new LruMap<number, string>(2, {
+      isPinned: () => true, // everything pinned
+    });
+    map.set(1, 'a');
+    map.set(2, 'b');
+    map.set(3, 'c'); // no non-pinned to evict; falls back to evicting oldest
+    expect(map.get(1)).toBeUndefined(); // fallback evicted
+    expect(map.get(2)).toBe('b');
+    expect(map.get(3)).toBe('c');
+  });
 });

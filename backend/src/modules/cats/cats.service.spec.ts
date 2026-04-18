@@ -102,45 +102,60 @@ describe('CatsService', () => {
   });
 
   describe('getCats', () => {
-    it('should return paginated results', async () => {
-      const drizzle = createMockDrizzle();
-      // First call: count query
-      drizzle.db.from
-        .mockResolvedValueOnce([{ count: 100 }])
-        // Second call: data query
-        .mockReturnValueOnce({
-          orderBy: jest.fn().mockReturnValue({
-            limit: jest.fn().mockReturnValue({
-              offset: jest.fn().mockResolvedValue([GENESIS_ROW]),
-            }),
-          }),
-        });
-      const service = new CatsService(drizzle as any, new CacheService());
+    it('should prime totals and batch-fetch missing cats from DB', async () => {
+      const cache = new CacheService();
+      cache.setTotals(1, 0); // pre-primed, so getCats skips prime query
+
+      const drizzle = createMockDrizzle({
+        where: jest.fn().mockResolvedValue([GENESIS_ROW]), // the IN-query returns genesis
+      });
+      const service = new CatsService(drizzle as any, cache);
 
       const result = await service.getCats(12, 1);
-      expect(result.total).toBe(100);
+      expect(result.total).toBe(1);
       expect(result.currentPage).toBe(1);
       expect(result.itemsPerPage).toBe(12);
       expect(result.cats).toHaveLength(1);
       expect(result.cats[0].catNumber).toBe(0);
+      expect(cache.getCachedCat(0)).toBeDefined();
     });
 
-    it('should calculate correct offset for page 3', async () => {
-      const offsetMock = jest.fn().mockResolvedValue([]);
-      const drizzle = createMockDrizzle();
-      drizzle.db.from
-        .mockResolvedValueOnce([{ count: 100 }])
-        .mockReturnValueOnce({
-          orderBy: jest.fn().mockReturnValue({
-            limit: jest.fn().mockReturnValue({
-              offset: offsetMock,
-            }),
-          }),
-        });
-      const service = new CatsService(drizzle as any, new CacheService());
+    it('should prime totals via COUNT+MAX when cache is cold', async () => {
+      const cache = new CacheService();
+      // Cache is cold (lastSyncedCatNumber = -1)
 
-      await service.getCats(10, 3);
-      expect(offsetMock).toHaveBeenCalledWith(20); // (3-1) * 10
+      // First .from() call = prime query (resolves), second .from() call = IN-query (needs to chain).
+      const drizzle = createMockDrizzle();
+      let callCount = 0;
+      drizzle.db.from = jest.fn(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve([{ totalCats: 1, lastSyncedCatNumber: 0 }]);
+        }
+        // second call: return chainable so .where() works
+        return drizzle.db;
+      }) as any;
+      drizzle.db.where = jest.fn().mockResolvedValue([GENESIS_ROW]);
+
+      const service = new CatsService(drizzle as any, cache);
+
+      const result = await service.getCats(12, 1);
+      expect(result.total).toBe(1);
+      expect(cache.getLastSyncedCatNumber()).toBe(0); // primed
+    });
+
+    it('should skip DB fetch when all cats already cached', async () => {
+      const cache = new CacheService();
+      cache.setTotals(1, 0);
+      cache.setCachedCat({ ...GENESIS_DTO }); // genesis already in cache
+
+      const whereMock = jest.fn();
+      const drizzle = createMockDrizzle({ where: whereMock });
+      const service = new CatsService(drizzle as any, cache);
+
+      const result = await service.getCats(12, 1);
+      expect(result.cats).toHaveLength(1);
+      expect(whereMock).not.toHaveBeenCalled(); // zero DB queries (no IN lookup needed)
     });
   });
 

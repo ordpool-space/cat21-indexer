@@ -147,6 +147,11 @@ export class SyncService {
 
         await this.drizzle.db.insert(cats).values(rows).onConflictDoNothing();
 
+        // Notify cache after each batch so paginated requests see progress during
+        // long initial syncs (minutes-long on fresh deployments).
+        const batchMax = rows[rows.length - 1].catNumber;
+        this.cache.onNewCatsSynced(batchMax);
+
         insertedCount += details.length;
         nextCatNumber += numbers.length;
 

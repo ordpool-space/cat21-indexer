@@ -126,29 +126,35 @@ export class StatusDto {
 }
 
 export class CacheStatsDto {
-  @ApiProperty({ description: 'Number of cats in LRU cache', example: 500 })
+  @ApiProperty({ description: 'Number of cats currently in the LRU cache. Oldest 2400 and newest 2400 are pinned (never evicted).', example: 5000 })
   cats!: number;
 
-  @ApiProperty({ description: 'Max capacity of cats LRU cache', example: 10000 })
+  @ApiProperty({ description: 'Max capacity of the cat LRU (dynamically adjusted between 5300 and 20000)', example: 10000 })
   catsMax!: number;
 
-  @ApiProperty({ description: 'Number of txHash index entries', example: 500 })
+  @ApiProperty({ description: 'Number of txHash index entries (secondary lookup map)', example: 5000 })
   txHashIndex!: number;
 
-  @ApiProperty({ description: 'Number of pagination results in LRU cache', example: 12 })
-  pagination!: number;
-
-  @ApiProperty({ description: 'Number of pinned first pages (newest cats)', example: 3 })
-  pinnedFirst!: number;
-
-  @ApiProperty({ description: 'Number of pinned last pages (genesis cats)', example: 3 })
-  pinnedLast!: number;
-
-  @ApiProperty({ description: 'Cached total cat count', example: 63732 })
+  @ApiProperty({ description: 'Cached total cat count (maintained via auto-bump + sync notifications)', example: 63732 })
   totalCatCount!: number;
 
-  @ApiProperty({ description: 'Cached last synced cat number', example: 63731 })
+  @ApiProperty({ description: 'Cached last synced cat number. Defines the newest-pinned range: [n-2399 .. n].', example: 63731 })
   lastSyncedCatNumber!: number;
+
+  @ApiProperty({ description: 'Detected container memory limit in MB (cgroup v2/v1, Node 20+ constrainedMemory, or fallback)', example: 512 })
+  memoryLimitMB!: number;
+
+  @ApiProperty({ description: 'Target memory ceiling (75% of limit) in MB', example: 384 })
+  memoryTargetMB!: number;
+
+  @ApiProperty({ description: 'Available memory before hitting target, in MB', example: 263 })
+  memoryHeadroomMB!: number;
+
+  @ApiProperty({ description: 'Current resident memory (RSS) in MB', example: 121 })
+  memoryRssMB!: number;
+
+  @ApiProperty({ description: 'Current V8 heap used in MB', example: 45 })
+  memoryHeapUsedMB!: number;
 }
 
 export class HealthDto {
