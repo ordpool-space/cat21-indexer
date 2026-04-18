@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { count, eq, desc, max } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
+import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.dto';
@@ -8,11 +9,11 @@ import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, HealthDto
 @Injectable()
 export class CatsService {
   private readonly startedAt = Date.now();
-  private statusCache: StatusDto | null = null;
-  private statusCacheTime = 0;
-  private readonly STATUS_CACHE_TTL = 30_000; // 30 seconds
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    private readonly cache: CacheService,
+  ) {}
 
   getHealth(): HealthDto {
     return {
@@ -20,14 +21,21 @@ export class CatsService {
       timestamp: new Date().toISOString(),
       uptimeSec: Math.floor((Date.now() - this.startedAt) / 1000),
       version: process.env.npm_package_version ?? '0.1.0',
+      memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      cache: this.cache.getStats(),
     };
   }
 
   async getStatus(): Promise<StatusDto> {
-    if (this.statusCache && Date.now() - this.statusCacheTime < this.STATUS_CACHE_TTL) {
-      return this.statusCache;
+    const total = this.cache.getTotalCatCount();
+    if (total > 0) {
+      return {
+        totalCats: total,
+        lastSyncedCatNumber: this.cache.getLastSyncedCatNumber(),
+      };
     }
 
+    // Cold start: populate from DB
     const [result] = await this.drizzle.db
       .select({
         totalCats: count(),
@@ -35,32 +43,47 @@ export class CatsService {
       })
       .from(cats);
 
-    this.statusCache = {
+    const status = {
       totalCats: result.totalCats,
       lastSyncedCatNumber: result.lastSyncedCatNumber ?? -1,
     };
-    this.statusCacheTime = Date.now();
-    return this.statusCache;
+    this.cache.setTotals(status.totalCats, status.lastSyncedCatNumber);
+    return status;
   }
 
   async getCatByNumber(catNumber: number): Promise<CatDto | null> {
+    const cached = this.cache.getCachedCat(catNumber);
+    if (cached) return cached;
+
     const [result] = await this.drizzle.db
       .select()
       .from(cats)
       .where(eq(cats.catNumber, catNumber));
 
     if (!result) return null;
-    return this.mapToDto(result);
+
+    const dto = this.mapToDto(result);
+    this.cache.setCachedCat(dto);
+    return dto;
   }
 
   async getCatByTxHash(txHash: string): Promise<CatDto | null> {
+    const catNumber = this.cache.getCachedCatNumberByTxHash(txHash);
+    if (catNumber !== undefined) {
+      const cached = this.cache.getCachedCat(catNumber);
+      if (cached) return cached;
+    }
+
     const [result] = await this.drizzle.db
       .select()
       .from(cats)
       .where(eq(cats.txHash, txHash));
 
     if (!result) return null;
-    return this.mapToDto(result);
+
+    const dto = this.mapToDto(result);
+    this.cache.setCachedCat(dto);
+    return dto;
   }
 
   async getCats(
@@ -68,15 +91,24 @@ export class CatsService {
     currentPage: number,
   ): Promise<CatsPaginatedResultDto> {
     const offset = (currentPage - 1) * itemsPerPage;
+    const cachedTotal = this.cache.getTotalCatCount();
 
     const [totalQuery, results] = await Promise.all([
-      this.drizzle.db.select({ count: count() }).from(cats),
+      cachedTotal > 0
+        ? Promise.resolve([{ count: cachedTotal }])
+        : this.drizzle.db.select({ count: count() }).from(cats),
       this.drizzle.db.select().from(cats).orderBy(desc(cats.catNumber)).limit(itemsPerPage).offset(offset),
     ]);
     const [totalResult] = totalQuery;
 
+    const dtos = results.map((r) => {
+      const dto = this.mapToDto(r);
+      this.cache.setCachedCat(dto);
+      return dto;
+    });
+
     return {
-      cats: results.map((r) => this.mapToDto(r)),
+      cats: dtos,
       total: totalResult.count,
       currentPage,
       itemsPerPage,
@@ -87,16 +119,33 @@ export class CatsService {
     itemsPerPage: number,
     currentPage: number,
   ): Promise<CatNumbersPaginatedResultDto> {
+    const cachedTotal = this.cache.getTotalCatCount();
+    const cachedNumbers = this.cache.getCachedCatNumbers(itemsPerPage, currentPage);
+
+    if (cachedNumbers && cachedTotal > 0) {
+      return {
+        catNumbers: cachedNumbers,
+        total: cachedTotal,
+        currentPage,
+        itemsPerPage,
+      };
+    }
+
     const offset = (currentPage - 1) * itemsPerPage;
 
     const [totalQuery, results] = await Promise.all([
-      this.drizzle.db.select({ count: count() }).from(cats),
+      cachedTotal > 0
+        ? Promise.resolve([{ count: cachedTotal }])
+        : this.drizzle.db.select({ count: count() }).from(cats),
       this.drizzle.db.select({ catNumber: cats.catNumber }).from(cats).orderBy(desc(cats.catNumber)).limit(itemsPerPage).offset(offset),
     ]);
     const [totalResult] = totalQuery;
+    const catNumbers = results.map((r) => r.catNumber);
+
+    this.cache.setCachedCatNumbers(itemsPerPage, currentPage, catNumbers);
 
     return {
-      catNumbers: results.map((r) => r.catNumber),
+      catNumbers,
       total: totalResult.count,
       currentPage,
       itemsPerPage,
@@ -104,6 +153,8 @@ export class CatsService {
   }
 
   async getCatSvg(catNumber: number): Promise<string | null> {
+    // SVGs are cached at Cloudflare edge (1 year, immutable).
+    // No in-memory cache needed here.
     const [row] = await this.drizzle.db
       .select({
         txHash: cats.txHash,

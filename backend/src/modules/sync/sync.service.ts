@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { max } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
+import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { OrdCatDetail, OrdClientService } from './ord-client.service';
@@ -29,6 +30,7 @@ export class SyncService {
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly ordClient: OrdClientService,
+    private readonly cache: CacheService,
   ) {}
 
   @Interval(60_000)
@@ -154,6 +156,7 @@ export class SyncService {
       }
 
       this.localMax = remoteMax;
+      this.cache.onNewCatsSynced(remoteMax);
       this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
     } catch (error) {
       this.logger.error('Sync failed', error);

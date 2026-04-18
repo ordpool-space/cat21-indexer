@@ -4,7 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
     .setTitle('CAT-21 Backend')
-    .setDescription('REST API for CAT-21 cat data with traits')
+    .setDescription('REST API for CAT-21 cat data with traits. Expand responses and click "Schema" to see full type information.')
     .setVersion('0.1.0')
     .build();
 

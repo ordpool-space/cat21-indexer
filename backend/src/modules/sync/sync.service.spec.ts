@@ -79,8 +79,9 @@ describe('SyncService', () => {
       getBlockHash: jest.fn().mockImplementation(() => Promise.resolve('0'.repeat(64))),
     };
 
-    const service = new SyncService(drizzle as any, ordClient as any);
-    return { service, drizzle, ordClient, insertMock };
+    const cache = { onNewCatsSynced: jest.fn() };
+    const service = new SyncService(drizzle as any, ordClient as any, cache as any);
+    return { service, drizzle, ordClient, insertMock, cache };
   }
 
   // --- Basic sync algorithm ---

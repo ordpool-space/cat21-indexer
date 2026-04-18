@@ -125,6 +125,32 @@ export class StatusDto {
   lastSyncedCatNumber!: number;
 }
 
+export class CacheStatsDto {
+  @ApiProperty({ description: 'Number of cats in LRU cache', example: 500 })
+  cats!: number;
+
+  @ApiProperty({ description: 'Max capacity of cats LRU cache', example: 10000 })
+  catsMax!: number;
+
+  @ApiProperty({ description: 'Number of txHash index entries', example: 500 })
+  txHashIndex!: number;
+
+  @ApiProperty({ description: 'Number of pagination results in LRU cache', example: 12 })
+  pagination!: number;
+
+  @ApiProperty({ description: 'Number of pinned first pages (newest cats)', example: 3 })
+  pinnedFirst!: number;
+
+  @ApiProperty({ description: 'Number of pinned last pages (genesis cats)', example: 3 })
+  pinnedLast!: number;
+
+  @ApiProperty({ description: 'Cached total cat count', example: 63732 })
+  totalCatCount!: number;
+
+  @ApiProperty({ description: 'Cached last synced cat number', example: 63731 })
+  lastSyncedCatNumber!: number;
+}
+
 export class HealthDto {
   @ApiProperty({ description: 'Service status', example: 'ok' })
   status!: string;
@@ -137,4 +163,10 @@ export class HealthDto {
 
   @ApiProperty({ description: 'Backend version', example: '0.1.0' })
   version!: string;
+
+  @ApiProperty({ description: 'Resident memory in MB', example: 85 })
+  memoryMB!: number;
+
+  @ApiProperty({ description: 'In-memory cache statistics', type: CacheStatsDto })
+  cache!: CacheStatsDto;
 }
