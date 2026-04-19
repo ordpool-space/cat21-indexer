@@ -548,6 +548,49 @@ describe('CacheService', () => {
     });
   });
 
+  describe('Proof of Cat Work', () => {
+    it('starts at 0', () => {
+      expect(cache.getProofOfCatWork()).toBe(0);
+    });
+
+    it('setProofOfCatWork stores the value', () => {
+      cache.setProofOfCatWork(123456789);
+      expect(cache.getProofOfCatWork()).toBe(123456789);
+    });
+
+    it('setProofOfCatWork overwrites (DB is source of truth)', () => {
+      cache.setProofOfCatWork(100);
+      cache.setProofOfCatWork(200);
+      cache.setProofOfCatWork(150); // can go down in tests; DB is authoritative
+      expect(cache.getProofOfCatWork()).toBe(150);
+    });
+
+    it('handles very large numbers (BTC sat range)', () => {
+      const tenMillionBtc = 10_000_000 * 100_000_000; // 1e15
+      cache.setProofOfCatWork(tenMillionBtc);
+      expect(cache.getProofOfCatWork()).toBe(tenMillionBtc);
+      expect(cache.getProofOfCatWork()).toBeLessThan(Number.MAX_SAFE_INTEGER);
+    });
+
+    it('is exposed in cache stats', () => {
+      cache.setProofOfCatWork(42);
+      const stats = cache.getStats();
+      expect(stats.proofOfCatWork).toBe(42);
+    });
+
+    it('is NOT touched by sync notification', () => {
+      cache.setProofOfCatWork(1000);
+      cache.onNewCatsSynced(500);
+      expect(cache.getProofOfCatWork()).toBe(1000);
+    });
+
+    it('is NOT touched by setCachedCat', () => {
+      cache.setProofOfCatWork(1000);
+      cache.setCachedCat(makeCatDto(42));
+      expect(cache.getProofOfCatWork()).toBe(1000);
+    });
+  });
+
   describe('full scenario: cold start through 1000 cats minted', () => {
     it('cold start → first paginated access → many mints → boundary shift', () => {
       // Phase 1: cold start

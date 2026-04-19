@@ -18,5 +18,9 @@ export interface StatusDto {
      * Cat number of the last synced cat (-1 if none)
      */
     lastSyncedCatNumber: number;
+    /**
+     * Proof of Cat Work: the total Bitcoin fees (in sats) paid to miners across all CAT-21 mint transactions. This number only grows, never decreases. See the CAT-21 whitepaper for the philosophical foundation.
+     */
+    proofOfCatWork: number;
 }
 

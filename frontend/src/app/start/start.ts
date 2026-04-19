@@ -1,3 +1,4 @@
+import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import {
@@ -16,7 +17,7 @@ import { rxResourceFixed } from '../shared/rx-resource-fixed';
 @Component({
   selector: 'app-start',
   templateUrl: './start.html',
-  imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, CatGallery],
+  imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, CatGallery, DecimalPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:keydown.ArrowLeft)': 'navigatePrev()',
@@ -36,8 +37,16 @@ export class Start {
     stream: ({ params }) => this.api.catsControllerGetCatNumbers(params.itemsPerPage, params.currentPage),
   });
 
+  statusResource = rxResourceFixed({
+    params: () => ({}),
+    stream: () => this.api.catsControllerGetStatus(),
+  });
+
   catNumbers = computed(() => this.catsResource.value()?.catNumbers ?? []);
   placeholders = computed(() => new Array(this.itemsPerPage() || 48));
+
+  readonly proofOfCatWorkSats = computed(() => this.statusResource.value()?.proofOfCatWork ?? 0);
+  readonly proofOfCatWorkBtc = computed(() => this.proofOfCatWorkSats() / 100_000_000);
 
   private readonly windowWidth = signal(typeof window === 'undefined' ? 1200 : window.innerWidth);
   // Narrower screens show fewer page numbers to prevent horizontal overflow.

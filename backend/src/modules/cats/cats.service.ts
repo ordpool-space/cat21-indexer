@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { count, eq, inArray, max } from 'drizzle-orm';
+import { count, eq, inArray, max, sum } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
@@ -27,28 +27,12 @@ export class CatsService {
   }
 
   async getStatus(): Promise<StatusDto> {
-    const total = this.cache.getTotalCatCount();
-    if (total > 0) {
-      return {
-        totalCats: total,
-        lastSyncedCatNumber: this.cache.getLastSyncedCatNumber(),
-      };
-    }
-
-    // Cold start: populate from DB
-    const [result] = await this.drizzle.db
-      .select({
-        totalCats: count(),
-        lastSyncedCatNumber: max(cats.catNumber),
-      })
-      .from(cats);
-
-    const status = {
-      totalCats: result.totalCats,
-      lastSyncedCatNumber: result.lastSyncedCatNumber ?? -1,
+    await this.ensureTotalsPrimed();
+    return {
+      totalCats: this.cache.getTotalCatCount(),
+      lastSyncedCatNumber: this.cache.getLastSyncedCatNumber(),
+      proofOfCatWork: this.cache.getProofOfCatWork(),
     };
-    this.cache.setTotals(status.totalCats, status.lastSyncedCatNumber);
-    return status;
   }
 
   async getCatByNumber(catNumber: number): Promise<CatDto | null> {
@@ -158,8 +142,8 @@ export class CatsService {
   }
 
   /**
-   * On cold start, one DB query primes `totalCatCount` and `lastSyncedCatNumber`.
-   * Subsequent calls use cached totals (maintained by auto-bump + sync notifications).
+   * On cold start, one DB query primes totals and Proof of Cat Work.
+   * Subsequent calls use cached values (maintained by sync notifications).
    */
   private async ensureTotalsPrimed(): Promise<void> {
     if (this.cache.getLastSyncedCatNumber() >= 0) return;
@@ -168,10 +152,12 @@ export class CatsService {
       .select({
         totalCats: count(),
         lastSyncedCatNumber: max(cats.catNumber),
+        proofOfCatWork: sum(cats.fee),
       })
       .from(cats);
 
     this.cache.setTotals(result.totalCats, result.lastSyncedCatNumber ?? -1);
+    this.cache.setProofOfCatWork(Number(result.proofOfCatWork ?? 0));
   }
 
   async getCatSvg(catNumber: number): Promise<string | null> {

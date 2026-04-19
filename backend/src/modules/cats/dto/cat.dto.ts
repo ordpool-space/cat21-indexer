@@ -123,6 +123,12 @@ export class StatusDto {
 
   @ApiProperty({ description: 'Cat number of the last synced cat (-1 if none)', example: 63731 })
   lastSyncedCatNumber!: number;
+
+  @ApiProperty({
+    description: 'Proof of Cat Work: the total Bitcoin fees (in sats) paid to miners across all CAT-21 mint transactions. This number only grows, never decreases. See the CAT-21 whitepaper for the philosophical foundation.',
+    example: 5234876543,
+  })
+  proofOfCatWork!: number;
 }
 
 export class CacheStatsDto {
@@ -140,6 +146,9 @@ export class CacheStatsDto {
 
   @ApiProperty({ description: 'Cached last synced cat number. Defines the newest-pinned range: [n-2399 .. n].', example: 63731 })
   lastSyncedCatNumber!: number;
+
+  @ApiProperty({ description: 'Cached Proof of Cat Work (sum of all mint fees in sats). Refreshed from DB after each sync cycle.', example: 5234876543 })
+  proofOfCatWork!: number;
 
   @ApiProperty({ description: 'Detected container memory limit in MB (cgroup v2/v1, Node 20+ constrainedMemory, or fallback)', example: 512 })
   memoryLimitMB!: number;

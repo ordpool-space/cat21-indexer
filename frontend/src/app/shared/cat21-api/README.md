@@ -1,6 +1,6 @@
 # @
 
-REST API for CAT-21 cat data with traits
+REST API for CAT-21 cat data with traits. Expand responses and click \"Schema\" to see full type information.
 
 The version of the OpenAPI document: 0.1.0
 

@@ -7,6 +7,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { CacheStatsDto } from './cacheStatsDto';
 
 
 export interface HealthDto { 
@@ -26,5 +27,13 @@ export interface HealthDto {
      * Backend version
      */
     version: string;
+    /**
+     * Resident memory in MB
+     */
+    memoryMB: number;
+    /**
+     * In-memory cache statistics
+     */
+    cache: CacheStatsDto;
 }
 

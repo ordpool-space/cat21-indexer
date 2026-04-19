@@ -30,24 +30,24 @@ describe('CatsService', () => {
   });
 
   describe('getStatus', () => {
-    it('should return totalCats and lastSyncedCatNumber', async () => {
+    it('should return totalCats, lastSyncedCatNumber, and proofOfCatWork', async () => {
       const drizzle = createMockDrizzle({
-        from: jest.fn().mockResolvedValue([{ totalCats: 63732, lastSyncedCatNumber: 63731 }]),
+        from: jest.fn().mockResolvedValue([{ totalCats: 63732, lastSyncedCatNumber: 63731, proofOfCatWork: '5234876543' }]),
       });
       const service = new CatsService(drizzle as any, new CacheService());
 
       const result = await service.getStatus();
-      expect(result).toEqual({ totalCats: 63732, lastSyncedCatNumber: 63731 });
+      expect(result).toEqual({ totalCats: 63732, lastSyncedCatNumber: 63731, proofOfCatWork: 5234876543 });
     });
 
-    it('should return -1 when no cats exist', async () => {
+    it('should return -1 and 0 when no cats exist', async () => {
       const drizzle = createMockDrizzle({
-        from: jest.fn().mockResolvedValue([{ totalCats: 0, lastSyncedCatNumber: null }]),
+        from: jest.fn().mockResolvedValue([{ totalCats: 0, lastSyncedCatNumber: null, proofOfCatWork: null }]),
       });
       const service = new CatsService(drizzle as any, new CacheService());
 
       const result = await service.getStatus();
-      expect(result).toEqual({ totalCats: 0, lastSyncedCatNumber: -1 });
+      expect(result).toEqual({ totalCats: 0, lastSyncedCatNumber: -1, proofOfCatWork: 0 });
     });
   });
 

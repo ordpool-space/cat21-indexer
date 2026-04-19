@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { max } from 'drizzle-orm';
+import { max, sum } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
@@ -162,6 +162,13 @@ export class SyncService {
 
       this.localMax = remoteMax;
       this.cache.onNewCatsSynced(remoteMax);
+
+      // Refresh Proof of Cat Work from DB (authoritative)
+      const [sumResult] = await this.drizzle.db
+        .select({ proofOfCatWork: sum(cats.fee) })
+        .from(cats);
+      this.cache.setProofOfCatWork(Number(sumResult.proofOfCatWork ?? 0));
+
       this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
     } catch (error) {
       this.logger.error('Sync failed', error);

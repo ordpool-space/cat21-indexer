@@ -71,6 +71,10 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   private totalCatCount = 0;
   private lastSyncedCatNumber = -1;
 
+  // Proof of Cat Work: sum of all mint transaction fees (sats).
+  // Refreshed from DB on cold start and after each sync cycle.
+  private proofOfCatWork = 0;
+
   private memoryCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
@@ -168,6 +172,16 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     this.lastSyncedCatNumber = lastSynced;
   }
 
+  // --- Proof of Cat Work ---
+
+  getProofOfCatWork(): number {
+    return this.proofOfCatWork;
+  }
+
+  setProofOfCatWork(sumFromDb: number): void {
+    this.proofOfCatWork = sumFromDb;
+  }
+
   // --- Sync notification ---
 
   /**
@@ -228,6 +242,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       txHashIndex: this.txHashToNumber.size,
       totalCatCount: this.totalCatCount,
       lastSyncedCatNumber: this.lastSyncedCatNumber,
+      proofOfCatWork: this.proofOfCatWork,
       memoryLimitMB: Math.round(this.memoryLimit / 1024 / 1024),
       memoryTargetMB: Math.round(mem.targetMax / 1024 / 1024),
       memoryHeadroomMB: Math.round(mem.headroom / 1024 / 1024),

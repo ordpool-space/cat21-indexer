@@ -18,9 +18,17 @@
 <h2 class="mt-5" id="latest">Minted cats</h2>
 
 @if (catsResource.value(); as data) {
-  <p class="mb-4">
-    Here you see all {{ data.total }} cats that have been minted so far.
+  <p class="mb-2">
+    Here you see all {{ data.total | number }} cats that have been minted so far.
   </p>
+  @if (statusResource.value()) {
+    <p class="mb-4">
+      Proof of Cat Work:
+      {{ proofOfCatWorkSats() | number }} sats
+      (≈ {{ proofOfCatWorkBtc() | number:'1.2-2' }} BTC).
+      <a href="https://github.com/ordpool-space/cat21#governance" target="_blank" rel="noopener">What is this?</a>
+    </p>
+  }
   <app-cat-gallery [catNumbers]="catNumbers()" />
   @if (data.total > 0) {
     <div>

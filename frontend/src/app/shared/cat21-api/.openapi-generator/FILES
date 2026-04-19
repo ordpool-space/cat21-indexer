@@ -8,6 +8,7 @@ configuration.ts
 encoder.ts
 git_push.sh
 index.ts
+model/cacheStatsDto.ts
 model/catDto.ts
 model/catNumbersPaginatedResultDto.ts
 model/catsPaginatedResultDto.ts
