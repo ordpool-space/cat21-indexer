@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { count, eq, inArray, max, sum } from 'drizzle-orm';
+import { count, eq, inArray, max, sql, sum } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
-import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.dto';
+import { SyncService } from '../sync/sync.service';
+import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
+
+const SYNC_STALL_SECONDS = 300;
 
 @Injectable()
 export class CatsService {
@@ -13,6 +16,7 @@ export class CatsService {
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly cache: CacheService,
+    private readonly sync: SyncService,
   ) {}
 
   getHealth(): HealthDto {
@@ -22,6 +26,54 @@ export class CatsService {
       uptimeSec: Math.floor((Date.now() - this.startedAt) / 1000),
       version: process.env.npm_package_version ?? '0.1.0',
       memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      cache: this.cache.getStats(),
+    };
+  }
+
+  async getExtendedHealth(): Promise<ExtendedHealthDto> {
+    const pingStart = Date.now();
+    let reachable = false;
+    let latencyMs: number | null = null;
+    let dbError: string | null = null;
+    try {
+      await this.drizzle.db.execute(sql`SELECT 1`);
+      reachable = true;
+      latencyMs = Date.now() - pingStart;
+    } catch (e) {
+      dbError = e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200);
+    }
+
+    const syncHealth = this.sync.getSyncHealth();
+    const now = Date.now();
+    const secondsSinceLastSuccess = syncHealth.lastSuccessAt
+      ? Math.floor((now - syncHealth.lastSuccessAt.getTime()) / 1000)
+      : null;
+    const stalled =
+      secondsSinceLastSuccess === null || secondsSinceLastSuccess > SYNC_STALL_SECONDS;
+
+    let status: 'ok' | 'degraded' | 'down';
+    if (!reachable) {
+      status = 'down';
+    } else if (stalled) {
+      status = 'degraded';
+    } else {
+      status = 'ok';
+    }
+
+    return {
+      status,
+      timestamp: new Date().toISOString(),
+      uptimeSec: Math.floor((now - this.startedAt) / 1000),
+      version: process.env.npm_package_version ?? '0.1.0',
+      memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      database: { reachable, latencyMs, error: dbError },
+      sync: {
+        lastSuccessAt: syncHealth.lastSuccessAt?.toISOString() ?? null,
+        lastErrorAt: syncHealth.lastErrorAt?.toISOString() ?? null,
+        lastError: syncHealth.lastError,
+        secondsSinceLastSuccess,
+        stalled,
+      },
       cache: this.cache.getStats(),
     };
   }

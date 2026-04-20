@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   Res,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ApiNotFoundResponse,
@@ -13,12 +14,13 @@ import {
   ApiOperation,
   ApiParam,
   ApiProduces,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
 import { CatsService } from './cats.service';
-import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, HealthDto, StatusDto } from './dto/cat.dto';
+import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Browser: 1 day (immutable), Cloudflare edge: 1 year (purgeable)
 const CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable';
@@ -29,10 +31,23 @@ export class CatsController {
   constructor(private readonly catsService: CatsService) {}
 
   @Get('health')
-  @ApiOperation({ summary: 'Health check', description: 'Returns service health info including uptime and version.' })
+  @ApiOperation({ summary: 'Health check', description: 'Lean liveness probe — confirms the Node process is alive. Used by Koyeb container health checks; does NOT query the database. For truthful service health (DB reachability, sync freshness), use /api/extendedHealth.' })
   @ApiOkResponse({ type: HealthDto })
   getHealth(): HealthDto {
     return this.catsService.getHealth();
+  }
+
+  @Get('extendedHealth')
+  @ApiOperation({ summary: 'Extended health check', description: 'Truthful service health: runs a live SELECT 1 against the database and reports sync freshness. Returns 200 when the DB is reachable (even if sync is stalled — status is "degraded"), or 503 when the DB ping fails ("down"). Intended for external monitors and humans, not for container liveness probes.' })
+  @ApiOkResponse({ type: ExtendedHealthDto, description: 'DB reachable. status is "ok" when sync is fresh or "degraded" when stalled.' })
+  @ApiServiceUnavailableResponse({ type: ExtendedHealthDto, description: 'DB unreachable. The response body is an ExtendedHealthDto with status: "down" and database.error set.' })
+  async getExtendedHealth(@Res({ passthrough: true }) reply: FastifyReply): Promise<ExtendedHealthDto> {
+    reply.header('Cache-Control', 'no-store');
+    const health = await this.catsService.getExtendedHealth();
+    if (health.status === 'down') {
+      throw new ServiceUnavailableException(health);
+    }
+    return health;
   }
 
   @Get('status')

@@ -185,3 +185,61 @@ export class HealthDto {
   @ApiProperty({ description: 'In-memory cache statistics', type: CacheStatsDto })
   cache!: CacheStatsDto;
 }
+
+export class DatabaseHealthDto {
+  @ApiProperty({ description: 'Whether the database responded to a SELECT 1 ping', example: true })
+  reachable!: boolean;
+
+  @ApiProperty({ description: 'DB round-trip time in ms for the SELECT 1 ping. Null when the ping failed.', example: 12, nullable: true })
+  latencyMs!: number | null;
+
+  @ApiProperty({ description: 'Short error message from the database driver when unreachable (truncated to 200 chars). Null when reachable.', example: null, nullable: true })
+  error!: string | null;
+}
+
+export class SyncHealthDto {
+  @ApiProperty({ description: 'ISO timestamp of the last successful sync cycle. Null until the first cycle completes after startup.', example: '2026-04-20T09:12:33.000Z', nullable: true })
+  lastSuccessAt!: string | null;
+
+  @ApiProperty({ description: 'ISO timestamp of the last sync cycle that threw. Null when no sync has errored since startup.', example: null, nullable: true })
+  lastErrorAt!: string | null;
+
+  @ApiProperty({ description: 'Short message of the last sync error. Null when no sync has errored since startup.', example: null, nullable: true })
+  lastError!: string | null;
+
+  @ApiProperty({ description: 'Seconds since the last successful sync cycle. Null until the first successful cycle.', example: 42, nullable: true })
+  secondsSinceLastSuccess!: number | null;
+
+  @ApiProperty({ description: 'True when the sync has not succeeded within the stall threshold (default 300 s).', example: false })
+  stalled!: boolean;
+}
+
+export class ExtendedHealthDto {
+  @ApiProperty({
+    description: 'Rollup status: "ok" when DB is reachable and sync is fresh; "degraded" when DB is reachable but sync is stalled; "down" when the DB ping failed.',
+    example: 'ok',
+    enum: ['ok', 'degraded', 'down'],
+  })
+  status!: 'ok' | 'degraded' | 'down';
+
+  @ApiProperty({ description: 'Current server time (ISO 8601)', example: '2026-04-20T09:13:15.000Z' })
+  timestamp!: string;
+
+  @ApiProperty({ description: 'Server uptime in seconds', example: 3600 })
+  uptimeSec!: number;
+
+  @ApiProperty({ description: 'Backend version', example: '0.1.0' })
+  version!: string;
+
+  @ApiProperty({ description: 'Resident memory in MB', example: 85 })
+  memoryMB!: number;
+
+  @ApiProperty({ description: 'Result of a live SELECT 1 against the database', type: DatabaseHealthDto })
+  database!: DatabaseHealthDto;
+
+  @ApiProperty({ description: 'Last sync cycle outcome and freshness signal', type: SyncHealthDto })
+  sync!: SyncHealthDto;
+
+  @ApiProperty({ description: 'In-memory cache statistics', type: CacheStatsDto })
+  cache!: CacheStatsDto;
+}

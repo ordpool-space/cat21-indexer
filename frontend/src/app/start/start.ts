@@ -1,4 +1,5 @@
 import { DecimalPipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import {
@@ -47,6 +48,11 @@ export class Start {
 
   readonly proofOfCatWorkSats = computed(() => this.statusResource.value()?.proofOfCatWork ?? 0);
   readonly proofOfCatWorkBtc = computed(() => this.proofOfCatWorkSats() / 100_000_000);
+
+  readonly isBackendUnavailable = computed(() => {
+    const err = this.catsResource.error();
+    return err instanceof HttpErrorResponse && (err.status >= 500 || err.status === 0);
+  });
 
   private readonly windowWidth = signal(typeof window === 'undefined' ? 1200 : window.innerWidth);
   // Narrower screens show fewer page numbers to prevent horizontal overflow.

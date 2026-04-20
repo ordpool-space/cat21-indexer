@@ -6,6 +6,6 @@ import { SyncService } from './sync.service';
 @Module({
   imports: [CacheModule],
   providers: [OrdClientService, SyncService],
-  exports: [OrdClientService],
+  exports: [OrdClientService, SyncService],
 })
 export class SyncModule {}

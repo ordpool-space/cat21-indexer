@@ -12,9 +12,12 @@ model/cacheStatsDto.ts
 model/catDto.ts
 model/catNumbersPaginatedResultDto.ts
 model/catsPaginatedResultDto.ts
+model/databaseHealthDto.ts
+model/extendedHealthDto.ts
 model/healthDto.ts
 model/models.ts
 model/statusDto.ts
+model/syncHealthDto.ts
 param.ts
 provide-api.ts
 query.params.ts

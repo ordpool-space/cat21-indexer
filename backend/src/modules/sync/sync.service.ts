@@ -27,11 +27,23 @@ export class SyncService {
   private localMax = -1;
   private readonly blockHashCache = new Map<number, string>();
 
+  private lastSuccessAt: Date | null = null;
+  private lastErrorAt: Date | null = null;
+  private lastError: string | null = null;
+
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly ordClient: OrdClientService,
     private readonly cache: CacheService,
   ) {}
+
+  getSyncHealth(): { lastSuccessAt: Date | null; lastErrorAt: Date | null; lastError: string | null } {
+    return {
+      lastSuccessAt: this.lastSuccessAt,
+      lastErrorAt: this.lastErrorAt,
+      lastError: this.lastError,
+    };
+  }
 
   @Interval(60_000)
   async handleSync() {
@@ -69,6 +81,7 @@ export class SyncService {
 
       if (remoteMax <= this.localMax) {
         this.logger.debug(`Already up to date (local: #${this.localMax}, remote: #${remoteMax})`);
+        this.lastSuccessAt = new Date();
         return;
       }
 
@@ -170,7 +183,10 @@ export class SyncService {
       this.cache.setProofOfCatWork(Number(sumResult.proofOfCatWork ?? 0));
 
       this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
+      this.lastSuccessAt = new Date();
     } catch (error) {
+      this.lastErrorAt = new Date();
+      this.lastError = error instanceof Error ? error.message : String(error);
       this.logger.error('Sync failed', error);
     } finally {
       this.blockHashCache.clear();
