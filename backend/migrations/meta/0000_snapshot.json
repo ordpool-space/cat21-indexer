@@ -1,0 +1,331 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "eb3ff0b4-f440-4911-bc37-a9635c31e65c",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "cats": {
+      "name": "cats",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cat_number": {
+          "name": "cat_number",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tx_hash": {
+          "name": "tx_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "block_hash": {
+          "name": "block_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "block_height": {
+          "name": "block_height",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "minted_at": {
+          "name": "minted_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "minted_by": {
+          "name": "minted_by",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "fee": {
+          "name": "fee",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "weight": {
+          "name": "weight",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size": {
+          "name": "size",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "feerate": {
+          "name": "feerate",
+          "type": "double",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sat": {
+          "name": "sat",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "genesis": {
+          "name": "genesis",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "cat_colors": {
+          "name": "cat_colors",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "('[]')"
+        },
+        "male": {
+          "name": "male",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "female": {
+          "name": "female",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "design_index": {
+          "name": "design_index",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "design_pose": {
+          "name": "design_pose",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "design_expression": {
+          "name": "design_expression",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "design_pattern": {
+          "name": "design_pattern",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "design_facing": {
+          "name": "design_facing",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "laser_eyes": {
+          "name": "laser_eyes",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'None'"
+        },
+        "background": {
+          "name": "background",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "background_colors": {
+          "name": "background_colors",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "('[]')"
+        },
+        "crown": {
+          "name": "crown",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'None'"
+        },
+        "glasses": {
+          "name": "glasses",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'None'"
+        },
+        "glasses_colors": {
+          "name": "glasses_colors",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "('[]')"
+        }
+      },
+      "indexes": {
+        "idx_cats_block_height": {
+          "name": "idx_cats_block_height",
+          "columns": [
+            "block_height"
+          ],
+          "isUnique": false
+        },
+        "idx_cats_minted_by": {
+          "name": "idx_cats_minted_by",
+          "columns": [
+            "minted_by"
+          ],
+          "isUnique": false
+        },
+        "idx_cats_genesis": {
+          "name": "idx_cats_genesis",
+          "columns": [
+            "genesis"
+          ],
+          "isUnique": false
+        },
+        "idx_cats_design_pose": {
+          "name": "idx_cats_design_pose",
+          "columns": [
+            "design_pose"
+          ],
+          "isUnique": false
+        },
+        "idx_cats_laser_eyes": {
+          "name": "idx_cats_laser_eyes",
+          "columns": [
+            "laser_eyes"
+          ],
+          "isUnique": false
+        },
+        "idx_cats_background": {
+          "name": "idx_cats_background",
+          "columns": [
+            "background"
+          ],
+          "isUnique": false
+        },
+        "idx_cats_crown": {
+          "name": "idx_cats_crown",
+          "columns": [
+            "crown"
+          ],
+          "isUnique": false
+        },
+        "idx_cats_glasses": {
+          "name": "idx_cats_glasses",
+          "columns": [
+            "glasses"
+          ],
+          "isUnique": false
+        },
+        "idx_cats_feerate": {
+          "name": "idx_cats_feerate",
+          "columns": [
+            "feerate"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "cats_id": {
+          "name": "cats_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "cats_cat_number_unique": {
+          "name": "cats_cat_number_unique",
+          "columns": [
+            "cat_number"
+          ]
+        },
+        "cats_tx_hash_unique": {
+          "name": "cats_tx_hash_unique",
+          "columns": [
+            "tx_hash"
+          ]
+        }
+      },
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

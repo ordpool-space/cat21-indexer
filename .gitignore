@@ -31,7 +31,5 @@ Thumbs.db
 # Angular cache
 .angular
 
-# Drizzle
-backend/migrations/meta
 frontend/playwright-report/
 frontend/test-results/
