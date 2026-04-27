@@ -158,7 +158,7 @@ export class SyncService {
           };
         });
 
-        await this.drizzle.db.insert(cats).values(rows).onConflictDoNothing();
+        await this.drizzle.db.insert(cats).ignore().values(rows);
 
         // Notify cache after each batch so paginated requests see progress during
         // long initial syncs (minutes-long on fresh deployments).

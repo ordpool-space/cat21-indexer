@@ -59,8 +59,8 @@ describe('SyncService', () => {
 
   function createMocks(localMax: number | null = null, remoteMax = 5) {
     const insertMock = jest.fn().mockReturnValue({
-      values: jest.fn().mockReturnValue({
-        onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
+      ignore: jest.fn().mockReturnValue({
+        values: jest.fn().mockResolvedValue(undefined),
       }),
     });
 
@@ -192,7 +192,7 @@ describe('SyncService', () => {
 
     // Should still insert the 2 cats that succeeded
     expect(insertMock).toHaveBeenCalled();
-    const insertedValues = insertMock.mock.results[0].value.values.mock.calls[0][0];
+    const insertedValues = insertMock.mock.results[0].value.ignore.mock.results[0].value.values.mock.calls[0][0];
     expect(insertedValues).toHaveLength(2);
   });
 

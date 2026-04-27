@@ -10,7 +10,7 @@ function createMockDrizzle(overrides: Record<string, any> = {}) {
     orderBy: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
     offset: jest.fn().mockReturnThis(),
-    execute: jest.fn().mockResolvedValue({ rows: [{ '?column?': 1 }] }),
+    execute: jest.fn().mockResolvedValue([[{ '1': 1 }], []]),
     ...overrides,
   };
   return { db: chainable };

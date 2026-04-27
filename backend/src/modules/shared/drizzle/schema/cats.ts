@@ -1,34 +1,35 @@
+import { randomUUID } from 'node:crypto';
 import {
-  pgTable,
-  uuid,
-  integer,
+  mysqlTable,
   varchar,
+  int,
+  bigint,
+  double,
   boolean,
   text,
-  doublePrecision,
-  timestamp,
-  bigint,
+  datetime,
+  json,
   index,
-} from 'drizzle-orm/pg-core';
+} from 'drizzle-orm/mysql-core';
 
-export const cats = pgTable(
+export const cats = mysqlTable(
   'cats',
   {
-    id: uuid('id').defaultRandom().primaryKey(),
+    id: varchar('id', { length: 36 }).primaryKey().$defaultFn(() => randomUUID()),
 
     // Core identification
-    catNumber: integer('cat_number').notNull().unique(),
+    catNumber: int('cat_number').notNull().unique(),
     txHash: varchar('tx_hash', { length: 64 }).notNull().unique(),
     blockHash: varchar('block_hash', { length: 64 }).notNull(),
-    blockHeight: integer('block_height').notNull(),
-    mintedAt: timestamp('minted_at', { withTimezone: true }).notNull(),
+    blockHeight: int('block_height').notNull(),
+    mintedAt: datetime('minted_at', { mode: 'date', fsp: 3 }).notNull(),
     mintedBy: varchar('minted_by', { length: 256 }), // null for OP_RETURN outputs (cat is free)
 
     // Transaction data (from ord)
     fee: bigint('fee', { mode: 'number' }).notNull(),
-    weight: integer('weight').notNull(),
-    size: integer('size').notNull(),
-    feeRate: doublePrecision('feerate').notNull(),
+    weight: int('weight').notNull(),
+    size: int('size').notNull(),
+    feeRate: double('feerate').notNull(),
     sat: bigint('sat', { mode: 'number' }).notNull(),
     value: bigint('value', { mode: 'number' }).notNull(),
 
@@ -37,20 +38,20 @@ export const cats = pgTable(
 
     // Traits (computed from ordpool-parser — always present)
     genesis: boolean('genesis').notNull().default(false),
-    catColors: text('cat_colors').array().notNull().default([]),
+    catColors: json('cat_colors').$type<string[]>().notNull().default([]),
     male: boolean('male').notNull().default(false),
     female: boolean('female').notNull().default(false),
-    designIndex: integer('design_index').notNull().default(0),
+    designIndex: int('design_index').notNull().default(0),
     designPose: varchar('design_pose', { length: 50 }).notNull().default(''),
     designExpression: varchar('design_expression', { length: 50 }).notNull().default(''),
     designPattern: varchar('design_pattern', { length: 50 }).notNull().default(''),
     designFacing: varchar('design_facing', { length: 10 }).notNull().default(''),
     laserEyes: varchar('laser_eyes', { length: 50 }).notNull().default('None'),
     background: varchar('background', { length: 50 }).notNull().default(''),
-    backgroundColors: text('background_colors').array().notNull().default([]),
+    backgroundColors: json('background_colors').$type<string[]>().notNull().default([]),
     crown: varchar('crown', { length: 50 }).notNull().default('None'),
     glasses: varchar('glasses', { length: 50 }).notNull().default('None'),
-    glassesColors: text('glasses_colors').array().notNull().default([]),
+    glassesColors: json('glasses_colors').$type<string[]>().notNull().default([]),
   },
   (t) => [
     index('idx_cats_block_height').on(t.blockHeight),

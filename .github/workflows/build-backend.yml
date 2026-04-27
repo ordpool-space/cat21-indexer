@@ -3,7 +3,7 @@ name: Build Backend
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ stage_prod ]
     paths:
       - 'backend/**'
       - '.github/workflows/build-backend.yml'
@@ -35,6 +35,7 @@ jobs:
       run: |
         cp package.json dist/
         cp package-lock.json dist/
+        cp -r migrations dist/migrations
         cd dist && node -e "
           const pkg = require('./package.json');
           pkg.scripts = { start: 'node main.js' };

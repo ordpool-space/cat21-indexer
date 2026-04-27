@@ -19,6 +19,10 @@ export class EnvironmentVariables {
   @Max(65535)
   PORT: number = 3333;
 
+  @IsOptional()
+  @IsString()
+  HOST: string = '0.0.0.0';
+
   @IsString()
   DATABASE_URL!: string;
 
