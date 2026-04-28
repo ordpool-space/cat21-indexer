@@ -91,8 +91,13 @@ This means **every backend route controls its own caching via `Cache-Control` he
 ### Tech Stack
 - **Angular 21** — zoneless (no zone.js), signal-first, standalone components
 - **Bootstrap 5.3** + ng-bootstrap for UI
-- **ordpool-parser** for cat SVG generation and trait parsing
 - **OpenAPI client** auto-generated from backend Swagger
+
+The frontend has **no direct dependency on `ordpool-parser`**. Cat SVGs are
+served by the backend via `GET /api/cat/:catNumber/image.svg` (and
+`image.webp`); the backend computes them once via `Cat21ParserService.parse()`
+during sync and they're cached at the Cloudflare edge for a year (immutable).
+Trait data comes through the OpenAPI client from `GET /api/cat/:catNumber`.
 
 ### Commands
 ```bash
@@ -348,12 +353,23 @@ Follow semantic HTML and ARIA best practices. This improves accessibility AND SE
 
 ## Dependency: ordpool-parser
 
-Both frontend and backend use `ordpool-parser`. For local dev with linked version:
+Only the **backend** depends on `ordpool-parser` (for `Cat21ParserService.parse()`
+during sync). The frontend gets cat SVGs from the backend, no direct parser
+dependency.
+
+The pin in `backend/package.json` is a GitHub commit hash, not a semver — we
+bump dependents by updating the hash, not by minor-versioning the parser:
+
+```jsonc
+"ordpool-parser": "github:ordpool-space/ordpool-parser#<commit-sha>"
+```
+
+For local dev with a linked version:
 
 ```bash
 # In ordpool-parser/
 npm run build && cd dist && npm link
 
-# In cat21-indexer/backend or frontend
+# In cat21-indexer/backend
 npm link ordpool-parser
 ```
