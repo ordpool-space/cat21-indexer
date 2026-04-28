@@ -8,9 +8,11 @@ import {
   boolean,
   text,
   datetime,
-  json,
   index,
 } from 'drizzle-orm/mysql-core';
+import { jsonColumn } from './json-column';
+
+const jsonStringArray = jsonColumn<string[]>();
 
 export const cats = mysqlTable(
   'cats',
@@ -38,7 +40,7 @@ export const cats = mysqlTable(
 
     // Traits (computed from ordpool-parser — always present)
     genesis: boolean('genesis').notNull().default(false),
-    catColors: json('cat_colors').$type<string[]>().notNull().default([]),
+    catColors: jsonStringArray('cat_colors').notNull().default([]),
     male: boolean('male').notNull().default(false),
     female: boolean('female').notNull().default(false),
     designIndex: int('design_index').notNull().default(0),
@@ -48,10 +50,10 @@ export const cats = mysqlTable(
     designFacing: varchar('design_facing', { length: 10 }).notNull().default(''),
     laserEyes: varchar('laser_eyes', { length: 50 }).notNull().default('None'),
     background: varchar('background', { length: 50 }).notNull().default(''),
-    backgroundColors: json('background_colors').$type<string[]>().notNull().default([]),
+    backgroundColors: jsonStringArray('background_colors').notNull().default([]),
     crown: varchar('crown', { length: 50 }).notNull().default('None'),
     glasses: varchar('glasses', { length: 50 }).notNull().default('None'),
-    glassesColors: json('glasses_colors').$type<string[]>().notNull().default([]),
+    glassesColors: jsonStringArray('glasses_colors').notNull().default([]),
   },
   (t) => [
     index('idx_cats_block_height').on(t.blockHeight),
