@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two independent projects (native CLIs):
 
-- **`backend/`** — NestJS 11 + Fastify + Drizzle ORM. Syncs cat data from `ord.cat21.space`, computes traits via `ordpool-parser`, stores in PostgreSQL. Exposes REST API with Swagger docs.
+- **`backend/`** — NestJS 11 + Fastify + Drizzle ORM. Syncs cat data from `ord.cat21.space`, computes traits via `ordpool-parser`, stores in MariaDB. Exposes REST API with Swagger docs. Live at `backend2.cat21.space` (Cloudflare Tunnel → happysrv `127.0.0.1:3333`).
 - **`frontend/`** — Angular 21 (zoneless, signal-first). The **cat21.space** public website. Shows minted CAT-21 cats with SVG rendering, trait display, paginated gallery.
 
 ## Quick Start
 
 ```bash
-# Backend (needs PostgreSQL running)
+# Backend (needs MariaDB running — see deploy-happyserver/HOWTO.md for the cat21 db+user bootstrap; same convention works for dev: cat21/cat21/cat21)
 cd backend && npm install && npm run start:dev  # port 3333, Swagger at /docs
 
 # Frontend
@@ -23,26 +23,27 @@ cd frontend && npm install && npm start          # port 4200
 
 ### Tech Stack
 - **NestJS 11** + Fastify + @fastify/helmet (security headers)
-- **Drizzle ORM** — schema-as-code in `src/modules/shared/drizzle/schema/`
-- **PostgreSQL** — connection via `DATABASE_URL` in `.env`
+- **Drizzle ORM** — schema-as-code in `src/modules/shared/drizzle/schema/`. JSON columns use the local `jsonColumn<T>()` customType (`schema/json-column.ts`) — Drizzle's built-in `json()` for mysql-core stringifies on write but doesn't parse on read under mysql2's prepared-statement protocol.
+- **MariaDB** via `mysql2` driver — connection via `DATABASE_URL` in `.env` (`mysql://user:pw@host:3306/db`).
 - **ordpool-parser** — `Cat21ParserService.parse()` for trait computation
 - **Swagger** — auto-generated docs at `/docs`
 
 ### Config
 All config via `.env` (see `.env.example`):
-- `DATABASE_URL` — PostgreSQL connection string
-- `ORD_API_URL` — ord REST API base URL (default: `https://ord.cat21.space`)
+- `DATABASE_URL` — MariaDB / MySQL connection string (e.g. `mysql://cat21:cat21@127.0.0.1:3306/cat21`)
+- `ORD_API_URL` — ord REST API base URL (default: `https://ord.cat21.space`; in prod uses loopback `http://127.0.0.1:8080`)
 
 ### Commands
 ```bash
 cd backend
-npm run start:dev      # Watch mode on port 3333
-npm run build          # Compile to dist/
-npm run typecheck      # Type check without emit
-npm run drizzle:gen    # Generate migration from schema diff
-npm run drizzle:push   # Push schema to database
-npm run test           # Jest tests
+npm run start:dev       # Watch mode on port 3333
+npm run build           # Compile to dist/
+npm run typecheck       # Type check without emit
+npm run drizzle:gen     # Generate a new migration from schema diff
+npm run test            # Jest tests
 ```
+
+Migrations are applied **automatically on app boot** by `DrizzleService.onModuleInit()` (reads `migrations/` shipped in the build artifact, fails the process on error). There is no `drizzle:push` flow — schema changes always go through generated migrations so prod and dev stay in lock-step.
 
 ### Key Modules
 | Module | Purpose |
