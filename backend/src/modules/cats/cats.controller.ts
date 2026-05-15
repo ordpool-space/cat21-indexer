@@ -251,9 +251,18 @@ function toSearchFilters(q: CatSearchQueryDto): SearchFilters {
   };
 }
 
-/** `"a,b, c"` → `['a','b','c']`; `""` / undefined → undefined. */
+/**
+ * `"a,b, c"` → `['a','b','c']`; `""` / undefined → undefined.
+ * Capped at 32 distinct values per filter — the largest legit trait row
+ * (color, 7 chips) fits with room to spare; anything bigger is abuse
+ * trying to balloon the SQL `IN (…)` clause.
+ */
 function splitCsv(value: string | undefined): string[] | undefined {
   if (!value) return undefined;
-  const parts = value.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  const parts = value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 32);
   return parts.length > 0 ? parts : undefined;
 }

@@ -17,7 +17,11 @@ sharp.concurrency(1);
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: false }),
+    // trustProxy: '127.0.0.1' — production traffic enters via cloudflared
+    // on loopback. With this, request.ip becomes the first X-Forwarded-For
+    // hop (the real client). Without it, every caller looks like
+    // 127.0.0.1 and any future rate-limit / abuse logging is blind.
+    new FastifyAdapter({ logger: false, trustProxy: '127.0.0.1' }),
   );
 
   // Public read-only API — permissive CORP so <img> tags work cross-origin

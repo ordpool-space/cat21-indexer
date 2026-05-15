@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
+
+// Per-field max length on the comma-separated value list. The longest legit
+// trait name we accept ("Whitepaper") is 10 chars; even a full list of every
+// chip in a row stays well under 200. Caps a class of cheap-to-send,
+// expensive-to-process inputs (huge IN(...) clauses, oversized regex etc.).
+const FILTER_MAX_LENGTH = 200;
 
 /**
  * Query parameters shared by /cats/search and /cats/search/random. Each
@@ -8,31 +14,31 @@ import { IsOptional, IsString } from 'class-validator';
  */
 export class CatSearchQueryDto {
   @ApiPropertyOptional({ description: 'Laser eyes: Orange, Red, Green, Blue, None', example: 'Red,Blue' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   eyes?: string;
 
   @ApiPropertyOptional({ description: 'Pose: Standing, Sleeping, Pouncing, Stalking', example: 'Sleeping' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   pose?: string;
 
   @ApiPropertyOptional({ description: 'Expression: Smile, Grumpy, Pouting, Shy', example: 'Smile' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   expression?: string;
 
   @ApiPropertyOptional({ description: 'Coat pattern: Solid, Striped, Eyepatch, Half/Half', example: 'Striped' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   pattern?: string;
 
   @ApiPropertyOptional({ description: 'Background: Block9, Cyberpunk, Whitepaper, Orange', example: 'Cyberpunk' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   background?: string;
 
   @ApiPropertyOptional({ description: 'Crown: Gold, Diamond, None', example: 'Diamond' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   crown?: string;
 
   @ApiPropertyOptional({ description: 'Glasses: Black, Cool, 3D, Nouns, None', example: 'Cool' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   glasses?: string;
 
   // Category bands track the official Dune dashboard query
@@ -40,15 +46,15 @@ export class CatSearchQueryDto {
   // band — its smallest applicable. `genesis` is a separate boolean trait,
   // accepted here as a sentinel so the chip UI can keep one row.
   @ApiPropertyOptional({ description: 'Rarity category: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple bands OR-combine.', example: 'sub1k' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   category?: string;
 
   @ApiPropertyOptional({ description: 'Gender: male, female', example: 'female' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   gender?: string;
 
   @ApiPropertyOptional({ description: 'Dominant body color bucket: red, orange, yellow, green, blue, purple, pink. Genesis cats have no body hue and never match.', example: 'red' })
-  @IsOptional() @IsString()
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   color?: string;
 }
 

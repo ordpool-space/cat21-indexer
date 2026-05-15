@@ -1,6 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, numberAttribute, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, linkedSignal, numberAttribute, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 
 import { environment } from '../../environments/environment';
@@ -50,6 +51,7 @@ const LABEL_TO_VALUE = buildLabelToValue();
 export class Search {
   private http = inject(HttpClient);
   private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
 
   // Page comes from the route; filter chips come from query params. All are
   // read via withComponentInputBinding() from `app.config.ts`.
@@ -152,15 +154,17 @@ export class Search {
     const httpParams = filtersToHttpParams(this.selected());
     const url = `${environment.api}/api/cats/search/random`;
 
-    this.http.get<{ catNumber: number }>(url, { params: httpParams }).subscribe({
-      next: (res) => {
-        this.luckyLoading.set(false);
-        void this.router.navigate(['/cat', res.catNumber]);
-      },
-      error: () => {
-        this.luckyLoading.set(false);
-      },
-    });
+    this.http.get<{ catNumber: number }>(url, { params: httpParams })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          this.luckyLoading.set(false);
+          void this.router.navigate(['/cat', res.catNumber]);
+        },
+        error: () => {
+          this.luckyLoading.set(false);
+        },
+      });
   }
 
   clearAll(): void {
