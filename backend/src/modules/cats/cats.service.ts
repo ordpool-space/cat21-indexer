@@ -1,11 +1,44 @@
 import { Injectable } from '@nestjs/common';
-import { count, eq, inArray, max, sql, sum } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lt, max, or, sql, sum, type SQL } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { SyncService } from '../sync/sync.service';
 import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
+
+/**
+ * Trait filters for the cat search endpoint. Each field is a list of accepted
+ * values (OR within a field). Multiple fields are AND-combined. An undefined
+ * or empty field means "no filter on that trait".
+ */
+export interface SearchFilters {
+  eyes?: string[];
+  pose?: string[];
+  expression?: string[];
+  pattern?: string[];
+  background?: string[];
+  crown?: string[];
+  glasses?: string[];
+  tier?: string[];
+  gender?: string[];
+}
+
+/**
+ * `tier` chip values map to `cat_number` thresholds. Per the details-page
+ * convention and `deriveCategory`, "sub10k" is inclusive of "sub1k" — the
+ * predicate is `cat_number < threshold`. Selecting multiple tier chips
+ * effectively widens to the largest threshold.
+ */
+const TIER_THRESHOLDS: Record<string, number> = {
+  sub1k: 1_000,
+  sub10k: 10_000,
+  sub50k: 50_000,
+  sub100k: 100_000,
+  sub250k: 250_000,
+  sub500k: 500_000,
+  sub1M: 1_000_000,
+};
 
 const SYNC_STALL_SECONDS = 300;
 
@@ -194,6 +227,46 @@ export class CatsService {
   }
 
   /**
+   * Trait search. Returns paginated cat numbers matching the filter set.
+   *
+   * Each filter value list is OR-combined within the field; fields are
+   * AND-combined across the query. Empty filter (no fields set) is allowed
+   * and returns the full result set sorted newest-first — same shape as
+   * `getCatNumbers`, just without the in-memory shortcut.
+   *
+   * The shortcut path (in-memory cat number range) used by `getCatNumbers`
+   * is intentionally not reused: filter combinations partition the result
+   * set differently each time, so the cache wouldn't help.
+   */
+  async searchCatNumbers(
+    filters: SearchFilters,
+    itemsPerPage: number,
+    currentPage: number,
+  ): Promise<CatNumbersPaginatedResultDto> {
+    const where = buildSearchWhere(filters);
+    const offset = (currentPage - 1) * itemsPerPage;
+
+    // Total + page in parallel; both queries hit the same indexed columns.
+    const [[totalRow], rows] = await Promise.all([
+      this.drizzle.db.select({ count: count() }).from(cats).where(where),
+      this.drizzle.db
+        .select({ catNumber: cats.catNumber })
+        .from(cats)
+        .where(where)
+        .orderBy(desc(cats.catNumber))
+        .limit(itemsPerPage)
+        .offset(offset),
+    ]);
+
+    return {
+      catNumbers: rows.map((r) => r.catNumber),
+      total: totalRow.count,
+      currentPage,
+      itemsPerPage,
+    };
+  }
+
+  /**
    * On cold start, one DB query primes totals and Proof of Cat Work.
    * Subsequent calls use cached values (maintained by sync notifications).
    */
@@ -271,4 +344,53 @@ export class CatsService {
       glassesColors: row.glassesColors,
     };
   }
+}
+
+/**
+ * Translates `SearchFilters` into a Drizzle WHERE expression. Each filter
+ * field is OR-combined internally; fields are AND-combined together.
+ * Returns `undefined` for an empty filter (caller passes `undefined` to
+ * `.where()` for no predicate). Exported for unit testing.
+ */
+export function buildSearchWhere(filters: SearchFilters): SQL | undefined {
+  const clauses: SQL[] = [];
+
+  if (filters.eyes?.length) clauses.push(inArray(cats.laserEyes, filters.eyes));
+  if (filters.pose?.length) clauses.push(inArray(cats.designPose, filters.pose));
+  if (filters.expression?.length) clauses.push(inArray(cats.designExpression, filters.expression));
+  if (filters.pattern?.length) clauses.push(inArray(cats.designPattern, filters.pattern));
+  if (filters.background?.length) clauses.push(inArray(cats.background, filters.background));
+  if (filters.crown?.length) clauses.push(inArray(cats.crown, filters.crown));
+  if (filters.glasses?.length) clauses.push(inArray(cats.glasses, filters.glasses));
+
+  if (filters.gender?.length) {
+    const genderClauses: SQL[] = [];
+    if (filters.gender.includes('male')) genderClauses.push(eq(cats.male, true));
+    if (filters.gender.includes('female')) genderClauses.push(eq(cats.female, true));
+    if (genderClauses.length === 1) {
+      clauses.push(genderClauses[0]);
+    } else if (genderClauses.length > 1) {
+      clauses.push(or(...genderClauses)!);
+    }
+  }
+
+  if (filters.tier?.length) {
+    const tierClauses: SQL[] = [];
+    for (const tier of filters.tier) {
+      if (tier === 'genesis') {
+        tierClauses.push(eq(cats.genesis, true));
+      } else if (TIER_THRESHOLDS[tier] !== undefined) {
+        tierClauses.push(lt(cats.catNumber, TIER_THRESHOLDS[tier]));
+      }
+    }
+    if (tierClauses.length === 1) {
+      clauses.push(tierClauses[0]);
+    } else if (tierClauses.length > 1) {
+      clauses.push(or(...tierClauses)!);
+    }
+  }
+
+  if (clauses.length === 0) return undefined;
+  if (clauses.length === 1) return clauses[0];
+  return and(...clauses);
 }

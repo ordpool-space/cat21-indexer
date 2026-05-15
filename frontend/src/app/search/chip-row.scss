@@ -1,0 +1,57 @@
+.chip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.chip-row-label {
+  flex: 0 0 4.5rem;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8a8a8a);
+}
+
+.chip-row-chips {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  // Horizontal scroll fallback on narrow viewports if the chip list overflows.
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chip {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.5rem;
+  background: transparent;
+  border: 1px solid var(--text-muted, #8a8a8a);
+  color: var(--text-muted, #8a8a8a);
+  font-family: inherit;
+  font-size: 0.75rem;
+  text-transform: lowercase;
+  cursor: pointer;
+  border-radius: 0;
+  // Pixelated edges — match the rest of the site's aesthetic.
+  image-rendering: pixelated;
+
+  &:hover {
+    color: var(--text, #d4d4d4);
+    border-color: var(--text, #d4d4d4);
+  }
+
+  &.chip-on {
+    background: var(--accent, #ff9900);
+    color: #000;
+    border-color: var(--accent, #ff9900);
+    font-weight: bold;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent, #ff9900);
+    outline-offset: 1px;
+  }
+}

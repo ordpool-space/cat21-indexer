@@ -1,0 +1,67 @@
+<section class="search-page">
+  <header class="search-header">
+    <h1>Search cats</h1>
+    <div class="search-counter">
+      @if (resultsResource.isLoading()) {
+        <span role="status">
+          <span class="visually-hidden">Loading…</span>
+          …
+        </span>
+      } @else if (isBackendUnavailable()) {
+        <span role="alert">Backend unavailable</span>
+      } @else if (total() === 0 && hasAnyFilter()) {
+        <span class="zero-results">0 cats — try fewer filters</span>
+      } @else {
+        <span>{{ total() | number }} cat{{ total() === 1 ? '' : 's' }}</span>
+      }
+      @if (hasAnyFilter()) {
+        <button type="button" class="clear-all-btn" (click)="clearAll()">clear all</button>
+      }
+    </div>
+  </header>
+
+  <div class="trait-rows">
+    @for (trait of traits; track trait.key) {
+      <app-chip-row
+        [label]="trait.label"
+        [options]="trait.options"
+        [selected]="selected()[trait.key]"
+        (toggle)="onToggle(trait.key, $event)"
+      />
+    }
+  </div>
+
+  @if (resultsResource.error() && !isBackendUnavailable()) {
+    <p class="search-error" role="alert">
+      Failed to load results.
+      <a (click)="resultsResource.reload()" role="button">Retry</a>
+    </p>
+  }
+
+  <app-cat-gallery
+    [catNumbers]="catNumbers()"
+    [emptyMessage]="hasAnyFilter() ? 'No cats match these filters.' : 'No cats yet.'"
+  />
+
+  @if (totalPages() > 1) {
+    <nav class="search-pager" aria-label="Search results pagination">
+      <button
+        type="button"
+        class="pager-btn"
+        (click)="changePage(currentPage() - 1)"
+        [disabled]="currentPage() <= 1"
+        aria-label="Previous page"
+      >‹ prev</button>
+      <span class="pager-position">
+        page {{ currentPage() | number }} of {{ totalPages() | number }}
+      </span>
+      <button
+        type="button"
+        class="pager-btn"
+        (click)="changePage(currentPage() + 1)"
+        [disabled]="currentPage() >= totalPages()"
+        aria-label="Next page"
+      >next ›</button>
+    </nav>
+  }
+</section>

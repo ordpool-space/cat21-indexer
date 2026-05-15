@@ -20,6 +20,7 @@
 @if (catsResource.value(); as data) {
   <p class="mb-2">
     Here you see all {{ data.total | number }} cats that have been minted so far.
+    <a routerLink="/search">Search by trait →</a>
   </p>
   @if (statusResource.value()) {
     <p class="mb-4">

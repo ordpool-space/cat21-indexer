@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Param,
   ParseIntPipe,
+  Query,
   Res,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -14,12 +15,13 @@ import {
   ApiOperation,
   ApiParam,
   ApiProduces,
+  ApiQuery,
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
-import { CatsService } from './cats.service';
+import { CatsService, type SearchFilters } from './cats.service';
 import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Browser: 1 day (immutable), Cloudflare edge: 1 year (purgeable)
@@ -182,4 +184,63 @@ export class CatsController {
       Math.max(1, currentPage),
     );
   }
+
+  @Get('cats/search/:itemsPerPage/:currentPage')
+  @ApiOperation({
+    summary: 'Search cats by traits',
+    description:
+      'Returns paginated cat numbers matching the supplied trait filters. ' +
+      'Each filter accepts a comma-separated list of values (OR within a filter). ' +
+      'Multiple filters are AND-combined. An empty filter (no query params) ' +
+      'returns the full result set, equivalent to /cats/numbers/.',
+  })
+  @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
+  @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
+  @ApiQuery({ name: 'eyes', required: false, description: 'Laser eyes: Orange, Red, Green, Blue, None', example: 'Red,Blue' })
+  @ApiQuery({ name: 'pose', required: false, description: 'Pose: Standing, Sleeping, Pouncing, Stalking', example: 'Sleeping' })
+  @ApiQuery({ name: 'expression', required: false, description: 'Expression: Smile, Grumpy, Pouting, Shy', example: 'Smile' })
+  @ApiQuery({ name: 'pattern', required: false, description: 'Coat pattern: Solid, Striped, Eyepatch, Half/Half', example: 'Striped' })
+  @ApiQuery({ name: 'background', required: false, description: 'Background: Block9, Cyberpunk, Whitepaper, Orange', example: 'Cyberpunk' })
+  @ApiQuery({ name: 'crown', required: false, description: 'Crown: Gold, Diamond, None', example: 'Diamond' })
+  @ApiQuery({ name: 'glasses', required: false, description: 'Glasses: Black, Cool, 3D, Nouns, None', example: 'Cool' })
+  @ApiQuery({ name: 'tier', required: false, description: 'Number tier: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Tier predicates are inclusive (sub10k matches cat_number < 10000).', example: 'sub1k' })
+  @ApiQuery({ name: 'gender', required: false, description: 'Gender: male, female', example: 'female' })
+  @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of matching cat numbers with total count' })
+  async searchCats(
+    @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
+    @Param('currentPage', ParseIntPipe) currentPage: number,
+    @Query('eyes') eyes?: string,
+    @Query('pose') pose?: string,
+    @Query('expression') expression?: string,
+    @Query('pattern') pattern?: string,
+    @Query('background') background?: string,
+    @Query('crown') crown?: string,
+    @Query('glasses') glasses?: string,
+    @Query('tier') tier?: string,
+    @Query('gender') gender?: string,
+  ): Promise<CatNumbersPaginatedResultDto> {
+    const filters: SearchFilters = {
+      eyes: splitCsv(eyes),
+      pose: splitCsv(pose),
+      expression: splitCsv(expression),
+      pattern: splitCsv(pattern),
+      background: splitCsv(background),
+      crown: splitCsv(crown),
+      glasses: splitCsv(glasses),
+      tier: splitCsv(tier),
+      gender: splitCsv(gender),
+    };
+    return this.catsService.searchCatNumbers(
+      filters,
+      Math.max(1, Math.min(itemsPerPage, 100)),
+      Math.max(1, currentPage),
+    );
+  }
+}
+
+/** `"a,b, c"` → `['a','b','c']`; `""` / undefined → undefined. */
+function splitCsv(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  const parts = value.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  return parts.length > 0 ? parts : undefined;
 }
