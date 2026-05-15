@@ -1,11 +1,47 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 // Per-field max length on the comma-separated value list. The longest legit
 // trait name we accept ("Whitepaper") is 10 chars; even a full list of every
 // chip in a row stays well under 200. Caps a class of cheap-to-send,
 // expensive-to-process inputs (huge IN(...) clauses, oversized regex etc.).
 const FILTER_MAX_LENGTH = 200;
+
+// Allowed values per filter. Case-sensitive because the DB stores these
+// exact strings — there's no normalization step on the read path, so
+// matching anything other than the canonical case would silently miss.
+// All ten lists are closed enums (no free-form fields), so strict
+// validation works end-to-end.
+const EYES_VALUES       = ['Orange', 'Red', 'Green', 'Blue', 'None'] as const;
+const POSE_VALUES       = ['Standing', 'Sleeping', 'Pouncing', 'Stalking'] as const;
+const EXPRESSION_VALUES = ['Smile', 'Grumpy', 'Pouting', 'Shy'] as const;
+const PATTERN_VALUES    = ['Solid', 'Striped', 'Eyepatch', 'Half/Half'] as const;
+const BACKGROUND_VALUES = ['Block9', 'Cyberpunk', 'Whitepaper', 'Orange'] as const;
+const CROWN_VALUES      = ['Gold', 'Diamond', 'None'] as const;
+const GLASSES_VALUES    = ['Black', 'Cool', '3D', 'Nouns', 'None'] as const;
+const CATEGORY_VALUES   = ['genesis', 'sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'] as const;
+const GENDER_VALUES     = ['male', 'female'] as const;
+const COLOR_VALUES      = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+
+// Build a regex that matches "v1,v2,v3,..." where each value is one of the
+// listed enum members. No nested quantifiers — ReDoS-safe by construction.
+function csvOf(values: readonly string[]): RegExp {
+  const alts = values.map((v) => v.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&')).join('|');
+  return new RegExp(`^(?:${alts})(?:,(?:${alts}))*$`);
+}
+const EYES_CSV       = csvOf(EYES_VALUES);
+const POSE_CSV       = csvOf(POSE_VALUES);
+const EXPRESSION_CSV = csvOf(EXPRESSION_VALUES);
+const PATTERN_CSV    = csvOf(PATTERN_VALUES);
+const BACKGROUND_CSV = csvOf(BACKGROUND_VALUES);
+const CROWN_CSV      = csvOf(CROWN_VALUES);
+const GLASSES_CSV    = csvOf(GLASSES_VALUES);
+const CATEGORY_CSV   = csvOf(CATEGORY_VALUES);
+const GENDER_CSV     = csvOf(GENDER_VALUES);
+const COLOR_CSV      = csvOf(COLOR_VALUES);
+
+const msg = (name: string, values: readonly string[]) =>
+  `${name} must be a comma-separated list of: ${values.join(', ')}`;
 
 /**
  * Query parameters shared by /cats/search and /cats/search/random. Each
@@ -15,30 +51,37 @@ const FILTER_MAX_LENGTH = 200;
 export class CatSearchQueryDto {
   @ApiPropertyOptional({ description: 'Laser eyes: Orange, Red, Green, Blue, None', example: 'Red,Blue' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(EYES_CSV, { message: msg('eyes', EYES_VALUES) })
   eyes?: string;
 
   @ApiPropertyOptional({ description: 'Pose: Standing, Sleeping, Pouncing, Stalking', example: 'Sleeping' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(POSE_CSV, { message: msg('pose', POSE_VALUES) })
   pose?: string;
 
   @ApiPropertyOptional({ description: 'Expression: Smile, Grumpy, Pouting, Shy', example: 'Smile' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(EXPRESSION_CSV, { message: msg('expression', EXPRESSION_VALUES) })
   expression?: string;
 
   @ApiPropertyOptional({ description: 'Coat pattern: Solid, Striped, Eyepatch, Half/Half', example: 'Striped' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(PATTERN_CSV, { message: msg('pattern', PATTERN_VALUES) })
   pattern?: string;
 
   @ApiPropertyOptional({ description: 'Background: Block9, Cyberpunk, Whitepaper, Orange', example: 'Cyberpunk' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(BACKGROUND_CSV, { message: msg('background', BACKGROUND_VALUES) })
   background?: string;
 
   @ApiPropertyOptional({ description: 'Crown: Gold, Diamond, None', example: 'Diamond' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(CROWN_CSV, { message: msg('crown', CROWN_VALUES) })
   crown?: string;
 
   @ApiPropertyOptional({ description: 'Glasses: Black, Cool, 3D, Nouns, None', example: 'Cool' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(GLASSES_CSV, { message: msg('glasses', GLASSES_VALUES) })
   glasses?: string;
 
   // Category bands track the official Dune dashboard query
@@ -47,14 +90,17 @@ export class CatSearchQueryDto {
   // accepted here as a sentinel so the chip UI can keep one row.
   @ApiPropertyOptional({ description: 'Rarity category: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple bands OR-combine.', example: 'sub1k' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(CATEGORY_CSV, { message: msg('category', CATEGORY_VALUES) })
   category?: string;
 
   @ApiPropertyOptional({ description: 'Gender: male, female', example: 'female' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(GENDER_CSV, { message: msg('gender', GENDER_VALUES) })
   gender?: string;
 
   @ApiPropertyOptional({ description: 'Dominant body color bucket: red, orange, yellow, green, blue, purple, pink. Genesis cats have no body hue and never match.', example: 'red' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(COLOR_CSV, { message: msg('color', COLOR_VALUES) })
   color?: string;
 }
 
