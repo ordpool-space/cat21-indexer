@@ -15,14 +15,13 @@ import {
   ApiOperation,
   ApiParam,
   ApiProduces,
-  ApiQuery,
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
 import { CatsService, type SearchFilters } from './cats.service';
-import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
+import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Browser: 1 day (immutable), Cloudflare edge: 1 year (purgeable)
 const CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable';
@@ -185,63 +184,27 @@ export class CatsController {
     );
   }
 
-  // NOTE: declared BEFORE `cats/search/:itemsPerPage/:currentPage` so the
-  // static path wins. Fastify usually prefers static over parametric
-  // regardless of declaration order, but ordering it first is the
-  // defensive move and removes one thing to think about.
+  // Declared before `cats/search/:itemsPerPage/:currentPage` so the static
+  // path wins over the parametric one.
   @Get('cats/search/random')
   @ApiOperation({
     summary: 'Pick one random cat matching the supplied trait filters',
     description:
       'Returns a single random cat number from the set that matches the same ' +
-      'filter parameters as /cats/search. Accepts the same query parameters ' +
-      '(eyes, pose, expression, pattern, background, crown, glasses, category, ' +
-      'gender, color). With no filters it picks a random cat from the entire ' +
-      'collection. Returns 404 if no cat matches the filters.',
+      'filter parameters as /cats/search. With no filters it picks a random ' +
+      'cat from the entire collection. Returns 404 if no cat matches.',
   })
-  @ApiQuery({ name: 'eyes', required: false, example: 'Red,Blue' })
-  @ApiQuery({ name: 'pose', required: false, example: 'Sleeping' })
-  @ApiQuery({ name: 'expression', required: false, example: 'Smile' })
-  @ApiQuery({ name: 'pattern', required: false, example: 'Striped' })
-  @ApiQuery({ name: 'background', required: false, example: 'Cyberpunk' })
-  @ApiQuery({ name: 'crown', required: false, example: 'Diamond' })
-  @ApiQuery({ name: 'glasses', required: false, example: 'Cool' })
-  @ApiQuery({ name: 'category', required: false, example: 'sub1k' })
-  @ApiQuery({ name: 'gender', required: false, example: 'female' })
-  @ApiQuery({ name: 'color', required: false, example: 'red' })
   @ApiOkResponse({
     description: 'A single random matching cat number',
     schema: { type: 'object', properties: { catNumber: { type: 'number', example: 42 } } },
   })
   @ApiNotFoundResponse({ description: 'No cat matches the supplied filters' })
   async randomCat(
+    @Query() query: CatSearchQueryDto,
     @Res({ passthrough: true }) reply: FastifyReply,
-    @Query('eyes') eyes?: string,
-    @Query('pose') pose?: string,
-    @Query('expression') expression?: string,
-    @Query('pattern') pattern?: string,
-    @Query('background') background?: string,
-    @Query('crown') crown?: string,
-    @Query('glasses') glasses?: string,
-    @Query('category') category?: string,
-    @Query('gender') gender?: string,
-    @Query('color') color?: string,
   ): Promise<{ catNumber: number }> {
-    const filters: SearchFilters = {
-      eyes: splitCsv(eyes),
-      pose: splitCsv(pose),
-      expression: splitCsv(expression),
-      pattern: splitCsv(pattern),
-      background: splitCsv(background),
-      crown: splitCsv(crown),
-      glasses: splitCsv(glasses),
-      category: splitCsv(category),
-      gender: splitCsv(gender),
-      color: splitCsv(color),
-    };
-    // Each call should pick fresh — never cache.
     reply.header('Cache-Control', 'no-store');
-    const catNumber = await this.catsService.randomCatNumber(filters);
+    const catNumber = await this.catsService.randomCatNumber(toSearchFilters(query));
     if (catNumber === null) {
       throw new NotFoundException('No cat matches the supplied filters');
     }
@@ -259,50 +222,33 @@ export class CatsController {
   })
   @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
   @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
-  @ApiQuery({ name: 'eyes', required: false, description: 'Laser eyes: Orange, Red, Green, Blue, None', example: 'Red,Blue' })
-  @ApiQuery({ name: 'pose', required: false, description: 'Pose: Standing, Sleeping, Pouncing, Stalking', example: 'Sleeping' })
-  @ApiQuery({ name: 'expression', required: false, description: 'Expression: Smile, Grumpy, Pouting, Shy', example: 'Smile' })
-  @ApiQuery({ name: 'pattern', required: false, description: 'Coat pattern: Solid, Striped, Eyepatch, Half/Half', example: 'Striped' })
-  @ApiQuery({ name: 'background', required: false, description: 'Background: Block9, Cyberpunk, Whitepaper, Orange', example: 'Cyberpunk' })
-  @ApiQuery({ name: 'crown', required: false, description: 'Crown: Gold, Diamond, None', example: 'Diamond' })
-  @ApiQuery({ name: 'glasses', required: false, description: 'Glasses: Black, Cool, 3D, Nouns, None', example: 'Cool' })
-  @ApiQuery({ name: 'category', required: false, description: 'Rarity category: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Each cat carries exactly one category band — its smallest applicable (cat 500 = sub1k, cat 5000 = sub10k). Selecting multiple categories OR-combines bands.', example: 'sub1k' })
-  @ApiQuery({ name: 'gender', required: false, description: 'Gender: male, female', example: 'female' })
-  @ApiQuery({ name: 'color', required: false, description: 'Dominant body color bucket: red, orange, yellow, green, blue, purple, pink. Genesis cats have no body hue and never match.', example: 'red' })
   @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of matching cat numbers with total count' })
   async searchCats(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,
-    @Query('eyes') eyes?: string,
-    @Query('pose') pose?: string,
-    @Query('expression') expression?: string,
-    @Query('pattern') pattern?: string,
-    @Query('background') background?: string,
-    @Query('crown') crown?: string,
-    @Query('glasses') glasses?: string,
-    @Query('category') category?: string,
-    @Query('gender') gender?: string,
-    @Query('color') color?: string,
+    @Query() query: CatSearchQueryDto,
   ): Promise<CatNumbersPaginatedResultDto> {
-    const filters: SearchFilters = {
-      eyes: splitCsv(eyes),
-      pose: splitCsv(pose),
-      expression: splitCsv(expression),
-      pattern: splitCsv(pattern),
-      background: splitCsv(background),
-      crown: splitCsv(crown),
-      glasses: splitCsv(glasses),
-      category: splitCsv(category),
-      gender: splitCsv(gender),
-      color: splitCsv(color),
-    };
     return this.catsService.searchCatNumbers(
-      filters,
+      toSearchFilters(query),
       Math.max(1, Math.min(itemsPerPage, 100)),
       Math.max(1, currentPage),
     );
   }
+}
 
+function toSearchFilters(q: CatSearchQueryDto): SearchFilters {
+  return {
+    eyes:       splitCsv(q.eyes),
+    pose:       splitCsv(q.pose),
+    expression: splitCsv(q.expression),
+    pattern:    splitCsv(q.pattern),
+    background: splitCsv(q.background),
+    crown:      splitCsv(q.crown),
+    glasses:    splitCsv(q.glasses),
+    category:   splitCsv(q.category),
+    gender:     splitCsv(q.gender),
+    color:      splitCsv(q.color),
+  };
 }
 
 /** `"a,b, c"` → `['a','b','c']`; `""` / undefined → undefined. */

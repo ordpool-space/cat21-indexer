@@ -9,13 +9,10 @@ import { CatNumbersPaginatedResultDto } from '../shared/cat21-api';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 import { ChipRow } from './chip-row';
 
-// Section labels mirror the details page (`cat21-viewer.html`) and the
-// parser type vocabulary verbatim. URL/backend values are exactly the
-// strings the parser emits (Title Case for the design traits, lowercase
-// for gender / category / color since those are stored that way).
-//
-// Tuple is [value, label]: `value` goes in the URL / backend query; `label`
-// is what the user reads on the chip and types into the keyword box.
+// Tuple is [URL value, display label]. URL values are exactly what the
+// parser emits (Title Case for design traits; lowercase for gender,
+// category, color). Labels are what shows on the chip and what the
+// keyword box accepts.
 const TRAIT_DEFINITIONS = {
   color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink']] },
   eyes:       { label: 'LASER EYES', options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
@@ -93,16 +90,11 @@ export class Search {
   /** Static trait list for the template. */
   readonly traits = FILTER_KEYS.map((key) => ({ key, ...TRAIT_DEFINITIONS[key] }));
 
-  /** Keyword-box visibility — closed by default; toggled by the 🔍 button. */
   readonly keywordOpen = signal(false);
 
-  /**
-   * Keyword draft text. Linked to `selected()` so any chip change rewrites
-   * the box to the canonical serialized form. The user can override locally
-   * (typing) and submit with Enter, which navigates and round-trips back
-   * through `selected()`. The reset-on-source behaviour means switching from
-   * the box to the chips can't desync.
-   */
+  // Linked to `selected()` so chip changes overwrite the user's draft.
+  // The alternative (an independent signal) lets chips and text drift
+  // out of sync silently.
   readonly keywordDraft = linkedSignal({
     source: () => this.selected(),
     computation: (sel) => serializeSelected(sel),
@@ -132,15 +124,9 @@ export class Search {
   /** True while a lucky-cat request is in flight (button disable + spinner). */
   readonly luckyLoading = signal(false);
 
-  /**
-   * Toggle one chip on/off, then write the new state back into the URL.
-   *
-   * Multi-select within a row is OR (a cat matches if it has any of the
-   * selected values for that trait). Across rows is AND (every active
-   * row must match). The header explainer states this so the chip
-   * stacking doesn't read as "show me cats with Block9 AND Cyberpunk
-   * background", which would always be empty.
-   */
+  // OR within a row, AND across rows — the trait-hint in the template
+  // tells the user, so two chips in one row stay valid (e.g. Block9 +
+  // Cyberpunk = "either background").
   onToggle(key: FilterKey, value: string): void {
     const current = this.selected()[key];
     const next = current.includes(value)
@@ -153,18 +139,12 @@ export class Search {
     this.keywordOpen.update((v) => !v);
   }
 
-  /** Enter / blur on the keyword box: parse → navigate → URL re-binds chips. */
   submitKeyword(): void {
-    const next = parseKeyword(this.keywordDraft());
-    this.navigateWithSelected(next, 1);
+    this.navigateWithSelected(parseKeyword(this.keywordDraft()), 1);
   }
 
-  /**
-   * Lucky pick. Hits the dedicated /search/random endpoint with the current
-   * filters, then routes to the cat detail page. 404 from the backend just
-   * means "no cat matches" — we surface that via the existing zero-results
-   * line in the header instead of an alert.
-   */
+  // 404 from the backend means "no match"; the zero-results line in the
+  // header already surfaces that, so swallow it here.
   pickLucky(): void {
     if (this.luckyLoading()) return;
     this.luckyLoading.set(true);
@@ -222,14 +202,8 @@ function filtersToHttpParams(filters: Record<FilterKey, string[]>): HttpParams {
   return httpParams;
 }
 
-/**
- * Serialize chip state to the keyword-box format:
- *   `eyes:red,blue pose:sleeping background:cyberpunk`
- *
- * Each token is `key:label[,label,…]`. Values are emitted as **labels** (what
- * the user sees on the chips), not the URL/backend values, so the box stays
- * readable and round-trips back to the same chips through `parseKeyword`.
- */
+// Emits labels (what the chips show), not URL values, so the keyword box
+// reads naturally and round-trips through parseKeyword.
 function serializeSelected(sel: Record<FilterKey, string[]>): string {
   const parts: string[] = [];
   for (const key of FILTER_KEYS) {
@@ -241,13 +215,8 @@ function serializeSelected(sel: Record<FilterKey, string[]>): string {
   return parts.join(' ');
 }
 
-/**
- * Parse the keyword box back into chip state. Forgiving:
- * - case-insensitive on the label side
- * - extra whitespace fine
- * - unknown keys / labels are silently dropped (don't poison the URL)
- * - empty / whitespace-only input → empty selection (clears everything)
- */
+// Forgiving: case-insensitive labels, unknown keys/labels dropped so junk
+// input never poisons the URL, empty string clears all selection.
 function parseKeyword(text: string): Record<FilterKey, string[]> {
   const result = emptySelected();
   const tokens = text.trim().split(/\s+/).filter((t) => t.length > 0);

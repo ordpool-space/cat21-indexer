@@ -1,4 +1,56 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
+
+/**
+ * Query parameters shared by /cats/search and /cats/search/random. Each
+ * field is a comma-separated list of accepted values (OR within the field);
+ * across fields they're AND-combined.
+ */
+export class CatSearchQueryDto {
+  @ApiPropertyOptional({ description: 'Laser eyes: Orange, Red, Green, Blue, None', example: 'Red,Blue' })
+  @IsOptional() @IsString()
+  eyes?: string;
+
+  @ApiPropertyOptional({ description: 'Pose: Standing, Sleeping, Pouncing, Stalking', example: 'Sleeping' })
+  @IsOptional() @IsString()
+  pose?: string;
+
+  @ApiPropertyOptional({ description: 'Expression: Smile, Grumpy, Pouting, Shy', example: 'Smile' })
+  @IsOptional() @IsString()
+  expression?: string;
+
+  @ApiPropertyOptional({ description: 'Coat pattern: Solid, Striped, Eyepatch, Half/Half', example: 'Striped' })
+  @IsOptional() @IsString()
+  pattern?: string;
+
+  @ApiPropertyOptional({ description: 'Background: Block9, Cyberpunk, Whitepaper, Orange', example: 'Cyberpunk' })
+  @IsOptional() @IsString()
+  background?: string;
+
+  @ApiPropertyOptional({ description: 'Crown: Gold, Diamond, None', example: 'Diamond' })
+  @IsOptional() @IsString()
+  crown?: string;
+
+  @ApiPropertyOptional({ description: 'Glasses: Black, Cool, 3D, Nouns, None', example: 'Cool' })
+  @IsOptional() @IsString()
+  glasses?: string;
+
+  // Category bands track the official Dune dashboard query
+  // (ordpool/official_dune_dasboard_query.sql): each cat is in exactly one
+  // band — its smallest applicable. `genesis` is a separate boolean trait,
+  // accepted here as a sentinel so the chip UI can keep one row.
+  @ApiPropertyOptional({ description: 'Rarity category: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple bands OR-combine.', example: 'sub1k' })
+  @IsOptional() @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ description: 'Gender: male, female', example: 'female' })
+  @IsOptional() @IsString()
+  gender?: string;
+
+  @ApiPropertyOptional({ description: 'Dominant body color bucket: red, orange, yellow, green, blue, purple, pink. Genesis cats have no body hue and never match.', example: 'red' })
+  @IsOptional() @IsString()
+  color?: string;
+}
 
 export class CatDto {
   @ApiProperty({ description: 'Internal database ID (UUID)', example: '9fe2d429-908c-4af9-9b11-4b5882b82ab9' })

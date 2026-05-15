@@ -253,19 +253,24 @@ export class CatsService {
 
   /**
    * Return one random cat number matching the supplied filters, or `null`
-   * if nothing matches. Powered by `ORDER BY RAND() LIMIT 1` — the
-   * filter set runs against the same indexed columns as the paginated
-   * search, so even with no filters this is one disk-IO-bound query on
-   * the full table (a few ms for ~500k rows).
+   * if nothing matches. Uses `LIMIT 1 OFFSET FLOOR(RAND()*N)` instead of
+   * `ORDER BY RAND()` so MariaDB never has to materialize-and-sort the
+   * filtered set — important once the table grows past a few thousand rows.
    */
   async randomCatNumber(filters: SearchFilters): Promise<number | null> {
     const where = buildSearchWhere(filters);
+    const [countRow] = await this.drizzle.db
+      .select({ count: count() })
+      .from(cats)
+      .where(where);
+    if (countRow.count === 0) return null;
+    const offset = Math.floor(Math.random() * countRow.count);
     const [row] = await this.drizzle.db
       .select({ catNumber: cats.catNumber })
       .from(cats)
       .where(where)
-      .orderBy(sql`RAND()`)
-      .limit(1);
+      .limit(1)
+      .offset(offset);
     return row?.catNumber ?? null;
   }
 
@@ -379,10 +384,9 @@ export function buildSearchWhere(filters: SearchFilters): SQL | undefined {
   }
 
   if (filters.category?.length) {
-    // Categories are discrete bands: each cat carries exactly one (its
-    // smallest applicable, written by `deriveCategory` at insert time).
-    // Match the band the cat is stored in; selecting multiple chips
-    // OR-combines bands. `genesis` is a separate boolean column.
+    // `genesis` isn't a band — it's a separate boolean column. Split it out
+    // so the band values go through the indexed IN(...) and the genesis
+    // sentinel becomes its own equality clause OR'd alongside.
     const bandValues = filters.category.filter((c) => c !== 'genesis');
     const categoryClauses: SQL[] = [];
     if (bandValues.length > 0) categoryClauses.push(inArray(cats.category, bandValues));
