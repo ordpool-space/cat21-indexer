@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, inArray, lt, max, or, sql, sum, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max, or, sql, sum, type SQL } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
@@ -24,22 +24,6 @@ export interface SearchFilters {
   gender?: string[];
   color?: string[];
 }
-
-/**
- * `category` chip values map to `cat_number` thresholds. Per
- * `deriveCategory`, "sub10k" is inclusive of "sub1k" — the predicate is
- * `cat_number < threshold`. Selecting multiple category chips effectively
- * widens to the largest threshold.
- */
-const CATEGORY_THRESHOLDS: Record<string, number> = {
-  sub1k: 1_000,
-  sub10k: 10_000,
-  sub50k: 50_000,
-  sub100k: 100_000,
-  sub250k: 250_000,
-  sub500k: 500_000,
-  sub1M: 1_000_000,
-};
 
 const SYNC_STALL_SECONDS = 300;
 
@@ -268,6 +252,24 @@ export class CatsService {
   }
 
   /**
+   * Return one random cat number matching the supplied filters, or `null`
+   * if nothing matches. Powered by `ORDER BY RAND() LIMIT 1` — the
+   * filter set runs against the same indexed columns as the paginated
+   * search, so even with no filters this is one disk-IO-bound query on
+   * the full table (a few ms for ~500k rows).
+   */
+  async randomCatNumber(filters: SearchFilters): Promise<number | null> {
+    const where = buildSearchWhere(filters);
+    const [row] = await this.drizzle.db
+      .select({ catNumber: cats.catNumber })
+      .from(cats)
+      .where(where)
+      .orderBy(sql`RAND()`)
+      .limit(1);
+    return row?.catNumber ?? null;
+  }
+
+  /**
    * On cold start, one DB query primes totals and Proof of Cat Work.
    * Subsequent calls use cached values (maintained by sync notifications).
    */
@@ -377,14 +379,14 @@ export function buildSearchWhere(filters: SearchFilters): SQL | undefined {
   }
 
   if (filters.category?.length) {
+    // Categories are discrete bands: each cat carries exactly one (its
+    // smallest applicable, written by `deriveCategory` at insert time).
+    // Match the band the cat is stored in; selecting multiple chips
+    // OR-combines bands. `genesis` is a separate boolean column.
+    const bandValues = filters.category.filter((c) => c !== 'genesis');
     const categoryClauses: SQL[] = [];
-    for (const cat of filters.category) {
-      if (cat === 'genesis') {
-        categoryClauses.push(eq(cats.genesis, true));
-      } else if (CATEGORY_THRESHOLDS[cat] !== undefined) {
-        categoryClauses.push(lt(cats.catNumber, CATEGORY_THRESHOLDS[cat]));
-      }
-    }
+    if (bandValues.length > 0) categoryClauses.push(inArray(cats.category, bandValues));
+    if (filters.category.includes('genesis')) categoryClauses.push(eq(cats.genesis, true));
     if (categoryClauses.length === 1) {
       clauses.push(categoryClauses[0]);
     } else if (categoryClauses.length > 1) {

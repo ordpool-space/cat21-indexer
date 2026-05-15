@@ -1,0 +1,1 @@
+CREATE INDEX `idx_cats_category` ON `cats` (`category`);

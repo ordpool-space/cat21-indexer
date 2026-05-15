@@ -46,6 +46,39 @@
   }
 }
 
+.icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted, #8a8a8a);
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+  line-height: 1;
+
+  &:hover:not(:disabled), &.active { border-color: var(--accent, #ff9900); }
+  &:disabled { opacity: 0.35; cursor: not-allowed; }
+}
+
+.keyword-box { margin-bottom: 1rem; }
+
+.keyword-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--text-muted, #8a8a8a);
+  color: var(--text, #d4d4d4);
+  font: 0.85rem monospace;
+  padding: 0.5rem 0.7rem;
+
+  &:focus { outline: none; border-color: var(--accent, #ff9900); }
+}
+
+.keyword-help {
+  margin: 0.3rem 0 0;
+  font: 0.7rem monospace;
+  color: var(--text-muted, #8a8a8a);
+
+  code { background: rgba(255, 255, 255, 0.05); padding: 0 0.2rem; }
+}
+
 .trait-hint {
   display: flex;
   flex-wrap: wrap;
@@ -116,17 +149,4 @@
 
 .pager-position {
   color: var(--text-muted, #8a8a8a);
-}
-
-// Accessibility helper.
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }

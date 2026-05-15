@@ -73,5 +73,6 @@ export const cats = mysqlTable(
     index('idx_cats_glasses').on(t.glasses),
     index('idx_cats_feerate').on(t.feeRate),
     index('idx_cats_dominant_color_category').on(t.dominantColorCategory),
+    index('idx_cats_category').on(t.category),
   ],
 );

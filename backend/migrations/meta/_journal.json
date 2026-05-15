@@ -15,6 +15,13 @@
       "when": 1779571200000,
       "tag": "0001_add_dominant_color_category",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1779638400000,
+      "tag": "0002_add_category_index",
+      "breakpoints": true
     }
   ]
 }

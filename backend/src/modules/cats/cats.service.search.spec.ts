@@ -64,11 +64,11 @@ describe('buildSearchWhere', () => {
       expect(buildSearchWhere({ category: ['genesis', 'sub1k'] })).toBeDefined();
     });
 
-    it('ignores unknown category values silently (filters are user-supplied)', () => {
-      // 'sub42k' isn't in TIER_THRESHOLDS; the function should drop it
-      // instead of crashing on the resulting array. With only an unknown
-      // value the category filter degenerates to no clause.
-      expect(buildSearchWhere({ category: ['sub42k'] })).toBeUndefined();
+    it('still returns a SQL clause for unknown category values (they just match nothing)', () => {
+      // 'sub42k' isn't a real band; it gets passed through to IN (...) which
+      // matches zero rows. No need to validate against an allowlist here —
+      // the query is bounded, and user-supplied junk just returns empty.
+      expect(buildSearchWhere({ category: ['sub42k'] })).toBeDefined();
     });
   });
 

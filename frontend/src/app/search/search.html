@@ -14,11 +14,52 @@
       } @else {
         <span>{{ total() | number }} cat{{ total() === 1 ? '' : 's' }}</span>
       }
+
+      <button
+        type="button"
+        class="icon-btn"
+        (click)="pickLucky()"
+        [disabled]="luckyLoading() || total() === 0"
+        [attr.aria-label]="hasAnyFilter() ? 'Pick a random matching cat' : 'Pick a random cat'"
+        title="Lucky cat — pick one at random"
+      >🎲</button>
+      <button
+        type="button"
+        class="icon-btn"
+        (click)="toggleKeyword()"
+        [class.active]="keywordOpen()"
+        aria-label="Toggle keyword search"
+        title="Keyword search (eyes:red pose:sleeping)"
+      >🔍</button>
+
       @if (hasAnyFilter()) {
         <button type="button" class="clear-all-btn" (click)="clearAll()">clear all</button>
       }
     </div>
   </header>
+
+  @if (keywordOpen()) {
+    <div class="keyword-box">
+      <input
+        type="text"
+        class="keyword-input"
+        spellcheck="false"
+        autocomplete="off"
+        autocapitalize="off"
+        autocorrect="off"
+        placeholder="eyes:red pose:sleeping background:cyberpunk"
+        [value]="keywordDraft()"
+        (input)="keywordDraft.set($any($event.target).value)"
+        (keydown.enter)="submitKeyword()"
+        (blur)="submitKeyword()"
+        aria-label="Search by keywords"
+      />
+      <p class="keyword-help">
+        Format: <code>trait:label</code>, comma-separated values within a trait (OR),
+        space-separated across traits (AND). Case-insensitive. Press Enter to apply.
+      </p>
+    </div>
+  }
 
   <p class="trait-hint">
     <em>Within a row: OR (matches any).</em>

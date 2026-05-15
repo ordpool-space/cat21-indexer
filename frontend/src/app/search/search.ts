@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, numberAttribute, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
 import { environment } from '../../environments/environment';
@@ -9,17 +9,13 @@ import { CatNumbersPaginatedResultDto } from '../shared/cat21-api';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 import { ChipRow } from './chip-row';
 
-/**
- * Trait families and their available chip values. Tuple is [value, label]:
- * `value` is what goes in the URL / backend query; `label` is what the user
- * reads. The two diverge for `tier` (URL keeps the parser's vocabulary,
- * label is the human-friendly rendering) and `gender` (lower-case URL token,
- * lower-case label).
- */
 // Section labels mirror the details page (`cat21-viewer.html`) and the
 // parser type vocabulary verbatim. URL/backend values are exactly the
 // strings the parser emits (Title Case for the design traits, lowercase
-// for gender / category since those are stored that way).
+// for gender / category / color since those are stored that way).
+//
+// Tuple is [value, label]: `value` goes in the URL / backend query; `label`
+// is what the user reads on the chip and types into the keyword box.
 const TRAIT_DEFINITIONS = {
   color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink']] },
   eyes:       { label: 'LASER EYES', options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
@@ -41,6 +37,12 @@ const FILTER_KEYS: readonly FilterKey[] = [
 
 const ITEMS_PER_PAGE = 48;
 
+// Precomputed lookup tables: URL value ↔ display label (the second element
+// of the tuple). The keyword box reads/writes labels because that's what
+// the user sees on the chips; we translate to URL values when routing.
+const VALUE_TO_LABEL = buildValueToLabel();
+const LABEL_TO_VALUE = buildLabelToValue();
+
 @Component({
   selector: 'app-search',
   templateUrl: './search.html',
@@ -57,9 +59,7 @@ export class Search {
   readonly currentPage = input(1, { transform: numberAttribute });
 
   // One input() per trait family. Routes pass comma-separated strings (URL
-  // shape: `?eyes=red,blue`) and we split them locally into arrays. Keep the
-  // input signal as the raw string so URL state is the source of truth;
-  // computed() unpacks to a Set for chip rendering.
+  // shape: `?eyes=red,blue`) and we split them locally into arrays.
   readonly color      = input<string>('');
   readonly eyes       = input<string>('');
   readonly pose       = input<string>('');
@@ -93,19 +93,28 @@ export class Search {
   /** Static trait list for the template. */
   readonly traits = FILTER_KEYS.map((key) => ({ key, ...TRAIT_DEFINITIONS[key] }));
 
+  /** Keyword-box visibility — closed by default; toggled by the 🔍 button. */
+  readonly keywordOpen = signal(false);
+
+  /**
+   * Keyword draft text. Linked to `selected()` so any chip change rewrites
+   * the box to the canonical serialized form. The user can override locally
+   * (typing) and submit with Enter, which navigates and round-trips back
+   * through `selected()`. The reset-on-source behaviour means switching from
+   * the box to the chips can't desync.
+   */
+  readonly keywordDraft = linkedSignal({
+    source: () => this.selected(),
+    computation: (sel) => serializeSelected(sel),
+  });
+
   resultsResource = rxResourceFixed({
     params: () => ({
       filters: this.selected(),
       page: this.currentPage() || 1,
     }),
     stream: ({ params }) => {
-      let httpParams = new HttpParams();
-      for (const key of FILTER_KEYS) {
-        const values = params.filters[key];
-        if (values.length > 0) {
-          httpParams = httpParams.set(key, values.join(','));
-        }
-      }
+      const httpParams = filtersToHttpParams(params.filters);
       const url = `${environment.api}/api/cats/search/${ITEMS_PER_PAGE}/${params.page}`;
       return this.http.get<CatNumbersPaginatedResultDto>(url, { params: httpParams });
     },
@@ -120,6 +129,9 @@ export class Search {
     return err instanceof HttpErrorResponse && (err.status >= 500 || err.status === 0);
   });
 
+  /** True while a lucky-cat request is in flight (button disable + spinner). */
+  readonly luckyLoading = signal(false);
+
   /**
    * Toggle one chip on/off, then write the new state back into the URL.
    *
@@ -128,9 +140,6 @@ export class Search {
    * row must match). The header explainer states this so the chip
    * stacking doesn't read as "show me cats with Block9 AND Cyberpunk
    * background", which would always be empty.
-   *
-   * The URL change re-fires the input bindings and the resource reloads —
-   * no manual state mirror, no reload() call.
    */
   onToggle(key: FilterKey, value: string): void {
     const current = this.selected()[key];
@@ -138,6 +147,40 @@ export class Search {
       ? current.filter((v) => v !== value)
       : [...current, value];
     this.navigateWithSelected({ ...this.selected(), [key]: next }, 1);
+  }
+
+  toggleKeyword(): void {
+    this.keywordOpen.update((v) => !v);
+  }
+
+  /** Enter / blur on the keyword box: parse → navigate → URL re-binds chips. */
+  submitKeyword(): void {
+    const next = parseKeyword(this.keywordDraft());
+    this.navigateWithSelected(next, 1);
+  }
+
+  /**
+   * Lucky pick. Hits the dedicated /search/random endpoint with the current
+   * filters, then routes to the cat detail page. 404 from the backend just
+   * means "no cat matches" — we surface that via the existing zero-results
+   * line in the header instead of an alert.
+   */
+  pickLucky(): void {
+    if (this.luckyLoading()) return;
+    this.luckyLoading.set(true);
+
+    const httpParams = filtersToHttpParams(this.selected());
+    const url = `${environment.api}/api/cats/search/random`;
+
+    this.http.get<{ catNumber: number }>(url, { params: httpParams }).subscribe({
+      next: (res) => {
+        this.luckyLoading.set(false);
+        void this.router.navigate(['/cat', res.catNumber]);
+      },
+      error: () => {
+        this.luckyLoading.set(false);
+      },
+    });
   }
 
   clearAll(): void {
@@ -165,5 +208,93 @@ function splitCsv(value: string): string[] {
 function emptySelected(): Record<FilterKey, string[]> {
   const result = {} as Record<FilterKey, string[]>;
   for (const key of FILTER_KEYS) result[key] = [];
+  return result;
+}
+
+function filtersToHttpParams(filters: Record<FilterKey, string[]>): HttpParams {
+  let httpParams = new HttpParams();
+  for (const key of FILTER_KEYS) {
+    const values = filters[key];
+    if (values.length > 0) {
+      httpParams = httpParams.set(key, values.join(','));
+    }
+  }
+  return httpParams;
+}
+
+/**
+ * Serialize chip state to the keyword-box format:
+ *   `eyes:red,blue pose:sleeping background:cyberpunk`
+ *
+ * Each token is `key:label[,label,…]`. Values are emitted as **labels** (what
+ * the user sees on the chips), not the URL/backend values, so the box stays
+ * readable and round-trips back to the same chips through `parseKeyword`.
+ */
+function serializeSelected(sel: Record<FilterKey, string[]>): string {
+  const parts: string[] = [];
+  for (const key of FILTER_KEYS) {
+    if (sel[key].length > 0) {
+      const labels = sel[key].map((v) => VALUE_TO_LABEL[key][v] ?? v);
+      parts.push(`${key}:${labels.join(',')}`);
+    }
+  }
+  return parts.join(' ');
+}
+
+/**
+ * Parse the keyword box back into chip state. Forgiving:
+ * - case-insensitive on the label side
+ * - extra whitespace fine
+ * - unknown keys / labels are silently dropped (don't poison the URL)
+ * - empty / whitespace-only input → empty selection (clears everything)
+ */
+function parseKeyword(text: string): Record<FilterKey, string[]> {
+  const result = emptySelected();
+  const tokens = text.trim().split(/\s+/).filter((t) => t.length > 0);
+
+  for (const token of tokens) {
+    const colon = token.indexOf(':');
+    if (colon <= 0) continue;
+    const key = token.slice(0, colon).toLowerCase();
+    const valueList = token.slice(colon + 1);
+    if (!isFilterKey(key) || !valueList) continue;
+
+    for (const rawLabel of valueList.split(',')) {
+      const label = rawLabel.trim().toLowerCase();
+      if (!label) continue;
+      const value = LABEL_TO_VALUE[key][label];
+      if (value && !result[key].includes(value)) {
+        result[key].push(value);
+      }
+    }
+  }
+  return result;
+}
+
+function isFilterKey(s: string): s is FilterKey {
+  return (FILTER_KEYS as readonly string[]).includes(s);
+}
+
+function buildValueToLabel(): Record<FilterKey, Record<string, string>> {
+  const result = {} as Record<FilterKey, Record<string, string>>;
+  for (const key of FILTER_KEYS) {
+    const map: Record<string, string> = {};
+    for (const [value, label] of TRAIT_DEFINITIONS[key].options) {
+      map[value] = label;
+    }
+    result[key] = map;
+  }
+  return result;
+}
+
+function buildLabelToValue(): Record<FilterKey, Record<string, string>> {
+  const result = {} as Record<FilterKey, Record<string, string>>;
+  for (const key of FILTER_KEYS) {
+    const map: Record<string, string> = {};
+    for (const [value, label] of TRAIT_DEFINITIONS[key].options) {
+      map[label.toLowerCase()] = value;
+    }
+    result[key] = map;
+  }
   return result;
 }
