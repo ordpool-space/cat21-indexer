@@ -8,6 +8,7 @@ import {
   Query,
   Res,
   ServiceUnavailableException,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiNotFoundResponse,
@@ -17,7 +18,9 @@ import {
   ApiProduces,
   ApiServiceUnavailableResponse,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
 import { CatsService, type SearchFilters } from './cats.service';
@@ -186,19 +189,28 @@ export class CatsController {
 
   // Declared before `cats/search/:itemsPerPage/:currentPage` so the static
   // path wins over the parametric one.
+  //
+  // Rate-limited because each call costs two DB queries (COUNT + OFFSET)
+  // and is `Cache-Control: no-store`, so a flood can't be absorbed by the
+  // edge cache. 30/min/IP matches realistic human dice-roll pacing with
+  // room to spare; identifies abusers cleanly.
   @Get('cats/search/random')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @ApiOperation({
     summary: 'Pick one random cat matching the supplied trait filters',
     description:
       'Returns a single random cat number from the set that matches the same ' +
       'filter parameters as /cats/search. With no filters it picks a random ' +
-      'cat from the entire collection. Returns 404 if no cat matches.',
+      'cat from the entire collection. Returns 404 if no cat matches. ' +
+      'Rate-limited to 30 requests per minute per IP.',
   })
   @ApiOkResponse({
     description: 'A single random matching cat number',
     schema: { type: 'object', properties: { catNumber: { type: 'number', example: 42 } } },
   })
   @ApiNotFoundResponse({ description: 'No cat matches the supplied filters' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded — wait a minute and try again' })
   async randomCat(
     @Query() query: CatSearchQueryDto,
     @Res({ passthrough: true }) reply: FastifyReply,
