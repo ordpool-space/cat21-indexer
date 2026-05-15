@@ -20,17 +20,17 @@ export interface SearchFilters {
   background?: string[];
   crown?: string[];
   glasses?: string[];
-  tier?: string[];
+  category?: string[];
   gender?: string[];
 }
 
 /**
- * `tier` chip values map to `cat_number` thresholds. Per the details-page
- * convention and `deriveCategory`, "sub10k" is inclusive of "sub1k" — the
- * predicate is `cat_number < threshold`. Selecting multiple tier chips
- * effectively widens to the largest threshold.
+ * `category` chip values map to `cat_number` thresholds. Per
+ * `deriveCategory`, "sub10k" is inclusive of "sub1k" — the predicate is
+ * `cat_number < threshold`. Selecting multiple category chips effectively
+ * widens to the largest threshold.
  */
-const TIER_THRESHOLDS: Record<string, number> = {
+const CATEGORY_THRESHOLDS: Record<string, number> = {
   sub1k: 1_000,
   sub10k: 10_000,
   sub50k: 50_000,
@@ -374,19 +374,19 @@ export function buildSearchWhere(filters: SearchFilters): SQL | undefined {
     }
   }
 
-  if (filters.tier?.length) {
-    const tierClauses: SQL[] = [];
-    for (const tier of filters.tier) {
-      if (tier === 'genesis') {
-        tierClauses.push(eq(cats.genesis, true));
-      } else if (TIER_THRESHOLDS[tier] !== undefined) {
-        tierClauses.push(lt(cats.catNumber, TIER_THRESHOLDS[tier]));
+  if (filters.category?.length) {
+    const categoryClauses: SQL[] = [];
+    for (const cat of filters.category) {
+      if (cat === 'genesis') {
+        categoryClauses.push(eq(cats.genesis, true));
+      } else if (CATEGORY_THRESHOLDS[cat] !== undefined) {
+        categoryClauses.push(lt(cats.catNumber, CATEGORY_THRESHOLDS[cat]));
       }
     }
-    if (tierClauses.length === 1) {
-      clauses.push(tierClauses[0]);
-    } else if (tierClauses.length > 1) {
-      clauses.push(or(...tierClauses)!);
+    if (categoryClauses.length === 1) {
+      clauses.push(categoryClauses[0]);
+    } else if (categoryClauses.length > 1) {
+      clauses.push(or(...categoryClauses)!);
     }
   }
 

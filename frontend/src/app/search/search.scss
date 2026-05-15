@@ -46,6 +46,26 @@
   }
 }
 
+.trait-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem 0;
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted, #8a8a8a);
+
+  em {
+    font-style: normal;
+  }
+
+  em + em::before {
+    content: '·';
+    margin-right: 0.5rem;
+    color: rgba(255, 255, 255, 0.25);
+  }
+}
+
 .trait-rows {
   margin-bottom: 1rem;
   padding: 0.75rem;

@@ -44,31 +44,31 @@ describe('buildSearchWhere', () => {
     expect(buildSearchWhere(filters)).toBeDefined();
   });
 
-  describe('tier', () => {
+  describe('category', () => {
 
-    it('translates a single sub-Nk tier into a clause', () => {
-      expect(buildSearchWhere({ tier: ['sub1k'] })).toBeDefined();
-      expect(buildSearchWhere({ tier: ['sub10k'] })).toBeDefined();
-      expect(buildSearchWhere({ tier: ['sub50k'] })).toBeDefined();
-      expect(buildSearchWhere({ tier: ['sub100k'] })).toBeDefined();
-      expect(buildSearchWhere({ tier: ['sub250k'] })).toBeDefined();
-      expect(buildSearchWhere({ tier: ['sub500k'] })).toBeDefined();
-      expect(buildSearchWhere({ tier: ['sub1M'] })).toBeDefined();
+    it('translates a single sub-Nk category into a clause', () => {
+      expect(buildSearchWhere({ category: ['sub1k'] })).toBeDefined();
+      expect(buildSearchWhere({ category: ['sub10k'] })).toBeDefined();
+      expect(buildSearchWhere({ category: ['sub50k'] })).toBeDefined();
+      expect(buildSearchWhere({ category: ['sub100k'] })).toBeDefined();
+      expect(buildSearchWhere({ category: ['sub250k'] })).toBeDefined();
+      expect(buildSearchWhere({ category: ['sub500k'] })).toBeDefined();
+      expect(buildSearchWhere({ category: ['sub1M'] })).toBeDefined();
     });
 
-    it('translates the genesis tier into a boolean equality clause', () => {
-      expect(buildSearchWhere({ tier: ['genesis'] })).toBeDefined();
+    it('translates the genesis category into a boolean equality clause', () => {
+      expect(buildSearchWhere({ category: ['genesis'] })).toBeDefined();
     });
 
-    it('combines genesis + tier in the same OR group', () => {
-      expect(buildSearchWhere({ tier: ['genesis', 'sub1k'] })).toBeDefined();
+    it('combines genesis + category in the same OR group', () => {
+      expect(buildSearchWhere({ category: ['genesis', 'sub1k'] })).toBeDefined();
     });
 
-    it('ignores unknown tier values silently (filters are user-supplied)', () => {
+    it('ignores unknown category values silently (filters are user-supplied)', () => {
       // 'sub42k' isn't in TIER_THRESHOLDS; the function should drop it
       // instead of crashing on the resulting array. With only an unknown
-      // value the tier filter degenerates to no clause.
-      expect(buildSearchWhere({ tier: ['sub42k'] })).toBeUndefined();
+      // value the category filter degenerates to no clause.
+      expect(buildSearchWhere({ category: ['sub42k'] })).toBeUndefined();
     });
   });
 

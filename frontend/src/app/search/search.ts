@@ -3,6 +3,7 @@ import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
+import { environment } from '../../environments/environment';
 import { CatGallery } from '../cat-gallery/cat-gallery';
 import { CatNumbersPaginatedResultDto } from '../shared/cat21-api';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
@@ -15,22 +16,26 @@ import { ChipRow } from './chip-row';
  * label is the human-friendly rendering) and `gender` (lower-case URL token,
  * lower-case label).
  */
+// Section labels mirror the details page (`cat21-viewer.html`) and the
+// parser type vocabulary verbatim. URL/backend values are exactly the
+// strings the parser emits (Title Case for the design traits, lowercase
+// for gender / category since those are stored that way).
 const TRAIT_DEFINITIONS = {
-  eyes:       { label: 'EYES',   options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
-  pose:       { label: 'POSE',   options: [['Standing', 'standing'], ['Sleeping', 'sleeping'], ['Pouncing', 'pouncing'], ['Stalking', 'stalking']] },
-  expression: { label: 'LOOK',   options: [['Smile', 'smile'], ['Grumpy', 'grumpy'], ['Pouting', 'pouting'], ['Shy', 'shy']] },
-  pattern:    { label: 'COAT',   options: [['Solid', 'solid'], ['Striped', 'striped'], ['Eyepatch', 'eyepatch'], ['Half/Half', 'half/half']] },
-  crown:      { label: 'HEAD',   options: [['Gold', 'gold'], ['Diamond', 'diamond'], ['None', 'bare']] },
-  glasses:    { label: 'SPECS',  options: [['Black', 'black'], ['Cool', 'cool'], ['3D', '3D'], ['Nouns', 'nouns'], ['None', 'bare']] },
-  background: { label: 'SCENE',  options: [['Block9', 'block9'], ['Cyberpunk', 'cyberpunk'], ['Whitepaper', 'whitepaper'], ['Orange', 'orange']] },
-  tier:       { label: 'TIER',   options: [['genesis', 'genesis'], ['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
-  gender:     { label: 'GENDER', options: [['male', 'male'], ['female', 'female']] },
+  eyes:       { label: 'LASER EYES', options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
+  pose:       { label: 'POSE',       options: [['Standing', 'standing'], ['Sleeping', 'sleeping'], ['Pouncing', 'pouncing'], ['Stalking', 'stalking']] },
+  expression: { label: 'EXPRESSION', options: [['Smile', 'smile'], ['Grumpy', 'grumpy'], ['Pouting', 'pouting'], ['Shy', 'shy']] },
+  pattern:    { label: 'PATTERN',    options: [['Solid', 'solid'], ['Striped', 'striped'], ['Eyepatch', 'eyepatch'], ['Half/Half', 'half/half']] },
+  crown:      { label: 'CROWN',      options: [['Gold', 'gold'], ['Diamond', 'diamond'], ['None', 'none']] },
+  glasses:    { label: 'GLASSES',    options: [['Black', 'black'], ['Cool', 'cool'], ['3D', '3D'], ['Nouns', 'nouns'], ['None', 'none']] },
+  background: { label: 'BACKGROUND', options: [['Block9', 'block9'], ['Cyberpunk', 'cyberpunk'], ['Whitepaper', 'whitepaper'], ['Orange', 'orange']] },
+  category:   { label: 'CATEGORY',   options: [['genesis', 'genesis'], ['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
+  gender:     { label: 'GENDER',     options: [['male', 'male'], ['female', 'female']] },
 } as const satisfies Record<string, { label: string; options: readonly (readonly [string, string])[] }>;
 
 type FilterKey = keyof typeof TRAIT_DEFINITIONS;
 
 const FILTER_KEYS: readonly FilterKey[] = [
-  'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'tier', 'gender',
+  'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'category', 'gender',
 ];
 
 const ITEMS_PER_PAGE = 48;
@@ -61,7 +66,7 @@ export class Search {
   readonly crown      = input<string>('');
   readonly glasses    = input<string>('');
   readonly background = input<string>('');
-  readonly tier       = input<string>('');
+  readonly category   = input<string>('');
   readonly gender     = input<string>('');
 
   /** Per-trait selected-value sets, derived from URL inputs. */
@@ -73,7 +78,7 @@ export class Search {
     crown:      splitCsv(this.crown()),
     glasses:    splitCsv(this.glasses()),
     background: splitCsv(this.background()),
-    tier:       splitCsv(this.tier()),
+    category:   splitCsv(this.category()),
     gender:     splitCsv(this.gender()),
   }));
 
@@ -98,7 +103,7 @@ export class Search {
           httpParams = httpParams.set(key, values.join(','));
         }
       }
-      const url = `/api/cats/search/${ITEMS_PER_PAGE}/${params.page}`;
+      const url = `${environment.api}/api/cats/search/${ITEMS_PER_PAGE}/${params.page}`;
       return this.http.get<CatNumbersPaginatedResultDto>(url, { params: httpParams });
     },
   });
@@ -114,8 +119,15 @@ export class Search {
 
   /**
    * Toggle one chip on/off, then write the new state back into the URL.
-   * The URL change re-fires the input bindings and the resource reloads
-   * automatically — no manual state mirror, no reload() call.
+   *
+   * Multi-select within a row is OR (a cat matches if it has any of the
+   * selected values for that trait). Across rows is AND (every active
+   * row must match). The header explainer states this so the chip
+   * stacking doesn't read as "show me cats with Block9 AND Cyberpunk
+   * background", which would always be empty.
+   *
+   * The URL change re-fires the input bindings and the resource reloads —
+   * no manual state mirror, no reload() call.
    */
   onToggle(key: FilterKey, value: string): void {
     const current = this.selected()[key];

@@ -203,7 +203,7 @@ export class CatsController {
   @ApiQuery({ name: 'background', required: false, description: 'Background: Block9, Cyberpunk, Whitepaper, Orange', example: 'Cyberpunk' })
   @ApiQuery({ name: 'crown', required: false, description: 'Crown: Gold, Diamond, None', example: 'Diamond' })
   @ApiQuery({ name: 'glasses', required: false, description: 'Glasses: Black, Cool, 3D, Nouns, None', example: 'Cool' })
-  @ApiQuery({ name: 'tier', required: false, description: 'Number tier: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Tier predicates are inclusive (sub10k matches cat_number < 10000).', example: 'sub1k' })
+  @ApiQuery({ name: 'category', required: false, description: 'Rarity category: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Predicates are inclusive (sub10k matches cat_number < 10000).', example: 'sub1k' })
   @ApiQuery({ name: 'gender', required: false, description: 'Gender: male, female', example: 'female' })
   @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of matching cat numbers with total count' })
   async searchCats(
@@ -216,7 +216,7 @@ export class CatsController {
     @Query('background') background?: string,
     @Query('crown') crown?: string,
     @Query('glasses') glasses?: string,
-    @Query('tier') tier?: string,
+    @Query('category') category?: string,
     @Query('gender') gender?: string,
   ): Promise<CatNumbersPaginatedResultDto> {
     const filters: SearchFilters = {
@@ -227,7 +227,7 @@ export class CatsController {
       background: splitCsv(background),
       crown: splitCsv(crown),
       glasses: splitCsv(glasses),
-      tier: splitCsv(tier),
+      category: splitCsv(category),
       gender: splitCsv(gender),
     };
     return this.catsService.searchCatNumbers(

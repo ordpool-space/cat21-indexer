@@ -20,6 +20,11 @@
     </div>
   </header>
 
+  <p class="trait-hint">
+    <em>Within a row: OR (matches any).</em>
+    <em>Across rows: AND (all must match).</em>
+  </p>
+
   <div class="trait-rows">
     @for (trait of traits; track trait.key) {
       <app-chip-row
