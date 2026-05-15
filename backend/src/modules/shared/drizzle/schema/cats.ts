@@ -54,6 +54,13 @@ export const cats = mysqlTable(
     crown: varchar('crown', { length: 50 }).notNull().default('None'),
     glasses: varchar('glasses', { length: 50 }).notNull().default('None'),
     glassesColors: jsonStringArray('glasses_colors').notNull().default([]),
+
+    // Dominant body-color bucket for trait search: one of `red`, `orange`,
+    // `yellow`, `green`, `blue`, `purple`, `pink`, or NULL for genesis cats
+    // (which have no body hue). Computed from feeRate + cat-hash bytes[1]
+    // via ordpool-parser's getCatColorCategory. Nullable so the migration
+    // can land before the boot-time backfill completes.
+    dominantColorCategory: varchar('dominant_color_category', { length: 20 }),
   },
   (t) => [
     index('idx_cats_block_height').on(t.blockHeight),
@@ -65,5 +72,6 @@ export const cats = mysqlTable(
     index('idx_cats_crown').on(t.crown),
     index('idx_cats_glasses').on(t.glasses),
     index('idx_cats_feerate').on(t.feeRate),
+    index('idx_cats_dominant_color_category').on(t.dominantColorCategory),
   ],
 );

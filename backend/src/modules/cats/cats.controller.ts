@@ -205,6 +205,7 @@ export class CatsController {
   @ApiQuery({ name: 'glasses', required: false, description: 'Glasses: Black, Cool, 3D, Nouns, None', example: 'Cool' })
   @ApiQuery({ name: 'category', required: false, description: 'Rarity category: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Predicates are inclusive (sub10k matches cat_number < 10000).', example: 'sub1k' })
   @ApiQuery({ name: 'gender', required: false, description: 'Gender: male, female', example: 'female' })
+  @ApiQuery({ name: 'color', required: false, description: 'Dominant body color bucket: red, orange, yellow, green, blue, purple, pink. Genesis cats have no body hue and never match.', example: 'red' })
   @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of matching cat numbers with total count' })
   async searchCats(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
@@ -218,6 +219,7 @@ export class CatsController {
     @Query('glasses') glasses?: string,
     @Query('category') category?: string,
     @Query('gender') gender?: string,
+    @Query('color') color?: string,
   ): Promise<CatNumbersPaginatedResultDto> {
     const filters: SearchFilters = {
       eyes: splitCsv(eyes),
@@ -229,6 +231,7 @@ export class CatsController {
       glasses: splitCsv(glasses),
       category: splitCsv(category),
       gender: splitCsv(gender),
+      color: splitCsv(color),
     };
     return this.catsService.searchCatNumbers(
       filters,

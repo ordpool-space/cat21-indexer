@@ -22,6 +22,7 @@ export interface SearchFilters {
   glasses?: string[];
   category?: string[];
   gender?: string[];
+  color?: string[];
 }
 
 /**
@@ -362,6 +363,7 @@ export function buildSearchWhere(filters: SearchFilters): SQL | undefined {
   if (filters.background?.length) clauses.push(inArray(cats.background, filters.background));
   if (filters.crown?.length) clauses.push(inArray(cats.crown, filters.crown));
   if (filters.glasses?.length) clauses.push(inArray(cats.glasses, filters.glasses));
+  if (filters.color?.length) clauses.push(inArray(cats.dominantColorCategory, filters.color));
 
   if (filters.gender?.length) {
     const genderClauses: SQL[] = [];

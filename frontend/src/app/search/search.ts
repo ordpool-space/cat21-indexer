@@ -21,6 +21,7 @@ import { ChipRow } from './chip-row';
 // strings the parser emits (Title Case for the design traits, lowercase
 // for gender / category since those are stored that way).
 const TRAIT_DEFINITIONS = {
+  color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink']] },
   eyes:       { label: 'LASER EYES', options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
   pose:       { label: 'POSE',       options: [['Standing', 'standing'], ['Sleeping', 'sleeping'], ['Pouncing', 'pouncing'], ['Stalking', 'stalking']] },
   expression: { label: 'EXPRESSION', options: [['Smile', 'smile'], ['Grumpy', 'grumpy'], ['Pouting', 'pouting'], ['Shy', 'shy']] },
@@ -35,7 +36,7 @@ const TRAIT_DEFINITIONS = {
 type FilterKey = keyof typeof TRAIT_DEFINITIONS;
 
 const FILTER_KEYS: readonly FilterKey[] = [
-  'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'category', 'gender',
+  'color', 'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'category', 'gender',
 ];
 
 const ITEMS_PER_PAGE = 48;
@@ -59,6 +60,7 @@ export class Search {
   // shape: `?eyes=red,blue`) and we split them locally into arrays. Keep the
   // input signal as the raw string so URL state is the source of truth;
   // computed() unpacks to a Set for chip rendering.
+  readonly color      = input<string>('');
   readonly eyes       = input<string>('');
   readonly pose       = input<string>('');
   readonly expression = input<string>('');
@@ -71,6 +73,7 @@ export class Search {
 
   /** Per-trait selected-value sets, derived from URL inputs. */
   readonly selected = computed<Record<FilterKey, string[]>>(() => ({
+    color:      splitCsv(this.color()),
     eyes:       splitCsv(this.eyes()),
     pose:       splitCsv(this.pose()),
     expression: splitCsv(this.expression()),

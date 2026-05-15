@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { max, sum } from 'drizzle-orm';
-import { Cat21ParserService } from 'ordpool-parser';
+import { and, eq, isNull, max, sum } from 'drizzle-orm';
+import { Cat21ParserService, getCatColorCategory } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
@@ -21,7 +21,7 @@ export function deriveCategory(catNumber: number): string {
 }
 
 @Injectable()
-export class SyncService {
+export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
   private syncing = false;
   private localMax = -1;
@@ -43,6 +43,63 @@ export class SyncService {
       lastErrorAt: this.lastErrorAt,
       lastError: this.lastError,
     };
+  }
+
+  /**
+   * Backfill `dominant_color_category` on any existing rows where it's NULL
+   * (i.e. minted before that column existed). Fire-and-forget on boot so a
+   * cold backfill doesn't block app readiness; the column is nullable and
+   * search queries against it just don't match the un-backfilled rows
+   * until they're filled in.
+   *
+   * Genesis cats are excluded by the WHERE clause and remain NULL on
+   * purpose — they have no body hue, and `getCatColorCategory` returns
+   * null for them anyway.
+   */
+  async onModuleInit(): Promise<void> {
+    setImmediate(() => {
+      this.backfillDominantColorCategory().catch((e) => {
+        this.logger.warn(
+          `Dominant-color backfill failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
+    });
+  }
+
+  private async backfillDominantColorCategory(): Promise<void> {
+    const BACKFILL_BATCH = 500;
+    let total = 0;
+    while (true) {
+      const rows = await this.drizzle.db
+        .select({
+          catNumber: cats.catNumber,
+          txHash: cats.txHash,
+          blockHash: cats.blockHash,
+          feeRate: cats.feeRate,
+        })
+        .from(cats)
+        .where(and(isNull(cats.dominantColorCategory), eq(cats.genesis, false)))
+        .limit(BACKFILL_BATCH);
+
+      if (rows.length === 0) break;
+
+      for (const row of rows) {
+        const category = getCatColorCategory(row.txHash, row.blockHash, row.feeRate);
+        await this.drizzle.db
+          .update(cats)
+          .set({ dominantColorCategory: category })
+          .where(eq(cats.catNumber, row.catNumber));
+      }
+
+      total += rows.length;
+      this.logger.log(`Dominant-color backfill: updated ${total} cats so far`);
+
+      // If we got less than a full batch we're done.
+      if (rows.length < BACKFILL_BATCH) break;
+    }
+    if (total > 0) {
+      this.logger.log(`Dominant-color backfill complete: ${total} cats updated`);
+    }
   }
 
   @Interval(60_000)
@@ -125,6 +182,8 @@ export class SyncService {
 
           const traits = parsed?.getTraits();
           const feeRate = detail.fee / (detail.weight / 4);
+          // null for genesis cats; one of red/orange/yellow/green/blue/purple/pink otherwise.
+          const dominantColorCategory = getCatColorCategory(txid, blockHash, feeRate);
 
           return {
             catNumber: detail.number,
@@ -155,6 +214,7 @@ export class SyncService {
             crown: traits?.crown,
             glasses: traits?.glasses,
             glassesColors: traits?.glassesColors ?? [],
+            dominantColorCategory,
           };
         });
 
