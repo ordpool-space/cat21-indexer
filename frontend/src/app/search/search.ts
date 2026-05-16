@@ -8,12 +8,12 @@ import { environment } from '../../environments/environment';
 import { CatGallery } from '../cat-gallery/cat-gallery';
 import { CatNumbersPaginatedResultDto } from '../shared/cat21-api';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
-import { ChipRow } from './chip-row';
+import { TraitRow } from './trait-row';
 
 // Tuple is [URL value, display label]. URL values are exactly what the
 // parser emits (Title Case for design traits; lowercase for gender,
-// category, color). Labels are what shows on the chip and what the
-// keyword box accepts.
+// category, color). Labels are what shows on the trait button and what
+// the keyword box accepts.
 const TRAIT_DEFINITIONS = {
   color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink']] },
   eyes:       { label: 'LASER EYES', options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
@@ -37,7 +37,7 @@ const ITEMS_PER_PAGE = 48;
 
 // Precomputed lookup tables: URL value ↔ display label (the second element
 // of the tuple). The keyword box reads/writes labels because that's what
-// the user sees on the chips; we translate to URL values when routing.
+// the user sees on the buttons; we translate to URL values when routing.
 const VALUE_TO_LABEL = buildValueToLabel();
 const LABEL_TO_VALUE = buildLabelToValue();
 
@@ -45,7 +45,7 @@ const LABEL_TO_VALUE = buildLabelToValue();
   selector: 'app-search',
   templateUrl: './search.html',
   styleUrl: './search.scss',
-  imports: [RouterLink, CatGallery, ChipRow, DecimalPipe],
+  imports: [RouterLink, CatGallery, TraitRow, DecimalPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Search {
@@ -53,8 +53,8 @@ export class Search {
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
-  // Page comes from the route; filter chips come from query params. All are
-  // read via withComponentInputBinding() from `app.config.ts`.
+  // Page comes from the route; trait selections come from query params.
+  // All are read via withComponentInputBinding() from `app.config.ts`.
   readonly currentPage = input(1, { transform: numberAttribute });
 
   // One input() per trait family. Routes pass comma-separated strings (URL
@@ -84,7 +84,7 @@ export class Search {
     gender:     splitCsv(this.gender()),
   }));
 
-  /** True when at least one chip is active across any trait family. */
+  /** True when at least one trait is active across any row. */
   readonly hasAnyFilter = computed(() =>
     Object.values(this.selected()).some((arr) => arr.length > 0),
   );
@@ -94,8 +94,8 @@ export class Search {
 
   readonly keywordOpen = signal(false);
 
-  // Linked to `selected()` so chip changes overwrite the user's draft.
-  // The alternative (an independent signal) lets chips and text drift
+  // Linked to `selected()` so trait changes overwrite the user's draft.
+  // The alternative (an independent signal) lets traits and text drift
   // out of sync silently.
   readonly keywordDraft = linkedSignal({
     source: () => this.selected(),
@@ -126,8 +126,8 @@ export class Search {
   /** True while a lucky-cat request is in flight (button disable + spinner). */
   readonly luckyLoading = signal(false);
 
-  // OR within a row, AND across rows — the trait-hint in the template
-  // tells the user, so two chips in one row stay valid (e.g. Block9 +
+  // OR within a row, AND across rows — the hint in the template tells
+  // the user, so two traits in one row stay valid (e.g. Block9 +
   // Cyberpunk = "either background").
   onToggle(key: FilterKey, value: string): void {
     const current = this.selected()[key];
@@ -202,8 +202,8 @@ function filtersToHttpParams(filters: Record<FilterKey, string[]>): HttpParams {
   return httpParams;
 }
 
-// Emits labels (what the chips show), not URL values, so the keyword box
-// reads naturally and round-trips through parseKeyword.
+// Emits labels (what the buttons show), not URL values, so the keyword
+// box reads naturally and round-trips through parseKeyword.
 function serializeSelected(sel: Record<FilterKey, string[]>): string {
   const parts: string[] = [];
   for (const key of FILTER_KEYS) {

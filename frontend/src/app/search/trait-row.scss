@@ -1,11 +1,11 @@
-.chip-row {
+.trait-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-.chip-row-label {
+.trait-row-label {
   flex: 0 0 6rem;
   font-family: "Public Pixel", sans-serif;
   font-size: 0.7rem;
@@ -13,17 +13,18 @@
   text-transform: uppercase;
 }
 
-.chip-row-chips {
+.trait-row-options {
   flex: 1 1 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
 }
 
-// Chips are real buttons styled to match the rest of the pixelated UI.
-// Inactive: white outline on the orange background. Active: black fill,
-// orange text — mirroring the inverted-pill feel of the rest of the site.
-.chip {
+// Each option is a real button styled to match the rest of the pixelated
+// UI. Inactive: white outline on the orange background. Active: black
+// fill, orange text — mirroring the inverted-pill feel of the rest of
+// the site.
+.trait {
   flex: 0 0 auto;
   padding: 0.25rem 0.7rem;
   background: transparent;
@@ -39,7 +40,7 @@
     background: rgba(0, 0, 0, 0.15);
   }
 
-  &.chip-on {
+  &.trait-on {
     background: #000;
     color: #FF9900;
     border-color: #000;

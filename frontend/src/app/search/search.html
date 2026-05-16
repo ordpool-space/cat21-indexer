@@ -2,7 +2,7 @@
 
 <p class="mt-2 mb-3">
   Find a cat by its traits.
-  Pick chips below or use <a (click)="toggleKeyword()" role="button">keyword search</a>.
+  Pick traits below or use <a (click)="toggleKeyword()" role="button">keyword search</a>.
 </p>
 
 @if (keywordOpen()) {
@@ -30,7 +30,7 @@
 
 <div class="trait-rows mb-3">
   @for (trait of traits; track trait.key) {
-    <app-chip-row
+    <app-trait-row
       [label]="trait.label"
       [options]="trait.options"
       [selected]="selected()[trait.key]"
