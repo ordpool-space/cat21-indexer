@@ -36,6 +36,13 @@
       "when": 1779811200000,
       "tag": "0004_reset_dominant_color_for_rederive",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1779897600000,
+      "tag": "0005_add_rarity_columns",
+      "breakpoints": true
     }
   ]
 }

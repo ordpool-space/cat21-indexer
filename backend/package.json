@@ -31,7 +31,7 @@
     "class-validator": "^0.14.2",
     "drizzle-orm": "^0.44.4",
     "mysql2": "^3.11.5",
-    "ordpool-parser": "github:ordpool-space/ordpool-parser#70c50dee83d4d97ff0c76058dc942130e6087e8c",
+    "ordpool-parser": "github:ordpool-space/ordpool-parser#ec1a1bc9c6f9de70544fe4c48cc1444d8692a20f",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5"

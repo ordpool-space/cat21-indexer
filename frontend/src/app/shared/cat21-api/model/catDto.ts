@@ -123,6 +123,17 @@ export interface CatDto {
      * Colors used to paint the glasses (empty if no glasses)
      */
     glassesColors: Array<string>;
+    /**
+     * OpenRarity information-content score for this cat within its
+     * category band (raw Σ -log₂(p_i)). Higher = rarer. Each band is
+     * scored independently. Null while the boot-time backfill is in flight.
+     */
+    rarityBits: number | null;
+    /**
+     * 1-based rarity rank within this cat's category band. Tied scores
+     * share a rank with classic 1-2-2-4 ordering. Null while backfill runs.
+     */
+    rarityRank: number | null;
 }
 export namespace CatDto {
     export const DesignPoseEnum = {

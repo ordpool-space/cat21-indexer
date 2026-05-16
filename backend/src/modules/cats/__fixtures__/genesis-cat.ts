@@ -30,6 +30,8 @@ export const GENESIS_ROW = {
   crown: 'None',
   glasses: 'None',
   glassesColors: [],
+  rarityBits: null,
+  rarityRank: null,
 };
 
 /** Genesis cat DTO shape (ISO string for mintedAt) */

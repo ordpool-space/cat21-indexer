@@ -352,6 +352,8 @@ export class CatsService {
       crown: row.crown,
       glasses: row.glasses,
       glassesColors: row.glassesColors,
+      rarityBits: row.rarityBits,
+      rarityRank: row.rarityRank,
     };
   }
 }

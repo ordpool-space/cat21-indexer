@@ -214,6 +214,20 @@ export class CatDto {
 
   @ApiProperty({ description: 'Colors used to paint the glasses (empty if no glasses)', example: [] })
   glassesColors!: string[];
+
+  // OpenRarity scoring (per-band). Both fields are null while the
+  // boot-time backfill is in flight on a fresh deploy.
+  @ApiPropertyOptional({
+    description: 'OpenRarity information-content score for this cat within its category band (raw Σ -log₂(p_i)). Higher = rarer. Each band is scored independently.',
+    example: 23.4,
+  })
+  rarityBits!: number | null;
+
+  @ApiPropertyOptional({
+    description: '1-based rarity rank within this cat\'s category band. Tied scores share a rank with classic 1-2-2-4 ordering.',
+    example: 17,
+  })
+  rarityRank!: number | null;
 }
 
 export class CatsPaginatedResultDto {

@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { inArray, isNull, max, sum } from 'drizzle-orm';
-import { Cat21ParserService, getCatColorCategory } from 'ordpool-parser';
+import { eq, inArray, isNull, max, sum } from 'drizzle-orm';
+import { Cat21ParserService, getCatColorCategory, RarityToken, scoreAndRank } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
@@ -50,11 +50,13 @@ export class SyncService implements OnModuleInit {
   // palettes). The pre-color-expansion version of this code excluded
   // genesis because the parser returned null.
   async onModuleInit(): Promise<void> {
-    this.backfillDominantColorCategory().catch((e) => {
-      this.logger.warn(
-        `Dominant-color backfill failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    });
+    this.backfillDominantColorCategory()
+      .then(() => this.recomputeRarityForAllBands())
+      .catch((e) => {
+        this.logger.warn(
+          `Boot-time backfill failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
   }
 
   private async backfillDominantColorCategory(): Promise<void> {
@@ -242,6 +244,20 @@ export class SyncService implements OnModuleInit {
 
       this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
       this.lastSuccessAt = new Date();
+
+      // After new cats arrive, the bands they fell into need re-ranking
+      // (their frequency tables shifted). Cheap on closed bands (no-op)
+      // because we identify dirty bands by tracking insertedCount's max.
+      // Simple approach: recompute the band that contains the highest
+      // inserted cat number. Other bands are unaffected unless we
+      // backfilled an entire range, which only happens on cold start.
+      if (insertedCount > 0) {
+        await this.recomputeRarityForAllBands().catch((e) => {
+          this.logger.warn(
+            `Rarity recompute after sync failed: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        });
+      }
     } catch (error) {
       this.lastErrorAt = new Date();
       this.lastError = error instanceof Error ? error.message : String(error);
@@ -250,5 +266,85 @@ export class SyncService implements OnModuleInit {
       this.blockHashCache.clear();
       this.syncing = false;
     }
+  }
+
+  /**
+   * Per-band OpenRarity scoring. Iterates every band, runs `scoreAndRank`
+   * from ordpool-parser on the band's cats, writes back `rarityBits` and
+   * `rarityRank`. Closed bands (where all rows already have rarityRank
+   * set) could be skipped, but we re-score every time anyway because the
+   * cost is small and it makes the boot path simpler.
+   *
+   * Each cat is scored against the other cats in its band only — sub1k
+   * cats never compete with sub10k cats. That's the user-visible
+   * narrative ("each band is a distinct collection").
+   *
+   * Tokens for the scorer: every searchable trait surfaced as a string
+   * attribute. Empty-string values get the parser's "absent" treatment;
+   * `dominantColorCategory` null becomes `'none'` so it doesn't sort
+   * against synthesized Null (genesis cats now have non-null colors
+   * anyway, so this is defense in depth).
+   */
+  private async recomputeRarityForAllBands(): Promise<void> {
+    const BANDS = ['sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'];
+    for (const band of BANDS) {
+      await this.recomputeRarityForBand(band);
+    }
+  }
+
+  private async recomputeRarityForBand(band: string): Promise<void> {
+    const rows = await this.drizzle.db
+      .select({
+        catNumber: cats.catNumber,
+        genesis: cats.genesis,
+        gender: cats.gender,
+        designPose: cats.designPose,
+        designExpression: cats.designExpression,
+        designPattern: cats.designPattern,
+        designFacing: cats.designFacing,
+        laserEyes: cats.laserEyes,
+        background: cats.background,
+        crown: cats.crown,
+        glasses: cats.glasses,
+        dominantColorCategory: cats.dominantColorCategory,
+      })
+      .from(cats)
+      .where(eq(cats.category, band));
+
+    if (rows.length === 0) return;
+
+    const tokens: RarityToken<number>[] = rows.map((r) => ({
+      id: r.catNumber,
+      attrs: {
+        // Boolean genesis as string. Rare value ('true', ~0.4%) → ~8 bits
+        // contribution; common 'false' → ~0 bits. Mirrors how the trait
+        // is exposed in search.
+        genesis:    r.genesis ? 'true' : 'false',
+        gender:     r.gender,
+        pose:       r.designPose,
+        expression: r.designExpression,
+        pattern:    r.designPattern,
+        facing:     r.designFacing,
+        eyes:       r.laserEyes,
+        background: r.background,
+        crown:      r.crown,
+        glasses:    r.glasses,
+        color:      r.dominantColorCategory ?? 'none',
+      },
+    }));
+
+    const ranked = scoreAndRank(tokens);
+
+    // Sequential UPDATEs. Acceptable on a single-instance backend with
+    // current band sizes; the largest open band is sub250k (potentially
+    // 150k rows), which would take ~7 minutes one-time on a cold boot.
+    // Subsequent syncs only mint a handful of cats and re-rank fast.
+    for (const r of ranked) {
+      await this.drizzle.db
+        .update(cats)
+        .set({ rarityBits: r.bits, rarityRank: r.rank })
+        .where(eq(cats.catNumber, r.id));
+    }
+    this.logger.log(`Rarity recomputed for band ${band}: ${ranked.length} cats ranked`);
   }
 }
