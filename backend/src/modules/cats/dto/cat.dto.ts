@@ -21,7 +21,7 @@ const CROWN_VALUES      = ['Gold', 'Diamond', 'None'] as const;
 const GLASSES_VALUES    = ['Black', 'Cool', '3D', 'Nouns', 'None'] as const;
 // Category bands are pinned to the Dune query. Genesis is NOT a category
 // — it's its own boolean trait (the ORIGIN row in the search UI). See
-// ordpool-headquarter CATEGORIES.md for the full narrative.
+// ordpool-parser/CAT21-RARITY-SCORE.md for the full narrative.
 const CATEGORY_VALUES   = ['sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'] as const;
 // Title Case matches the parser's emitted strings ('Female' | 'Male'),
 // which is what the DB stores after migration 0003.

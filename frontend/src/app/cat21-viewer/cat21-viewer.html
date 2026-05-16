@@ -32,6 +32,38 @@
         <div class="mt-2 cat-container">
           <table class="table table-borderless mt-4">
             <tbody>
+              @if (cat.category) {
+                <tr>
+                  <td><b [ngbTooltip]="categoryTooltip">i</b>Category</td>
+                  <td>{{ cat.category }}</td>
+                </tr>
+                <ng-template #categoryTooltip>
+                  Each cat is in exactly one band — its smallest applicable.<br><br>
+                  sub1k: cat 0 to cat 999 (1 000 cats in total)<br>
+                  sub10k: cat 1 000 to cat 9 999 (9 000 cats in total)<br>
+                  sub50k: cat 10 000 to cat 49 999 (40 000 cats in total)<br>
+                  sub100k: cat 50 000 to cat 99 999 (50 000 cats in total)<br>
+                  sub250k: cat 100 000 to cat 249 999 (150 000 cats in total)<br>
+                  sub500k: cat 250 000 to cat 499 999 (250 000 cats in total)<br>
+                  sub1M: cat 500 000 to cat 999 999 (500 000 cats in total)
+                </ng-template>
+              }
+              @if (cat.rarityRank !== null && cat.rarityBits !== null) {
+                <tr>
+                  <td><b [ngbTooltip]="rarityTooltip">i</b>Rarity</td>
+                  <td>rank {{ cat.rarityRank | number }} · {{ cat.rarityBits | number: '1.2-2' }} bits</td>
+                </tr>
+                <ng-template #rarityTooltip>
+                  OpenRarity score, computed per category.<br><br>
+                  Each category is its own collection — sub1k cats are
+                  ranked only against the other sub1k cats; sub10k cats
+                  only against sub10k. Categories never compete.<br><br>
+                  "bits" is the raw information-content sum — higher = rarer.
+                  "rank 1" is the rarest cat in the category.<br><br>
+                  Bonus: cat #0 is always rank 1 in sub1k. There are many
+                  genesis cats (the trait), but only one Genesis Cat.
+                </ng-template>
+              }
               <tr>
                 <td><b ngbTooltip="The first cat owner (Address that received the first output of the mint transaction)">i</b>First Owner&nbsp;</td>
                 <td>
@@ -75,22 +107,6 @@
                 <td><b ngbTooltip="The date and time when this cat was minted.">i</b>Minted</td>
                 <td>{{ cat.mintedAt | date: 'yyyy-MM-dd' }}</td>
               </tr>
-              @if (cat.category) {
-                <tr>
-                  <td><b [ngbTooltip]="categoryTooltip">i</b>Category</td>
-                  <td>{{ cat.category }}</td>
-                </tr>
-                <ng-template #categoryTooltip>
-                  Each cat is in exactly one band — its smallest applicable.<br><br>
-                  sub1k: cat 0 to cat 999 (1 000 cats in total)<br>
-                  sub10k: cat 1 000 to cat 9 999 (9 000 cats in total)<br>
-                  sub50k: cat 10 000 to cat 49 999 (40 000 cats in total)<br>
-                  sub100k: cat 50 000 to cat 99 999 (50 000 cats in total)<br>
-                  sub250k: cat 100 000 to cat 249 999 (150 000 cats in total)<br>
-                  sub500k: cat 250 000 to cat 499 999 (250 000 cats in total)<br>
-                  sub1M: cat 500 000 to cat 999 999 (500 000 cats in total)
-                </ng-template>
-              }
               <tr>
                 <td colspan="2">
                   <hr>

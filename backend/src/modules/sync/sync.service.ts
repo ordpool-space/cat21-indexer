@@ -51,7 +51,7 @@ export class SyncService implements OnModuleInit {
   // genesis because the parser returned null.
   async onModuleInit(): Promise<void> {
     this.backfillDominantColorCategory()
-      .then(() => this.recomputeRarityForAllBands())
+      .then(() => this.recomputeRarityForAllCategories())
       .catch((e) => {
         this.logger.warn(
           `Boot-time backfill failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -245,14 +245,12 @@ export class SyncService implements OnModuleInit {
       this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
       this.lastSuccessAt = new Date();
 
-      // After new cats arrive, the bands they fell into need re-ranking
-      // (their frequency tables shifted). Cheap on closed bands (no-op)
-      // because we identify dirty bands by tracking insertedCount's max.
-      // Simple approach: recompute the band that contains the highest
-      // inserted cat number. Other bands are unaffected unless we
-      // backfilled an entire range, which only happens on cold start.
+      // After new cats arrive, the categories they fell into need re-
+      // ranking (their frequency tables shifted). Cheap on closed
+      // categories (no-op) because we recompute everything and the cats
+      // stay in the same order. Simpler than tracking dirty categories.
       if (insertedCount > 0) {
-        await this.recomputeRarityForAllBands().catch((e) => {
+        await this.recomputeRarityForAllCategories().catch((e) => {
           this.logger.warn(
             `Rarity recompute after sync failed: ${e instanceof Error ? e.message : String(e)}`,
           );
@@ -269,15 +267,16 @@ export class SyncService implements OnModuleInit {
   }
 
   /**
-   * Per-band OpenRarity scoring. Iterates every band, runs `scoreAndRank`
-   * from ordpool-parser on the band's cats, writes back `rarityBits` and
-   * `rarityRank`. Closed bands (where all rows already have rarityRank
-   * set) could be skipped, but we re-score every time anyway because the
-   * cost is small and it makes the boot path simpler.
+   * Per-category OpenRarity scoring. Iterates every category, runs
+   * `scoreAndRank` from ordpool-parser on the category's cats, writes
+   * back `rarityBits` and `rarityRank`. Closed categories (where all
+   * rows already have rarityRank set) could be skipped, but we re-score
+   * every time anyway because the cost is small and it makes the boot
+   * path simpler.
    *
-   * Each cat is scored against the other cats in its band only — sub1k
-   * cats never compete with sub10k cats. That's the user-visible
-   * narrative ("each band is a distinct collection").
+   * Each cat is scored against the other cats in its category only —
+   * sub1k cats never compete with sub10k cats. That's the user-visible
+   * narrative ("each category is a distinct collection").
    *
    * Tokens for the scorer: every searchable trait surfaced as a string
    * attribute. Empty-string values get the parser's "absent" treatment;
@@ -285,14 +284,14 @@ export class SyncService implements OnModuleInit {
    * against synthesized Null (genesis cats now have non-null colors
    * anyway, so this is defense in depth).
    */
-  private async recomputeRarityForAllBands(): Promise<void> {
-    const BANDS = ['sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'];
-    for (const band of BANDS) {
-      await this.recomputeRarityForBand(band);
+  private async recomputeRarityForAllCategories(): Promise<void> {
+    const CATEGORIES = ['sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'];
+    for (const category of CATEGORIES) {
+      await this.recomputeRarityForCategory(category);
     }
   }
 
-  private async recomputeRarityForBand(band: string): Promise<void> {
+  private async recomputeRarityForCategory(category: string): Promise<void> {
     const rows = await this.drizzle.db
       .select({
         catNumber: cats.catNumber,
@@ -309,7 +308,7 @@ export class SyncService implements OnModuleInit {
         dominantColorCategory: cats.dominantColorCategory,
       })
       .from(cats)
-      .where(eq(cats.category, band));
+      .where(eq(cats.category, category));
 
     if (rows.length === 0) return;
 
@@ -339,10 +338,10 @@ export class SyncService implements OnModuleInit {
     //
     // There are many "genesis cats" (the trait — every cat where
     // catHash[0] === 79 gets the black/white palette; ~0.4% of any
-    // band). But there is only ONE dedicated Genesis Cat: cat #0, the
-    // first nLockTime=21 transaction in Bitcoin history (block 824 205).
-    // Protocol significance overrides trait math: cat #0 is pinned at
-    // rank 1 inside sub1k, full stop.
+    // category). But there is only ONE dedicated Genesis Cat: cat #0,
+    // the first nLockTime=21 transaction in Bitcoin history (block
+    // 824 205). Protocol significance overrides trait math: cat #0 is
+    // pinned at rank 1 inside sub1k, full stop.
     //
     // Implementation: move cat #0 to position 0 in the ranked array,
     // then re-number ranks sequentially. The natural ties among the
@@ -350,9 +349,9 @@ export class SyncService implements OnModuleInit {
     // lore. `rarityBits` is NOT touched; the math stays honest, only
     // the rank label is pinned.
     //
-    // Limited to sub1k by definition — no other band contains THE
+    // Limited to sub1k by definition — no other category contains THE
     // genesis cat.
-    if (band === 'sub1k') {
+    if (category === 'sub1k') {
       const i = ranked.findIndex((r) => r.id === 0);
       if (i > 0) {
         const cat0 = ranked.splice(i, 1)[0];
@@ -362,9 +361,10 @@ export class SyncService implements OnModuleInit {
     }
 
     // Sequential UPDATEs. Acceptable on a single-instance backend with
-    // current band sizes; the largest open band is sub250k (potentially
-    // 150k rows), which would take ~7 minutes one-time on a cold boot.
-    // Subsequent syncs only mint a handful of cats and re-rank fast.
+    // current category sizes; the largest open category is sub250k
+    // (potentially 150k rows), which would take ~7 minutes one-time on
+    // a cold boot. Subsequent syncs only mint a handful of cats and
+    // re-rank fast.
     for (const r of ranked) {
       await this.drizzle.db
         .update(cats)
@@ -374,6 +374,6 @@ export class SyncService implements OnModuleInit {
       // re-reads the row (now with updated rarity) from the DB.
       this.cache.invalidateCat(r.id);
     }
-    this.logger.log(`Rarity recomputed for band ${band}: ${ranked.length} cats ranked`);
+    this.logger.log(`Rarity recomputed for category ${category}: ${ranked.length} cats ranked`);
   }
 }

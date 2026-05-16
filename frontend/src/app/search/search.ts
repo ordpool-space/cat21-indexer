@@ -15,7 +15,7 @@ import { TraitRow } from './trait-row';
 // category, color, genesis). Labels are what shows on the trait button
 // and what the keyword box accepts.
 //
-// COLOR has 12 buckets — see ordpool-headquarter CATEGORIES.md. Genesis
+// COLOR has 12 buckets — see ordpool-parser/CAT21-RARITY-SCORE.md. Genesis
 // is an ORIGIN row, NOT a category value (the previous version was a bug).
 const TRAIT_DEFINITIONS = {
   color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['cyan', 'cyan'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink'], ['black', 'black'], ['white', 'white'], ['fire', 'fire'], ['saturated', 'saturated']] },
@@ -41,9 +41,9 @@ const FILTER_KEYS: readonly FilterKey[] = [
 // Everything else renders as chip rows underneath.
 const CHIP_TRAIT_KEYS: readonly FilterKey[] = FILTER_KEYS.filter((k) => k !== 'category') as FilterKey[];
 
-// Default tab on landing. Per CATEGORIES.md: drop1/sub1k is the most
+// Default tab on landing. Per ordpool-parser/CAT21-RARITY-SCORE.md: sub1k is the most
 // prestigious collection; first-time visitors land there. Holders of
-// higher bands click through.
+// other categories click through.
 const DEFAULT_CATEGORY = 'sub1k';
 
 // Tab list, in declaration order. Same as TRAIT_DEFINITIONS.category.options
@@ -93,8 +93,9 @@ export class Search {
    *
    * Category is special: it always resolves to exactly one value (the
    * active tab). If the URL has no category, the default tab is used
-   * — so the backend query is always scoped to one band, never to "all
-   * cats" (no such mode exists by design — see CATEGORIES.md).
+   * — so the backend query is always scoped to one category, never to
+   * "all cats" (no such mode exists by design —
+   * see ordpool-parser/CAT21-RARITY-SCORE.md).
    */
   readonly selected = computed<Record<FilterKey, string[]>>(() => {
     const rawCategory = splitCsv(this.category());
@@ -116,7 +117,7 @@ export class Search {
   /** The active category tab. Always defined; defaults to sub1k. */
   readonly activeCategory = computed(() => this.selected().category[0]);
 
-  /** Static list of category tab values, in band order. */
+  /** Static list of category tab values, smallest-supply first. */
   readonly categoryTabs = CATEGORY_TABS;
 
   /**
@@ -178,7 +179,7 @@ export class Search {
 
   /** Switch the active category tab. Other chip selections survive
    *  the switch — a user with `color=red` flipping from sub1k → sub10k
-   *  sees the red cats from the new band. */
+   *  sees the red cats from the new category. */
   setCategory(value: string): void {
     this.navigateWithSelected({ ...this.selected(), category: [value] }, 1);
   }

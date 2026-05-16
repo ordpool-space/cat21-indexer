@@ -64,11 +64,11 @@ export const cats = mysqlTable(
     // can land before the boot-time backfill completes.
     dominantColorCategory: varchar('dominant_color_category', { length: 20 }),
 
-    // Per-band OpenRarity score. `rarityBits` is the raw Σ -log₂(p_i)
+    // Per-category OpenRarity score. `rarityBits` is the raw Σ -log₂(p_i)
     // sum (the "23.4 bits" headline); `rarityRank` is the 1-based rank
-    // INSIDE the cat's category band (sub1k cats compete against sub1k
-    // cats only). Both nullable while the boot-time backfill is in
-    // flight. Computed via ordpool-parser's scoreAndRank.
+    // INSIDE the cat's category (sub1k cats compete against sub1k cats
+    // only). Both nullable while the boot-time backfill is in flight.
+    // Computed via ordpool-parser's scoreAndRank.
     rarityBits: double('rarity_bits'),
     rarityRank: int('rarity_rank'),
   },
@@ -84,7 +84,7 @@ export const cats = mysqlTable(
     index('idx_cats_feerate').on(t.feeRate),
     index('idx_cats_dominant_color_category').on(t.dominantColorCategory),
     index('idx_cats_category').on(t.category),
-    // Composite index for "list cats in band by rank" — the primary
+    // Composite index for "list cats in category by rank" — the primary
     // query path for the rarity-sorted gallery.
     index('idx_cats_category_rarity_rank').on(t.category, t.rarityRank),
   ],
