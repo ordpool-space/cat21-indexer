@@ -77,7 +77,7 @@
               </tr>
               @if (cat.category) {
                 <tr>
-                  <td><b ngbTooltip="Rarity category based on cat number: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M">i</b>Category</td>
+                  <td><b ngbTooltip="The rarity band this cat lives in. Each cat is in exactly one band — the smallest applicable (cat 500 → sub1k, cat 5000 → sub10k). 'sub10k' means cats numbered 1 000–9 999, not every cat under 10 000. Bands don't overlap — they're distinct collections.">i</b>Category</td>
                   <td>{{ cat.category }}</td>
                 </tr>
               }
