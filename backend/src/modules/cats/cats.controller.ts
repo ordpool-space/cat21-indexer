@@ -261,6 +261,7 @@ function toSearchFilters(q: CatSearchQueryDto): SearchFilters {
     gender:     splitCsv(q.gender),
     color:      splitCsv(q.color),
     genesis:    splitCsv(q.genesis),
+    rarity:     splitCsv(q.rarity),
   };
 }
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, inArray, max, sql, sum, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lte, max, sql, sum, type SQL } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
@@ -26,7 +26,16 @@ export interface SearchFilters {
   // 'genesis' / 'normal'. Translated to a boolean equality against cats.genesis.
   // Selecting both is a no-op (matches every row).
   genesis?: string[];
+  // 'top10' / 'top100' / 'top1k'. Rank-ceiling within the active
+  // category. Multi-select picks the broadest ceiling.
+  rarity?: string[];
 }
+
+const RARITY_THRESHOLDS: Record<string, number> = {
+  top10: 10,
+  top100: 100,
+  top1k: 1000,
+};
 
 const SYNC_STALL_SECONDS = 300;
 
@@ -390,6 +399,19 @@ export function buildSearchWhere(filters: SearchFilters): SQL | undefined {
     if (wantsGenesis && !wantsNormal) clauses.push(eq(cats.genesis, true));
     else if (wantsNormal && !wantsGenesis) clauses.push(eq(cats.genesis, false));
     // both → no-op (matches everything)
+  }
+
+  // RARITY rank ceiling. Multi-select OR semantics = the broadest
+  // ceiling wins (top10 ∪ top100 = top100). `null` ranks (cats whose
+  // backfill hasn't completed) never match — lte(NULL, N) is unknown,
+  // SQL treats unknown as false.
+  if (filters.rarity?.length) {
+    const thresholds = filters.rarity
+      .map((v) => RARITY_THRESHOLDS[v])
+      .filter((t): t is number => t !== undefined);
+    if (thresholds.length > 0) {
+      clauses.push(lte(cats.rarityRank, Math.max(...thresholds)));
+    }
   }
 
   if (clauses.length === 0) return undefined;

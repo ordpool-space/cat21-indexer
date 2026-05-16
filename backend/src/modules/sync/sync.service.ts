@@ -336,21 +336,10 @@ export class SyncService implements OnModuleInit {
 
     // === The Genesis Cat Bonus ===
     //
-    // There are many "genesis cats" (the trait — every cat where
-    // catHash[0] === 79 gets the black/white palette; ~0.4% of any
-    // category). But there is only ONE dedicated Genesis Cat: cat #0,
-    // the first nLockTime=21 transaction in Bitcoin history (block
-    // 824 205). Protocol significance overrides trait math: cat #0 is
-    // pinned at rank 1 inside sub1k, full stop.
-    //
-    // Implementation: move cat #0 to position 0 in the ranked array,
-    // then re-number ranks sequentially. The natural ties among the
-    // remaining 999 cats flatten a little — acceptable cost for the
-    // lore. `rarityBits` is NOT touched; the math stays honest, only
-    // the rank label is pinned.
-    //
-    // Limited to sub1k by definition — no other category contains THE
-    // genesis cat.
+    // Cat #0 is rank 1 in sub1k. Always. The genesis cat holder has
+    // spoken — this is law, not math. `rarityBits` stays honest; only
+    // the rank label is pinned. See ordpool-parser/CAT21-RARITY-SCORE.md
+    // for the full narrative. Limited to sub1k by definition.
     if (category === 'sub1k') {
       const i = ranked.findIndex((r) => r.id === 0);
       if (i > 0) {

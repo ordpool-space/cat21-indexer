@@ -35,6 +35,11 @@ const COLOR_VALUES      = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', '
 // cat; 'normal' = everything else. Selecting both ORs them (returns
 // everything).
 const GENESIS_VALUES    = ['genesis', 'normal'] as const;
+// RARITY presets — single-value rank ceilings within the active
+// category. 'top10' means rarityRank ≤ 10, 'top100' ≤ 100, 'top1k'
+// ≤ 1000. OR-combining picks the broadest ceiling (top10 ∪ top100 =
+// top100), so multi-select behaves as union semantics.
+const RARITY_VALUES     = ['top10', 'top100', 'top1k'] as const;
 
 // Build a regex that matches "v1,v2,v3,..." where each value is one of the
 // listed enum members. No nested quantifiers — ReDoS-safe by construction.
@@ -53,6 +58,7 @@ const CATEGORY_CSV   = csvOf(CATEGORY_VALUES);
 const GENDER_CSV     = csvOf(GENDER_VALUES);
 const COLOR_CSV      = csvOf(COLOR_VALUES);
 const GENESIS_CSV    = csvOf(GENESIS_VALUES);
+const RARITY_CSV     = csvOf(RARITY_VALUES);
 
 const msg = (name: string, values: readonly string[]) =>
   `${name} must be a comma-separated list of: ${values.join(', ')}`;
@@ -98,12 +104,12 @@ export class CatSearchQueryDto {
   @Matches(GLASSES_CSV, { message: msg('glasses', GLASSES_VALUES) })
   glasses?: string;
 
-  // Category bands track the official Dune dashboard query
-  // (ordpool/official_dune_dasboard_query.sql): each cat is in exactly one
-  // band — its smallest applicable. Multi-select is allowed but
+  // Categories follow the model spelled out in
+  // ordpool-parser/CAT21-RARITY-SCORE.md: each cat is in exactly one
+  // category — its smallest applicable. Multi-select is allowed but
   // semantically discouraged (categories are collections, not filters);
   // the UI presents them as tabs, not chips.
-  @ApiPropertyOptional({ description: 'Rarity category: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple bands OR-combine.', example: 'sub1k' })
+  @ApiPropertyOptional({ description: 'Rarity category: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple categories OR-combine.', example: 'sub1k' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(CATEGORY_CSV, { message: msg('category', CATEGORY_VALUES) })
   category?: string;
@@ -124,6 +130,15 @@ export class CatSearchQueryDto {
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(GENESIS_CSV, { message: msg('genesis', GENESIS_VALUES) })
   genesis?: string;
+
+  // Rarity rank ceiling within the active category. 'top10' / 'top100'
+  // / 'top1k' = rarityRank ≤ 10 / 100 / 1000. Per-category scoring —
+  // 'top10' inside sub1k returns the 10 rarest sub1k cats only. See
+  // ordpool-parser/CAT21-RARITY-SCORE.md.
+  @ApiPropertyOptional({ description: 'Rarity rank ceiling within the active category: top10 (rank ≤ 10), top100 (≤ 100), top1k (≤ 1000). Multi-select takes the broadest ceiling.', example: 'top10' })
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(RARITY_CSV, { message: msg('rarity', RARITY_VALUES) })
+  rarity?: string;
 }
 
 export class CatDto {

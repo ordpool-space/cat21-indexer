@@ -29,12 +29,13 @@ const TRAIT_DEFINITIONS = {
   category:   { label: 'CATEGORY',   options: [['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
   gender:     { label: 'GENDER',     options: [['Male', 'male'], ['Female', 'female']] },
   genesis:    { label: 'ORIGIN',     options: [['genesis', 'genesis cat'], ['normal', 'normal cat']] },
+  rarity:     { label: 'RARITY',     options: [['top10', 'top 10'], ['top100', 'top 100'], ['top1k', 'top 1k']] },
 } as const satisfies Record<string, { label: string; options: readonly (readonly [string, string])[] }>;
 
 type FilterKey = keyof typeof TRAIT_DEFINITIONS;
 
 const FILTER_KEYS: readonly FilterKey[] = [
-  'color', 'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'category', 'gender', 'genesis',
+  'rarity', 'color', 'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'category', 'gender', 'genesis',
 ];
 
 // Category renders as a tab strip (primary scope), not a chip row.
@@ -87,6 +88,7 @@ export class Search {
   readonly category   = input<string>('');
   readonly gender     = input<string>('');
   readonly genesis    = input<string>('');
+  readonly rarity     = input<string>('');
 
   /**
    * Per-trait selected-value sets, derived from URL inputs.
@@ -111,6 +113,7 @@ export class Search {
       category:   rawCategory.length > 0 ? [rawCategory[0]] : [DEFAULT_CATEGORY],
       gender:     splitCsv(this.gender()),
       genesis:    splitCsv(this.genesis()),
+      rarity:     splitCsv(this.rarity()),
     };
   });
 
