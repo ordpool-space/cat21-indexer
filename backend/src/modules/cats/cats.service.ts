@@ -118,6 +118,10 @@ export class CatsService {
   }
 
   async getCatByNumber(catNumber: number): Promise<CatDto | null> {
+    // Prime totals so mapToDto's categoryPopulation() has a usable
+    // lastSyncedCatNumber. Cheap after the first call (cache hit).
+    await this.ensureTotalsPrimed();
+
     const cached = this.cache.getCachedCat(catNumber);
     if (cached) return cached;
 
@@ -134,6 +138,8 @@ export class CatsService {
   }
 
   async getCatByTxHash(txHash: string): Promise<CatDto | null> {
+    await this.ensureTotalsPrimed();
+
     const catNumber = this.cache.getCachedCatNumberByTxHash(txHash);
     if (catNumber !== undefined) {
       const cached = this.cache.getCachedCat(catNumber);
