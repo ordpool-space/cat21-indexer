@@ -41,8 +41,10 @@ export const cats = mysqlTable(
     // Traits (computed from ordpool-parser — always present)
     genesis: boolean('genesis').notNull().default(false),
     catColors: jsonStringArray('cat_colors').notNull().default([]),
-    male: boolean('male').notNull().default(false),
-    female: boolean('female').notNull().default(false),
+    // Single field mirrors what the parser emits ('Male' | 'Female').
+    // Empty string for the rare row that has neither (e.g. the genesis
+    // cat in some fixtures); never null so the column can stay NOT NULL.
+    gender: varchar('gender', { length: 10 }).notNull().default(''),
     designIndex: int('design_index').notNull().default(0),
     designPose: varchar('design_pose', { length: 50 }).notNull().default(''),
     designExpression: varchar('design_expression', { length: 50 }).notNull().default(''),

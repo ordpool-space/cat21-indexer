@@ -75,13 +75,10 @@ export interface CatDto {
      */
     catColors: Array<string>;
     /**
-     * Whether the cat is male (50% chance)
+     * Gender of the cat. Empty string for cats that have neither
+     * (rare edge case, e.g. some fixtures).
      */
-    male: boolean;
-    /**
-     * Whether the cat is female (50% chance)
-     */
-    female: boolean;
+    gender: string;
     /**
      * Design index (0-127), combination of pose, expression, pattern, and facing
      */

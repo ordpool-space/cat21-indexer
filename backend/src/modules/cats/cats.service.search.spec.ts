@@ -74,20 +74,20 @@ describe('buildSearchWhere', () => {
 
   describe('gender', () => {
 
-    it('maps male to a male=true clause', () => {
-      expect(buildSearchWhere({ gender: ['male'] })).toBeDefined();
+    it('matches Male via inArray', () => {
+      expect(buildSearchWhere({ gender: ['Male'] })).toBeDefined();
     });
 
-    it('maps female to a female=true clause', () => {
-      expect(buildSearchWhere({ gender: ['female'] })).toBeDefined();
+    it('matches Female via inArray', () => {
+      expect(buildSearchWhere({ gender: ['Female'] })).toBeDefined();
     });
 
     it('combines both via OR', () => {
-      expect(buildSearchWhere({ gender: ['male', 'female'] })).toBeDefined();
+      expect(buildSearchWhere({ gender: ['Male', 'Female'] })).toBeDefined();
     });
 
-    it('silently drops unknown gender tokens', () => {
-      expect(buildSearchWhere({ gender: ['xenon'] })).toBeUndefined();
+    it('still returns a clause for unknown gender tokens (just matches nothing)', () => {
+      expect(buildSearchWhere({ gender: ['xenon'] })).toBeDefined();
     });
   });
 });

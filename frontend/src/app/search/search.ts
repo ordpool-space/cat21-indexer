@@ -24,7 +24,7 @@ const TRAIT_DEFINITIONS = {
   glasses:    { label: 'GLASSES',    options: [['Black', 'black'], ['Cool', 'cool'], ['3D', '3D'], ['Nouns', 'nouns'], ['None', 'none']] },
   background: { label: 'BACKGROUND', options: [['Block9', 'block9'], ['Cyberpunk', 'cyberpunk'], ['Whitepaper', 'whitepaper'], ['Orange', 'orange']] },
   category:   { label: 'CATEGORY',   options: [['genesis', 'genesis'], ['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
-  gender:     { label: 'GENDER',     options: [['male', 'male'], ['female', 'female']] },
+  gender:     { label: 'GENDER',     options: [['Male', 'male'], ['Female', 'female']] },
 } as const satisfies Record<string, { label: string; options: readonly (readonly [string, string])[] }>;
 
 type FilterKey = keyof typeof TRAIT_DEFINITIONS;

@@ -20,7 +20,9 @@ const BACKGROUND_VALUES = ['Block9', 'Cyberpunk', 'Whitepaper', 'Orange'] as con
 const CROWN_VALUES      = ['Gold', 'Diamond', 'None'] as const;
 const GLASSES_VALUES    = ['Black', 'Cool', '3D', 'Nouns', 'None'] as const;
 const CATEGORY_VALUES   = ['genesis', 'sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'] as const;
-const GENDER_VALUES     = ['male', 'female'] as const;
+// Title Case matches the parser's emitted strings ('Female' | 'Male'),
+// which is what the DB stores after migration 0003.
+const GENDER_VALUES     = ['Male', 'Female'] as const;
 const COLOR_VALUES      = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
 
 // Build a regex that matches "v1,v2,v3,..." where each value is one of the
@@ -93,7 +95,7 @@ export class CatSearchQueryDto {
   @Matches(CATEGORY_CSV, { message: msg('category', CATEGORY_VALUES) })
   category?: string;
 
-  @ApiPropertyOptional({ description: 'Gender: male, female', example: 'female' })
+  @ApiPropertyOptional({ description: 'Gender: Male, Female', example: 'Female' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(GENDER_CSV, { message: msg('gender', GENDER_VALUES) })
   gender?: string;
@@ -153,11 +155,12 @@ export class CatDto {
   @ApiProperty({ description: 'All colors used to paint the cat (excluding laser eyes and other trait colors)', example: ['#555555', '#d3d3d3', '#ffffff'] })
   catColors!: string[];
 
-  @ApiProperty({ description: 'Whether the cat is male (50% chance)', example: false })
-  male!: boolean;
-
-  @ApiProperty({ description: 'Whether the cat is female (50% chance)', example: true })
-  female!: boolean;
+  @ApiProperty({
+    description: 'Gender of the cat. Empty string for cats that have neither (rare edge case, e.g. some fixtures).',
+    enum: ['Female', 'Male', ''],
+    example: 'Female',
+  })
+  gender!: string;
 
   @ApiProperty({ description: 'Design index (0-127), combination of pose, expression, pattern, and facing', example: 24 })
   designIndex!: number;

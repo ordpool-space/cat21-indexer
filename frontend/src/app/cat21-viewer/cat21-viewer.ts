@@ -45,11 +45,7 @@ export class Cat21Viewer {
     return `cat/${cat.catNumber}/image.${format}`;
   });
 
-  readonly gender = computed(() => {
-    const cat = this.cat();
-    if (!cat) return '';
-    if (cat.male) return 'Male';
-    if (cat.female) return 'Female';
-    return 'Unknown';
-  });
+  // Empty-string fallback covers the rare cat row with neither value
+  // (some legacy fixtures); 'Unknown' would lie about parser output.
+  readonly gender = computed(() => this.cat()?.gender || '—');
 }

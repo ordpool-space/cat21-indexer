@@ -337,8 +337,7 @@ export class CatsService {
       category: row.category,
       genesis: row.genesis,
       catColors: row.catColors,
-      male: row.male,
-      female: row.female,
+      gender: row.gender,
       designIndex: row.designIndex,
       designPose: row.designPose,
       designExpression: row.designExpression,
@@ -372,16 +371,7 @@ export function buildSearchWhere(filters: SearchFilters): SQL | undefined {
   if (filters.glasses?.length) clauses.push(inArray(cats.glasses, filters.glasses));
   if (filters.color?.length) clauses.push(inArray(cats.dominantColorCategory, filters.color));
 
-  if (filters.gender?.length) {
-    const genderClauses: SQL[] = [];
-    if (filters.gender.includes('male')) genderClauses.push(eq(cats.male, true));
-    if (filters.gender.includes('female')) genderClauses.push(eq(cats.female, true));
-    if (genderClauses.length === 1) {
-      clauses.push(genderClauses[0]);
-    } else if (genderClauses.length > 1) {
-      clauses.push(or(...genderClauses)!);
-    }
-  }
+  if (filters.gender?.length) clauses.push(inArray(cats.gender, filters.gender));
 
   if (filters.category?.length) {
     // `genesis` isn't a band — it's a separate boolean column. Split it out
