@@ -211,11 +211,16 @@ describe('CatsService', () => {
       expect(result!.mintedBy).toBeNull();
     });
 
-    it('should map all 25 DTO fields', async () => {
+    it('should map all 26 DTO fields', async () => {
       const drizzle = createMockDrizzle({
         where: jest.fn().mockResolvedValue([GENESIS_ROW]),
       });
-      const service = new CatsService(drizzle as any, new CacheService(), createMockSync() as any);
+      const cache = new CacheService();
+      // Seed lastSyncedCatNumber so categoryPopulation computes the
+      // closed-state value (1000) for sub1k. Without this, an empty
+      // cache returns 0.
+      cache.setTotals(63749, 63748);
+      const service = new CatsService(drizzle as any, cache, createMockSync() as any);
 
       const result = await service.getCatByNumber(0);
       expect(result).toEqual(GENESIS_DTO);

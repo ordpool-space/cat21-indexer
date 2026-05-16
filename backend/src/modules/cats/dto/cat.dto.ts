@@ -239,10 +239,16 @@ export class CatDto {
   rarityBits!: number | null;
 
   @ApiPropertyOptional({
-    description: '1-based rarity rank within this cat\'s category band. Tied scores share a rank with classic 1-2-2-4 ordering.',
+    description: '1-based rarity rank within this cat\'s category. Tied scores share a rank with classic 1-2-2-4 ordering.',
     example: 17,
   })
   rarityRank!: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Total cats currently in this cat\'s category. For closed categories (sub1k, sub10k, etc.) this is the fixed drop size. For open categories it grows with each new mint. Pairs with rarityRank to read as "rank N of M".',
+    example: 1000,
+  })
+  rarityCategoryTotal!: number | null;
 }
 
 export class CatsPaginatedResultDto {

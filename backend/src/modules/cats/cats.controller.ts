@@ -26,8 +26,16 @@ import * as sharp from 'sharp';
 import { CatsService, type SearchFilters } from './cats.service';
 import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
 
-// Browser: 1 day (immutable), Cloudflare edge: 1 year (purgeable)
-const CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable';
+// Used for cat IMAGES (SVG/WebP) — the rendered art is truly
+// immutable, so a year-long edge cache is fine.
+const IMMUTABLE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable';
+
+// Used for cat DETAIL JSON responses. NOT immutable — the rarity
+// fields (rarityRank/rarityBits/rarityCategoryTotal) get recomputed
+// whenever a new cat mints into an open category. Short edge cache
+// lets traffic bursts get absorbed but rarity updates propagate
+// within minutes.
+const CAT_DETAIL_CACHE_CONTROL = 'public, max-age=60, s-maxage=300';
 
 @ApiTags('api')
 @Controller('api')
@@ -75,7 +83,7 @@ export class CatsController {
       reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Cat #${catNumber} not found`);
     }
-    reply.header('Cache-Control', CACHE_CONTROL);
+    reply.header('Cache-Control', CAT_DETAIL_CACHE_CONTROL);
     return cat;
   }
 
@@ -97,7 +105,7 @@ export class CatsController {
       reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Cat with tx ${txHash} not found`);
     }
-    reply.header('Cache-Control', CACHE_CONTROL);
+    reply.header('Cache-Control', CAT_DETAIL_CACHE_CONTROL);
     return cat;
   }
 
@@ -118,7 +126,7 @@ export class CatsController {
     }
 
     return reply
-      .header('Cache-Control', CACHE_CONTROL)
+      .header('Cache-Control', IMMUTABLE_CACHE_CONTROL)
       .header('Content-Type', 'image/svg+xml')
       .header('Content-Disposition', `inline; filename="cat21-${catNumber}.svg"`)
       .send(svg);
@@ -147,7 +155,7 @@ export class CatsController {
         .toBuffer();
 
       return reply
-        .header('Cache-Control', CACHE_CONTROL)
+        .header('Cache-Control', IMMUTABLE_CACHE_CONTROL)
         .header('Content-Type', 'image/webp')
         .header('Content-Disposition', `inline; filename="cat21-${catNumber}.webp"`)
         .send(webp);

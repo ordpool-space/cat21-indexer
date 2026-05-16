@@ -48,18 +48,17 @@
                   sub1M: cat 500 000 to cat 999 999 (500 000 cats in total)
                 </ng-template>
               }
-              @if (cat.rarityRank !== null && cat.rarityBits !== null) {
+              @if (cat.rarityRank !== null && cat.rarityCategoryTotal) {
                 <tr>
                   <td><b [ngbTooltip]="rarityTooltip">i</b>Rarity</td>
-                  <td>rank {{ cat.rarityRank | number }} · {{ cat.rarityBits | number: '1.2-2' }} bits</td>
+                  <td>rank {{ cat.rarityRank | number }} of {{ cat.rarityCategoryTotal | number }}</td>
                 </tr>
                 <ng-template #rarityTooltip>
                   OpenRarity score, computed per category.<br><br>
                   Each category is its own collection — sub1k cats are
                   ranked only against the other sub1k cats; sub10k cats
                   only against sub10k. Categories never compete.<br><br>
-                  "bits" is the raw information-content sum — higher = rarer.
-                  "rank 1" is the rarest cat in the category.<br><br>
+                  Rank 1 is the rarest cat in the category.<br><br>
                   Genesis Cat Bonus: cat #0 is rank 1 in sub1k. Always.
                   Many genesis cats, only one Genesis Cat.
                 </ng-template>

@@ -32,6 +32,10 @@ export const GENESIS_ROW = {
   glassesColors: [],
   rarityBits: null,
   rarityRank: null,
+  // Mirrors how mapToDto computes this in real prod state: sub1k is
+  // closed at 1 000 cats. The unit test seeds the cache with
+  // lastSyncedCatNumber >= 999 so this value gets returned.
+  rarityCategoryTotal: 1000,
 };
 
 /** Genesis cat DTO shape (ISO string for mintedAt) */

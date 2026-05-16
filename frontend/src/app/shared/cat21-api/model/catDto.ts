@@ -134,6 +134,13 @@ export interface CatDto {
      * share a rank with classic 1-2-2-4 ordering. Null while backfill runs.
      */
     rarityRank: number | null;
+    /**
+     * Total cats currently in this cat's category. For closed categories
+     * (sub1k, sub10k, etc.) this is the fixed drop size; for open
+     * categories it grows with each new mint. Pairs with rarityRank so
+     * the UI can render "rank N of M".
+     */
+    rarityCategoryTotal: number | null;
 }
 export namespace CatDto {
     export const DesignPoseEnum = {

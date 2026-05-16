@@ -56,7 +56,7 @@ describe('CatsController', () => {
       expect(result).toEqual(mockCat);
       expect(reply.header).toHaveBeenCalledWith(
         'Cache-Control',
-        'public, max-age=86400, s-maxage=31536000, immutable',
+        'public, max-age=60, s-maxage=300',
       );
     });
 
@@ -77,7 +77,7 @@ describe('CatsController', () => {
       expect(result).toEqual(mockCat);
       expect(reply.header).toHaveBeenCalledWith(
         'Cache-Control',
-        'public, max-age=86400, s-maxage=31536000, immutable',
+        'public, max-age=60, s-maxage=300',
       );
     });
 

@@ -33,6 +33,7 @@ function makeCatDto(catNumber: number, txHash?: string): CatDto {
     glassesColors: [],
     rarityBits: null,
     rarityRank: null,
+    rarityCategoryTotal: null,
   };
 }
 
