@@ -63,16 +63,18 @@
                   number wins.
                 </ng-template>
               }
-              <tr>
-                <td><b [ngbTooltip]="priceTooltip">i</b>Price</td>
-                <td>21 BTC</td>
-              </tr>
-              <ng-template #priceTooltip>
-                CAT-21 enriches Bitcoin. Every cat lives on a single
-                satoshi; the Genesis Cat is the ultimate flip — one
-                sat equals 21 BTC.<br><br>
-                See the CAT-21 protocol specification.
-              </ng-template>
+              @if (cat.catNumber === 0) {
+                <tr>
+                  <td><b [ngbTooltip]="priceTooltip">i</b>Price</td>
+                  <td>21 BTC</td>
+                </tr>
+                <ng-template #priceTooltip>
+                  CAT-21 enriches Bitcoin. Every cat lives on a single
+                  satoshi; the Genesis Cat is the ultimate flip — one
+                  sat equals 21 BTC.<br><br>
+                  See the CAT-21 protocol specification.
+                </ng-template>
+              }
               <tr>
                 <td><b ngbTooltip="The first cat owner (Address that received the first output of the mint transaction)">i</b>First Owner&nbsp;</td>
                 <td>
