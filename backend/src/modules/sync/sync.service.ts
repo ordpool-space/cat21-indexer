@@ -335,6 +335,32 @@ export class SyncService implements OnModuleInit {
 
     const ranked = scoreAndRank(tokens);
 
+    // === The Genesis Cat Bonus ===
+    //
+    // There are many "genesis cats" (the trait — every cat where
+    // catHash[0] === 79 gets the black/white palette; ~0.4% of any
+    // band). But there is only ONE dedicated Genesis Cat: cat #0, the
+    // first nLockTime=21 transaction in Bitcoin history (block 824 205).
+    // Protocol significance overrides trait math: cat #0 is pinned at
+    // rank 1 inside sub1k, full stop.
+    //
+    // Implementation: move cat #0 to position 0 in the ranked array,
+    // then re-number ranks sequentially. The natural ties among the
+    // remaining 999 cats flatten a little — acceptable cost for the
+    // lore. `rarityBits` is NOT touched; the math stays honest, only
+    // the rank label is pinned.
+    //
+    // Limited to sub1k by definition — no other band contains THE
+    // genesis cat.
+    if (band === 'sub1k') {
+      const i = ranked.findIndex((r) => r.id === 0);
+      if (i > 0) {
+        const cat0 = ranked.splice(i, 1)[0];
+        ranked.unshift(cat0);
+        ranked.forEach((r, n) => { r.rank = n + 1; });
+      }
+    }
+
     // Sequential UPDATEs. Acceptable on a single-instance backend with
     // current band sizes; the largest open band is sub250k (potentially
     // 150k rows), which would take ~7 minutes one-time on a cold boot.
