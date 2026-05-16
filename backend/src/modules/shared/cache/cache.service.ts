@@ -134,6 +134,21 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     this.txHashToNumber.set(cat.txHash, cat.catNumber);
   }
 
+  /**
+   * Drop one cat from the cache. Next fetch will re-read from the DB.
+   * Used by background processes that mutate cat rows directly (rarity
+   * backfill is the only current caller) — without this, the cache
+   * would keep returning a stale DTO until the entry is evicted by LRU
+   * pressure, which never happens for pinned cats (#0 etc.).
+   */
+  invalidateCat(catNumber: number): void {
+    const cached = this.catsByNumber.get(catNumber);
+    if (cached) {
+      this.txHashToNumber.delete(cached.txHash);
+      this.catsByNumber.delete(catNumber);
+    }
+  }
+
   // --- Pagination (computed from formula, zero storage) ---
 
   /**

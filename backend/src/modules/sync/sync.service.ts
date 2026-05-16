@@ -344,6 +344,9 @@ export class SyncService implements OnModuleInit {
         .update(cats)
         .set({ rarityBits: r.bits, rarityRank: r.rank })
         .where(eq(cats.catNumber, r.id));
+      // Drop the in-memory cache entry so the next /api/cat/N request
+      // re-reads the row (now with updated rarity) from the DB.
+      this.cache.invalidateCat(r.id);
     }
     this.logger.log(`Rarity recomputed for band ${band}: ${ranked.length} cats ranked`);
   }
