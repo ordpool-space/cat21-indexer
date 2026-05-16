@@ -171,10 +171,6 @@ export class Search {
     this.navigateWithSelected(emptySelected(), 1);
   }
 
-  changePage(page: number): void {
-    this.navigateWithSelected(this.selected(), page);
-  }
-
   private navigateWithSelected(sel: Record<FilterKey, string[]>, page: number): void {
     const queryParams: Record<string, string | null> = {};
     for (const key of FILTER_KEYS) {

@@ -1,113 +1,111 @@
-<section class="search-page">
-  <header class="search-header">
-    <h1>Search cats</h1>
-    <div class="search-counter">
-      @if (resultsResource.isLoading()) {
-        <span role="status">
-          <span class="visually-hidden">Loading…</span>
-          …
-        </span>
-      } @else if (isBackendUnavailable()) {
-        <span role="alert">Backend unavailable</span>
-      } @else if (total() === 0 && hasAnyFilter()) {
-        <span class="zero-results">0 cats — try fewer filters</span>
-      } @else {
-        <span>{{ total() | number }} cat{{ total() === 1 ? '' : 's' }}</span>
-      }
+<h1 class="mt-2">Search</h1>
 
-      <button
-        type="button"
-        class="icon-btn"
-        (click)="pickLucky()"
-        [disabled]="luckyLoading() || total() === 0"
-        [attr.aria-label]="hasAnyFilter() ? 'Pick a random matching cat' : 'Pick a random cat'"
-        title="Lucky cat — pick one at random"
-      >🎲</button>
-      <button
-        type="button"
-        class="icon-btn"
-        (click)="toggleKeyword()"
-        [class.active]="keywordOpen()"
-        aria-label="Toggle keyword search"
-        title="Keyword search (eyes:red pose:sleeping)"
-      >🔍</button>
+<p class="mt-2 mb-3">
+  Find a cat by its traits.
+  Pick chips below or use <a (click)="toggleKeyword()" role="button">keyword search</a>.
+</p>
 
-      @if (hasAnyFilter()) {
-        <button type="button" class="clear-all-btn" (click)="clearAll()">clear all</button>
-      }
-    </div>
-  </header>
-
-  @if (keywordOpen()) {
-    <div class="keyword-box">
-      <input
-        type="text"
-        class="keyword-input"
-        spellcheck="false"
-        autocomplete="off"
-        autocapitalize="off"
-        autocorrect="off"
-        placeholder="eyes:red pose:sleeping background:cyberpunk"
-        [value]="keywordDraft()"
-        (input)="keywordDraft.set($any($event.target).value)"
-        (keydown.enter)="submitKeyword()"
-        (blur)="submitKeyword()"
-        aria-label="Search by keywords"
-      />
-      <p class="keyword-help">
-        Format: <code>trait:label</code>, comma-separated values within a trait (OR),
-        space-separated across traits (AND). Case-insensitive. Press Enter to apply.
-      </p>
-    </div>
-  }
-
-  <p class="trait-hint">
-    <em>Within a row: OR (matches any).</em>
-    <em>Across rows: AND (all must match).</em>
-  </p>
-
-  <div class="trait-rows">
-    @for (trait of traits; track trait.key) {
-      <app-chip-row
-        [label]="trait.label"
-        [options]="trait.options"
-        [selected]="selected()[trait.key]"
-        (toggle)="onToggle(trait.key, $event)"
-      />
-    }
-  </div>
-
-  @if (resultsResource.error() && !isBackendUnavailable()) {
-    <p class="search-error" role="alert">
-      Failed to load results.
-      <a (click)="resultsResource.reload()" role="button">Retry</a>
+@if (keywordOpen()) {
+  <div class="mb-3">
+    <input
+      type="text"
+      class="form-control keyword-input"
+      spellcheck="false"
+      autocomplete="off"
+      autocapitalize="off"
+      autocorrect="off"
+      placeholder="eyes:red pose:sleeping background:cyberpunk"
+      [value]="keywordDraft()"
+      (input)="keywordDraft.set($any($event.target).value)"
+      (keydown.enter)="submitKeyword()"
+      (blur)="submitKeyword()"
+      aria-label="Search by keywords"
+    />
+    <p class="mt-1 mb-0 small">
+      Format <code>trait:label</code>. Comma-separates values within a trait (OR);
+      space-separates across traits (AND). Case-insensitive. Press Enter to apply.
     </p>
+  </div>
+}
+
+<div class="trait-rows mb-3">
+  @for (trait of traits; track trait.key) {
+    <app-chip-row
+      [label]="trait.label"
+      [options]="trait.options"
+      [selected]="selected()[trait.key]"
+      (toggle)="onToggle(trait.key, $event)"
+    />
+  }
+</div>
+
+<p class="small mb-3">
+  Within a row: <strong>OR</strong> (matches any).
+  Across rows: <strong>AND</strong> (all must match).
+</p>
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-4">
+  <button
+    type="button"
+    class="btn btn-primary fw-bold"
+    (click)="pickLucky()"
+    [disabled]="luckyLoading() || total() === 0"
+  >Lucky cat</button>
+
+  @if (hasAnyFilter()) {
+    <button
+      type="button"
+      class="btn btn-outline-light fw-bold"
+      (click)="clearAll()"
+    >Clear all</button>
   }
 
-  <app-cat-gallery
-    [catNumbers]="catNumbers()"
-    [emptyMessage]="hasAnyFilter() ? 'No cats match these filters.' : 'No cats yet.'"
-  />
-
-  @if (totalPages() > 1) {
-    <nav class="search-pager" aria-label="Search results pagination">
-      <button
-        type="button"
-        class="pager-btn"
-        (click)="changePage(currentPage() - 1)"
-        [disabled]="currentPage() <= 1"
-        aria-label="Previous page"
-      >‹ prev</button>
-      <span class="pager-position">
-        page {{ currentPage() | number }} of {{ totalPages() | number }}
+  <span class="ms-auto">
+    @if (resultsResource.isLoading()) {
+      <span role="status">
+        <span class="visually-hidden">Loading…</span>
+        Loading…
       </span>
-      <button
-        type="button"
-        class="pager-btn"
-        (click)="changePage(currentPage() + 1)"
-        [disabled]="currentPage() >= totalPages()"
-        aria-label="Next page"
-      >next ›</button>
-    </nav>
-  }
-</section>
+    } @else if (isBackendUnavailable()) {
+      <span role="alert"><strong>Backend unavailable</strong></span>
+    } @else if (total() === 0 && hasAnyFilter()) {
+      <strong>0 cats</strong> — try fewer filters
+    } @else {
+      <strong>{{ total() | number }}</strong> cat{{ total() === 1 ? '' : 's' }}
+    }
+  </span>
+</div>
+
+@if (resultsResource.error() && !isBackendUnavailable()) {
+  <p role="alert">
+    <strong>Failed to load results.</strong>
+    <a (click)="resultsResource.reload()" role="button">Retry</a>
+  </p>
+}
+
+<app-cat-gallery
+  [catNumbers]="catNumbers()"
+  [emptyMessage]="hasAnyFilter() ? 'No cats match these filters.' : 'No cats yet.'"
+/>
+
+@if (totalPages() > 1) {
+  <nav class="clearfix mt-4 mb-4" aria-label="Search results pagination">
+    @if (currentPage() > 1) {
+      <a
+        [routerLink]="['/search', currentPage() - 1]"
+        [queryParamsHandling]="'preserve'"
+        class="btn btn-primary fw-bold float-start"
+      >« prev</a>
+    }
+    <span class="d-block text-center fw-bold pt-2">
+      page {{ currentPage() | number }} of {{ totalPages() | number }}
+    </span>
+    @if (currentPage() < totalPages()) {
+      <a
+        [routerLink]="['/search', currentPage() + 1]"
+        [queryParamsHandling]="'preserve'"
+        class="btn btn-primary fw-bold float-end"
+      >next »</a>
+    }
+  </nav>
+}
