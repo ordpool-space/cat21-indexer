@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { and, eq, inArray, isNull, max, sum } from 'drizzle-orm';
+import { inArray, isNull, max, sum } from 'drizzle-orm';
 import { Cat21ParserService, getCatColorCategory } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
@@ -45,8 +45,10 @@ export class SyncService implements OnModuleInit {
     };
   }
 
-  // Genesis cats are excluded by the WHERE clause and remain NULL on
-  // purpose — getCatColorCategory returns null for them anyway.
+  // Genesis cats included: getCatColorCategory now returns 'black' or
+  // 'white' for them (matching the parser's two hardcoded genesis
+  // palettes). The pre-color-expansion version of this code excluded
+  // genesis because the parser returned null.
   async onModuleInit(): Promise<void> {
     this.backfillDominantColorCategory().catch((e) => {
       this.logger.warn(
@@ -67,7 +69,7 @@ export class SyncService implements OnModuleInit {
           feeRate: cats.feeRate,
         })
         .from(cats)
-        .where(and(isNull(cats.dominantColorCategory), eq(cats.genesis, false)))
+        .where(isNull(cats.dominantColorCategory))
         .limit(BACKFILL_BATCH);
 
       if (rows.length === 0) break;

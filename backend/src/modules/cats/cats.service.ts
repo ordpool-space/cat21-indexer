@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, inArray, max, or, sql, sum, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max, sql, sum, type SQL } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
@@ -23,6 +23,9 @@ export interface SearchFilters {
   category?: string[];
   gender?: string[];
   color?: string[];
+  // 'genesis' / 'normal'. Translated to a boolean equality against cats.genesis.
+  // Selecting both is a no-op (matches every row).
+  genesis?: string[];
 }
 
 const SYNC_STALL_SECONDS = 300;
@@ -374,18 +377,17 @@ export function buildSearchWhere(filters: SearchFilters): SQL | undefined {
   if (filters.gender?.length) clauses.push(inArray(cats.gender, filters.gender));
 
   if (filters.category?.length) {
-    // `genesis` isn't a band — it's a separate boolean column. Split it out
-    // so the band values go through the indexed IN(...) and the genesis
-    // sentinel becomes its own equality clause OR'd alongside.
-    const bandValues = filters.category.filter((c) => c !== 'genesis');
-    const categoryClauses: SQL[] = [];
-    if (bandValues.length > 0) categoryClauses.push(inArray(cats.category, bandValues));
-    if (filters.category.includes('genesis')) categoryClauses.push(eq(cats.genesis, true));
-    if (categoryClauses.length === 1) {
-      clauses.push(categoryClauses[0]);
-    } else if (categoryClauses.length > 1) {
-      clauses.push(or(...categoryClauses)!);
-    }
+    clauses.push(inArray(cats.category, filters.category));
+  }
+
+  // ORIGIN trait: 'genesis' / 'normal' → boolean equality. Both selected
+  // means every cat matches — skip the clause entirely in that case.
+  if (filters.genesis?.length) {
+    const wantsGenesis = filters.genesis.includes('genesis');
+    const wantsNormal  = filters.genesis.includes('normal');
+    if (wantsGenesis && !wantsNormal) clauses.push(eq(cats.genesis, true));
+    else if (wantsNormal && !wantsGenesis) clauses.push(eq(cats.genesis, false));
+    // both → no-op (matches everything)
   }
 
   if (clauses.length === 0) return undefined;

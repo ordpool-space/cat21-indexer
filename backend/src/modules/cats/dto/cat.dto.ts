@@ -19,11 +19,22 @@ const PATTERN_VALUES    = ['Solid', 'Striped', 'Eyepatch', 'Half/Half'] as const
 const BACKGROUND_VALUES = ['Block9', 'Cyberpunk', 'Whitepaper', 'Orange'] as const;
 const CROWN_VALUES      = ['Gold', 'Diamond', 'None'] as const;
 const GLASSES_VALUES    = ['Black', 'Cool', '3D', 'Nouns', 'None'] as const;
-const CATEGORY_VALUES   = ['genesis', 'sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'] as const;
+// Category bands are pinned to the Dune query. Genesis is NOT a category
+// — it's its own boolean trait (the ORIGIN row in the search UI). See
+// ordpool-headquarter CATEGORIES.md for the full narrative.
+const CATEGORY_VALUES   = ['sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'] as const;
 // Title Case matches the parser's emitted strings ('Female' | 'Male'),
 // which is what the DB stores after migration 0003.
 const GENDER_VALUES     = ['Male', 'Female'] as const;
-const COLOR_VALUES      = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink'] as const;
+// Twelve buckets total: eight hue buckets (red/orange/yellow/green/cyan/
+// blue/purple/pink) + the two genesis palettes (black/white) + the two
+// fee-rate easter eggs (fire/saturated). See ordpool-parser
+// cat-color-category.ts for the assignment logic.
+const COLOR_VALUES      = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'black', 'white', 'fire', 'saturated'] as const;
+// ORIGIN trait — separate from category. 'genesis' = the 1-of-1 genesis
+// cat; 'normal' = everything else. Selecting both ORs them (returns
+// everything).
+const GENESIS_VALUES    = ['genesis', 'normal'] as const;
 
 // Build a regex that matches "v1,v2,v3,..." where each value is one of the
 // listed enum members. No nested quantifiers — ReDoS-safe by construction.
@@ -41,6 +52,7 @@ const GLASSES_CSV    = csvOf(GLASSES_VALUES);
 const CATEGORY_CSV   = csvOf(CATEGORY_VALUES);
 const GENDER_CSV     = csvOf(GENDER_VALUES);
 const COLOR_CSV      = csvOf(COLOR_VALUES);
+const GENESIS_CSV    = csvOf(GENESIS_VALUES);
 
 const msg = (name: string, values: readonly string[]) =>
   `${name} must be a comma-separated list of: ${values.join(', ')}`;
@@ -88,9 +100,10 @@ export class CatSearchQueryDto {
 
   // Category bands track the official Dune dashboard query
   // (ordpool/official_dune_dasboard_query.sql): each cat is in exactly one
-  // band — its smallest applicable. `genesis` is a separate boolean trait,
-  // accepted here as a sentinel so the chip UI can keep one row.
-  @ApiPropertyOptional({ description: 'Rarity category: genesis, sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple bands OR-combine.', example: 'sub1k' })
+  // band — its smallest applicable. Multi-select is allowed but
+  // semantically discouraged (categories are collections, not filters);
+  // the UI presents them as tabs, not chips.
+  @ApiPropertyOptional({ description: 'Rarity category: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple bands OR-combine.', example: 'sub1k' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(CATEGORY_CSV, { message: msg('category', CATEGORY_VALUES) })
   category?: string;
@@ -100,10 +113,17 @@ export class CatSearchQueryDto {
   @Matches(GENDER_CSV, { message: msg('gender', GENDER_VALUES) })
   gender?: string;
 
-  @ApiPropertyOptional({ description: 'Dominant body color bucket: red, orange, yellow, green, blue, purple, pink. Genesis cats have no body hue and never match.', example: 'red' })
+  @ApiPropertyOptional({ description: 'Dominant color bucket: red, orange, yellow, green, cyan, blue, purple, pink, black (genesis), white (genesis), fire (feeRate 69 sat/vB), saturated (feeRate 420 sat/vB).', example: 'red' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(COLOR_CSV, { message: msg('color', COLOR_VALUES) })
   color?: string;
+
+  // ORIGIN trait — the genesis flag surfaced as a searchable boolean.
+  // Filter values: 'genesis' (the 1-of-1) or 'normal' (everything else).
+  @ApiPropertyOptional({ description: 'Origin: genesis (the 1-of-1 cat #0) or normal (everything else).', example: 'genesis' })
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(GENESIS_CSV, { message: msg('genesis', GENESIS_VALUES) })
+  genesis?: string;
 }
 
 export class CatDto {

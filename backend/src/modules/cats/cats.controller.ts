@@ -260,6 +260,7 @@ function toSearchFilters(q: CatSearchQueryDto): SearchFilters {
     category:   splitCsv(q.category),
     gender:     splitCsv(q.gender),
     color:      splitCsv(q.color),
+    genesis:    splitCsv(q.genesis),
   };
 }
 

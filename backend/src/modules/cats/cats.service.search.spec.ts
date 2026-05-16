@@ -56,19 +56,23 @@ describe('buildSearchWhere', () => {
       expect(buildSearchWhere({ category: ['sub1M'] })).toBeDefined();
     });
 
-    it('translates the genesis category into a boolean equality clause', () => {
-      expect(buildSearchWhere({ category: ['genesis'] })).toBeDefined();
-    });
-
-    it('combines genesis + category in the same OR group', () => {
-      expect(buildSearchWhere({ category: ['genesis', 'sub1k'] })).toBeDefined();
-    });
-
     it('still returns a SQL clause for unknown category values (they just match nothing)', () => {
-      // 'sub42k' isn't a real band; it gets passed through to IN (...) which
-      // matches zero rows. No need to validate against an allowlist here —
-      // the query is bounded, and user-supplied junk just returns empty.
       expect(buildSearchWhere({ category: ['sub42k'] })).toBeDefined();
+    });
+  });
+
+  describe('genesis (ORIGIN trait)', () => {
+
+    it("translates 'genesis' alone to a boolean equality clause", () => {
+      expect(buildSearchWhere({ genesis: ['genesis'] })).toBeDefined();
+    });
+
+    it("translates 'normal' alone to a boolean equality clause", () => {
+      expect(buildSearchWhere({ genesis: ['normal'] })).toBeDefined();
+    });
+
+    it('returns undefined when both genesis+normal are selected (matches everything)', () => {
+      expect(buildSearchWhere({ genesis: ['genesis', 'normal'] })).toBeUndefined();
     });
   });
 
