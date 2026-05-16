@@ -12,10 +12,13 @@ import { TraitRow } from './trait-row';
 
 // Tuple is [URL value, display label]. URL values are exactly what the
 // parser emits (Title Case for design traits; lowercase for gender,
-// category, color). Labels are what shows on the trait button and what
-// the keyword box accepts.
+// category, color, genesis). Labels are what shows on the trait button
+// and what the keyword box accepts.
+//
+// COLOR has 12 buckets — see ordpool-headquarter CATEGORIES.md. Genesis
+// is an ORIGIN row, NOT a category value (the previous version was a bug).
 const TRAIT_DEFINITIONS = {
-  color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink']] },
+  color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['cyan', 'cyan'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink'], ['black', 'black'], ['white', 'white'], ['fire', 'fire'], ['saturated', 'saturated']] },
   eyes:       { label: 'LASER EYES', options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
   pose:       { label: 'POSE',       options: [['Standing', 'standing'], ['Sleeping', 'sleeping'], ['Pouncing', 'pouncing'], ['Stalking', 'stalking']] },
   expression: { label: 'EXPRESSION', options: [['Smile', 'smile'], ['Grumpy', 'grumpy'], ['Pouting', 'pouting'], ['Shy', 'shy']] },
@@ -23,14 +26,15 @@ const TRAIT_DEFINITIONS = {
   crown:      { label: 'CROWN',      options: [['Gold', 'gold'], ['Diamond', 'diamond'], ['None', 'none']] },
   glasses:    { label: 'GLASSES',    options: [['Black', 'black'], ['Cool', 'cool'], ['3D', '3D'], ['Nouns', 'nouns'], ['None', 'none']] },
   background: { label: 'BACKGROUND', options: [['Block9', 'block9'], ['Cyberpunk', 'cyberpunk'], ['Whitepaper', 'whitepaper'], ['Orange', 'orange']] },
-  category:   { label: 'CATEGORY',   options: [['genesis', 'genesis'], ['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
+  category:   { label: 'CATEGORY',   options: [['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
   gender:     { label: 'GENDER',     options: [['Male', 'male'], ['Female', 'female']] },
+  genesis:    { label: 'ORIGIN',     options: [['genesis', 'genesis cat'], ['normal', 'normal cat']] },
 } as const satisfies Record<string, { label: string; options: readonly (readonly [string, string])[] }>;
 
 type FilterKey = keyof typeof TRAIT_DEFINITIONS;
 
 const FILTER_KEYS: readonly FilterKey[] = [
-  'color', 'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'category', 'gender',
+  'color', 'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'category', 'gender', 'genesis',
 ];
 
 const ITEMS_PER_PAGE = 48;
@@ -69,6 +73,7 @@ export class Search {
   readonly background = input<string>('');
   readonly category   = input<string>('');
   readonly gender     = input<string>('');
+  readonly genesis    = input<string>('');
 
   /** Per-trait selected-value sets, derived from URL inputs. */
   readonly selected = computed<Record<FilterKey, string[]>>(() => ({
@@ -82,6 +87,7 @@ export class Search {
     background: splitCsv(this.background()),
     category:   splitCsv(this.category()),
     gender:     splitCsv(this.gender()),
+    genesis:    splitCsv(this.genesis()),
   }));
 
   /** True when at least one trait is active across any row. */
