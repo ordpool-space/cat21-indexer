@@ -1,9 +1,36 @@
 <h1 class="mt-2">Search</h1>
 
 <p class="mt-2 mb-3">
-  Find a cat by its traits.
-  Pick traits below or use <a (click)="toggleKeyword()" role="button">keyword search</a>.
+  Pick a collection below, then filter by traits inside it.
+  Or use <a (click)="toggleKeyword()" role="button">keyword search</a>.
 </p>
+
+<!-- Category tabs (desktop) — each band is a distinct collection.
+     Mobile falls back to a dropdown via CSS. -->
+<nav class="category-tabs mb-2 d-none d-md-flex flex-wrap" aria-label="Cat category">
+  @for (band of categoryTabs; track band) {
+    <button
+      type="button"
+      class="category-tab"
+      [class.category-tab-active]="band === activeCategory()"
+      [attr.aria-pressed]="band === activeCategory()"
+      (click)="setCategory(band)"
+    >{{ band }}</button>
+  }
+</nav>
+<div class="d-block d-md-none mb-2">
+  <label class="visually-hidden" for="category-select">Cat category</label>
+  <select
+    id="category-select"
+    class="form-select category-select"
+    [value]="activeCategory()"
+    (change)="setCategory($any($event.target).value)"
+  >
+    @for (band of categoryTabs; track band) {
+      <option [value]="band">{{ band }}</option>
+    }
+  </select>
+</div>
 
 @if (keywordOpen()) {
   <div class="mb-3">

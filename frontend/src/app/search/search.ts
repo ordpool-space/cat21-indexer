@@ -37,6 +37,19 @@ const FILTER_KEYS: readonly FilterKey[] = [
   'color', 'eyes', 'pose', 'expression', 'pattern', 'crown', 'glasses', 'background', 'category', 'gender', 'genesis',
 ];
 
+// Category renders as a tab strip (primary scope), not a chip row.
+// Everything else renders as chip rows underneath.
+const CHIP_TRAIT_KEYS: readonly FilterKey[] = FILTER_KEYS.filter((k) => k !== 'category') as FilterKey[];
+
+// Default tab on landing. Per CATEGORIES.md: drop1/sub1k is the most
+// prestigious collection; first-time visitors land there. Holders of
+// higher bands click through.
+const DEFAULT_CATEGORY = 'sub1k';
+
+// Tab list, in declaration order. Same as TRAIT_DEFINITIONS.category.options
+// but extracted here so the template doesn't need to index into the trait map.
+const CATEGORY_TABS = TRAIT_DEFINITIONS.category.options.map(([value]) => value);
+
 const ITEMS_PER_PAGE = 48;
 
 // Precomputed lookup tables: URL value ↔ display label (the second element
@@ -75,28 +88,48 @@ export class Search {
   readonly gender     = input<string>('');
   readonly genesis    = input<string>('');
 
-  /** Per-trait selected-value sets, derived from URL inputs. */
-  readonly selected = computed<Record<FilterKey, string[]>>(() => ({
-    color:      splitCsv(this.color()),
-    eyes:       splitCsv(this.eyes()),
-    pose:       splitCsv(this.pose()),
-    expression: splitCsv(this.expression()),
-    pattern:    splitCsv(this.pattern()),
-    crown:      splitCsv(this.crown()),
-    glasses:    splitCsv(this.glasses()),
-    background: splitCsv(this.background()),
-    category:   splitCsv(this.category()),
-    gender:     splitCsv(this.gender()),
-    genesis:    splitCsv(this.genesis()),
-  }));
+  /**
+   * Per-trait selected-value sets, derived from URL inputs.
+   *
+   * Category is special: it always resolves to exactly one value (the
+   * active tab). If the URL has no category, the default tab is used
+   * — so the backend query is always scoped to one band, never to "all
+   * cats" (no such mode exists by design — see CATEGORIES.md).
+   */
+  readonly selected = computed<Record<FilterKey, string[]>>(() => {
+    const rawCategory = splitCsv(this.category());
+    return {
+      color:      splitCsv(this.color()),
+      eyes:       splitCsv(this.eyes()),
+      pose:       splitCsv(this.pose()),
+      expression: splitCsv(this.expression()),
+      pattern:    splitCsv(this.pattern()),
+      crown:      splitCsv(this.crown()),
+      glasses:    splitCsv(this.glasses()),
+      background: splitCsv(this.background()),
+      category:   rawCategory.length > 0 ? [rawCategory[0]] : [DEFAULT_CATEGORY],
+      gender:     splitCsv(this.gender()),
+      genesis:    splitCsv(this.genesis()),
+    };
+  });
 
-  /** True when at least one trait is active across any row. */
+  /** The active category tab. Always defined; defaults to sub1k. */
+  readonly activeCategory = computed(() => this.selected().category[0]);
+
+  /** Static list of category tab values, in band order. */
+  readonly categoryTabs = CATEGORY_TABS;
+
+  /**
+   * True when at least one non-category trait is active. Used to show
+   * the "clear all" affordance — clearing doesn't change the active
+   * tab, only the chip selections inside it.
+   */
   readonly hasAnyFilter = computed(() =>
-    Object.values(this.selected()).some((arr) => arr.length > 0),
+    CHIP_TRAIT_KEYS.some((key) => this.selected()[key].length > 0),
   );
 
-  /** Static trait list for the template. */
-  readonly traits = FILTER_KEYS.map((key) => ({ key, ...TRAIT_DEFINITIONS[key] }));
+  /** Chip rows rendered in the grid (everything except category). */
+  readonly traits = CHIP_TRAIT_KEYS.map((key) => ({ key, ...TRAIT_DEFINITIONS[key] }));
 
   readonly keywordOpen = signal(false);
 
@@ -143,6 +176,13 @@ export class Search {
     this.navigateWithSelected({ ...this.selected(), [key]: next }, 1);
   }
 
+  /** Switch the active category tab. Other chip selections survive
+   *  the switch — a user with `color=red` flipping from sub1k → sub10k
+   *  sees the red cats from the new band. */
+  setCategory(value: string): void {
+    this.navigateWithSelected({ ...this.selected(), category: [value] }, 1);
+  }
+
   toggleKeyword(): void {
     this.keywordOpen.update((v) => !v);
   }
@@ -173,14 +213,24 @@ export class Search {
       });
   }
 
+  /** Clear all chip selections; the active category tab is preserved.
+   *  Clearing "all" means clearing your filters inside the current
+   *  collection, not jumping to a different collection. */
   clearAll(): void {
-    this.navigateWithSelected(emptySelected(), 1);
+    const empty = emptySelected();
+    empty.category = this.selected().category;
+    this.navigateWithSelected(empty, 1);
   }
 
   private navigateWithSelected(sel: Record<FilterKey, string[]>, page: number): void {
     const queryParams: Record<string, string | null> = {};
     for (const key of FILTER_KEYS) {
-      queryParams[key] = sel[key].length > 0 ? sel[key].join(',') : null;
+      const vals = sel[key];
+      // Category is structurally single-valued. If the user (or the
+      // keyword parser) handed us multiple, take the first so the URL
+      // stays in sync with what the tab UI shows.
+      const effective = key === 'category' ? vals.slice(0, 1) : vals;
+      queryParams[key] = effective.length > 0 ? effective.join(',') : null;
     }
     void this.router.navigate(['/search', page], { queryParams });
   }
