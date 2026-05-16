@@ -36,3 +36,10 @@ a:hover {
 a.btn {
   text-decoration: none;
 }
+
+// ngbTooltip body content. Bootstrap's default centers it, which
+// reads awkwardly for multi-line tooltips (lists of ranges, prose
+// paragraphs). Left-align everywhere.
+.tooltip-inner {
+  text-align: left;
+}
