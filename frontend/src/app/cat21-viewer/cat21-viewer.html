@@ -77,9 +77,19 @@
               </tr>
               @if (cat.category) {
                 <tr>
-                  <td><b ngbTooltip="The rarity band this cat lives in. Each cat is in exactly one band — the smallest applicable (cat 500 → sub1k, cat 5000 → sub10k). 'sub10k' means cats numbered 1 000–9 999, not every cat under 10 000. Bands don't overlap — they're distinct collections.">i</b>Category</td>
+                  <td><b [ngbTooltip]="categoryTooltip">i</b>Category</td>
                   <td>{{ cat.category }}</td>
                 </tr>
+                <ng-template #categoryTooltip>
+                  Each cat is in exactly one band — its smallest applicable.<br><br>
+                  sub1k: cat 0 to cat 999<br>
+                  sub10k: cat 1 000 to cat 9 999<br>
+                  sub50k: cat 10 000 to cat 49 999<br>
+                  sub100k: cat 50 000 to cat 99 999<br>
+                  sub250k: cat 100 000 to cat 249 999<br>
+                  sub500k: cat 250 000 to cat 499 999<br>
+                  sub1M: cat 500 000 to cat 999 999
+                </ng-template>
               }
               <tr>
                 <td colspan="2">
