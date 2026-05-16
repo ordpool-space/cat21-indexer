@@ -239,7 +239,7 @@ export class CatDto {
   rarityBits!: number | null;
 
   @ApiPropertyOptional({
-    description: '1-based rarity rank within this cat\'s category. Tied scores share a rank with classic 1-2-2-4 ordering.',
+    description: '1-based rarity rank within this cat\'s category. Strict total order — when two cats roll the same scored trait combination, the lower cat number wins the tie.',
     example: 17,
   })
   rarityRank!: number | null;

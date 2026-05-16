@@ -332,7 +332,13 @@ export class SyncService implements OnModuleInit {
       },
     }));
 
-    const ranked = scoreAndRank(tokens);
+    // Strict total order via the `lower catNumber wins` tiebreaker.
+    // Two cats can roll the same scored-trait combination (the trait
+    // surface is finite), so without a tiebreaker their identical
+    // scores would share a rank. The genesis cat holder's rule: in
+    // a tie, the older cat is rarer. See
+    // ordpool-parser/CAT21-RARITY-SCORE.md → Tiebreaker.
+    const ranked = scoreAndRank(tokens, { tiebreaker: (a, b) => a - b });
 
     // === The Genesis Cat Bonus ===
     //

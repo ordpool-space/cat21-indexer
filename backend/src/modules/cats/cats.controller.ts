@@ -27,15 +27,45 @@ import { CatsService, type SearchFilters } from './cats.service';
 import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Used for cat IMAGES (SVG/WebP) — the rendered art is truly
-// immutable, so a year-long edge cache is fine.
+// immutable, so a year-long edge cache is fine. Also used for cat
+// detail responses whose category is fully-minted (closed) — at
+// that point rarity is frozen and the whole row stops changing.
 const IMMUTABLE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable';
 
-// Used for cat DETAIL JSON responses. NOT immutable — the rarity
-// fields (rarityRank/rarityBits/rarityCategoryTotal) get recomputed
-// whenever a new cat mints into an open category. Short edge cache
-// lets traffic bursts get absorbed but rarity updates propagate
-// within minutes.
+// Used for cat DETAIL JSON responses whose category is still open.
+// The rarity fields (rarityRank/rarityBits/rarityCategoryTotal) shift
+// each time a new cat mints into the same category. Short edge cache
+// absorbs traffic bursts; rarity updates propagate within minutes.
 const CAT_DETAIL_CACHE_CONTROL = 'public, max-age=60, s-maxage=300';
+
+// Full population per category, as defined in
+// ordpool-parser/CAT21-RARITY-SCORE.md. A category is "closed" when
+// its current row count equals this max.
+const CATEGORY_FULL_SIZE: Record<string, number> = {
+  sub1k:   1000,
+  sub10k:  9000,
+  sub50k:  40000,
+  sub100k: 50000,
+  sub250k: 150000,
+  sub500k: 250000,
+  sub1M:   500000,
+};
+
+/**
+ * Pick the right Cache-Control for a cat detail response. Cats whose
+ * category is closed AND whose rarity has been computed are fully
+ * frozen — immutable. Everything else gets the short TTL so rarity
+ * updates can propagate.
+ */
+function cacheControlFor(cat: CatDto): string {
+  const max = CATEGORY_FULL_SIZE[cat.category];
+  const closed =
+    cat.rarityRank !== null &&
+    cat.rarityCategoryTotal !== null &&
+    max !== undefined &&
+    cat.rarityCategoryTotal >= max;
+  return closed ? IMMUTABLE_CACHE_CONTROL : CAT_DETAIL_CACHE_CONTROL;
+}
 
 @ApiTags('api')
 @Controller('api')
@@ -83,7 +113,7 @@ export class CatsController {
       reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Cat #${catNumber} not found`);
     }
-    reply.header('Cache-Control', CAT_DETAIL_CACHE_CONTROL);
+    reply.header('Cache-Control', cacheControlFor(cat));
     return cat;
   }
 
@@ -105,7 +135,7 @@ export class CatsController {
       reply.header('Cache-Control', 'no-store');
       throw new NotFoundException(`Cat with tx ${txHash} not found`);
     }
-    reply.header('Cache-Control', CAT_DETAIL_CACHE_CONTROL);
+    reply.header('Cache-Control', cacheControlFor(cat));
     return cat;
   }
 

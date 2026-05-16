@@ -130,8 +130,9 @@ export interface CatDto {
      */
     rarityBits: number | null;
     /**
-     * 1-based rarity rank within this cat's category. Tied scores
-     * share a rank with classic 1-2-2-4 ordering. Null while backfill runs.
+     * 1-based rarity rank within this cat's category. Strict total
+     * order — when two cats roll the same scored trait combination,
+     * the lower cat number wins the tie. Null while backfill runs.
      */
     rarityRank: number | null;
     /**
