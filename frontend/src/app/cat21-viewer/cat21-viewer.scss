@@ -11,32 +11,6 @@
   background: url("/placeholder-cat.svg") center / cover no-repeat;
 }
 
-// Bootstrap's .table-borderless zeros border-bottom-width on every
-// cell at the same specificity as anything we'd write naturally,
-// and its rule loads after our component CSS in some build paths.
-// Use !important to force the override — exceptional but warranted
-// for a framework default we're explicitly fighting.
-table.table {
-  tr td {
-    padding: 0.45rem 0;
-    vertical-align: top;
-    // Thin separator between rows so labels and values stay visually
-    // tied to their own row even when the right-hand column wraps.
-    border-bottom: 1px solid rgba(0, 0, 0, 0.35) !important;
-  }
-
-  // Drop the separator on the last row to avoid a trailing line.
-  tr:last-child td {
-    border-bottom: none !important;
-  }
-
-  // The "Traits" sub-header row spans both columns; the separator
-  // there would draw a heavy line through nothing useful.
-  tr td[colspan="2"] {
-    border-bottom: none !important;
-  }
-}
-
 b {
   display: inline-block;
   padding: 1px;
