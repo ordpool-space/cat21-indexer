@@ -18,10 +18,16 @@
   border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-// Category scope strip — visually heavier than chip rows because picking
-// a band is structurally bigger than toggling a trait.
+// Pixelated browser-tab look. The tabs share a 2px white rail at the
+// bottom (the parent's border-bottom). Adjacent tabs overlap their
+// side borders with margin-left: -2px so we don't get a 4px double-
+// line between them. The active tab's bottom border is set to its own
+// fill colour, which masks the white rail beneath and makes the tab
+// look attached to the panel below.
 .category-tabs {
-  gap: 0.4rem;
+  gap: 0;
+  border-bottom: 2px solid white;
+  margin-bottom: 1rem;
 }
 
 .category-tab {
@@ -29,19 +35,28 @@
   padding: 0.4rem 0.9rem;
   background: transparent;
   border: 2px solid white;
+  margin-bottom: -2px;
+  margin-left: -2px;
   color: white;
   font-family: "Public Pixel", sans-serif;
   font-size: 0.85rem;
   cursor: pointer;
   border-radius: 0;
   image-rendering: pixelated;
+  position: relative;
+
+  &:first-child { margin-left: 0; }
 
   &:hover { background: rgba(0, 0, 0, 0.15); }
+
   &.category-tab-active {
     background: #000;
     color: #FF9900;
-    border-color: #000;
+    font-weight: bold;
+    border-bottom-color: #000;
+    z-index: 1;
   }
+
   &:focus-visible { outline: 2px solid #000; outline-offset: 2px; }
 }
 
