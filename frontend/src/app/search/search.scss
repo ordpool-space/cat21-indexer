@@ -18,12 +18,9 @@
   border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-// Tab strip + content panel share a deep coffee colour. The active tab
-// fills with the panel colour and drops its bottom border into the
-// panel, so the eye reads "this tab and the panel below are one
-// connected surface". Inactive tabs stay outlined-only — clearly above
-// the panel surface. The size jump (active tab is taller) and the
-// shared colour together are what makes this read as tabs.
+// Active tab and the trait-rows panel below it share this colour, so
+// the active tab visually merges into the panel. Inactive tabs stay
+// outlined on the page background.
 $panel-color: #6B6B6B;
 
 .category-tabs {
@@ -67,8 +64,6 @@ $panel-color: #6B6B6B;
 .trait-rows {
   background: $panel-color;
   padding: 1rem;
-  position: relative;
-  z-index: 0;
 }
 
 .category-select {
