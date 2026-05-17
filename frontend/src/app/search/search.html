@@ -2,8 +2,7 @@
 
 <p class="mt-2 mb-3">
   Pick a collection below, then filter by traits inside it.
-  Or use <a (click)="toggleKeyword()" role="button" class="keyword-search-link">keyword search</a>
-  for complex queries — try <code>color:fire,saturated eyes:red crown:gold</code>.
+  Or use <a (click)="toggleKeyword()" role="button" class="keyword-search-link">keyword search</a>.
 </p>
 
 <!-- Category tabs (desktop) — each band is a distinct collection.
@@ -52,6 +51,8 @@
     <p class="mt-1 mb-0 small">
       Format <code>trait:label</code>. Comma-separates values within a trait (OR);
       space-separates across traits (AND). Case-insensitive. Press Enter to apply.
+      <br>
+      Try: <code>color:fire,saturated eyes:red crown:gold</code>
     </p>
   </div>
 }
