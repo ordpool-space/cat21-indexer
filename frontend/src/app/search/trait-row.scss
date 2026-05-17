@@ -1,18 +1,6 @@
-// Each app-trait-row host stacks vertically inside .trait-rows. A top
-// border on every row except the first draws the separator without
-// leaving a trailing line against the container's bottom edge.
-:host {
-  display: block;
-}
-
-:host + :host .trait-row {
-  border-top: 2px solid white;
-  padding-top: 0.5rem;
-}
-
 .trait-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }

@@ -4,6 +4,15 @@
   border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
+.trait-rows app-trait-row {
+  display: block;
+}
+
+.trait-rows app-trait-row:not(:first-child) {
+  border-top: 2px solid white;
+  padding-top: 0.5rem;
+}
+
 .keyword-search-link {
   text-decoration: underline;
   cursor: pointer;
