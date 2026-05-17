@@ -18,25 +18,27 @@
   border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-// Pixelated browser-tab look. The tabs share a 2px white rail at the
-// bottom (the parent's border-bottom). Adjacent tabs overlap their
-// side borders with margin-left: -2px so we don't get a 4px double-
-// line between them. The active tab's bottom border is set to its own
-// fill colour, which masks the white rail beneath and makes the tab
-// look attached to the panel below.
+// Pixelated tab strip. A 4px white shelf at the bottom of the row reads
+// as the top edge of a content panel. Inactive tabs sit flush against
+// the shelf, smaller and lighter. The active tab is taller (more vertical
+// padding), pops above the inactive row, and its bottom border is set to
+// its own fill colour so it punches through the shelf — the size jump
+// plus the broken shelf line is what sells it as a tab.
 .category-tabs {
   gap: 0;
-  border-bottom: 2px solid white;
+  border-bottom: 4px solid white;
   margin-bottom: 1rem;
+  align-items: flex-end;
 }
 
 .category-tab {
   flex: 0 0 auto;
-  padding: 0.4rem 0.9rem;
+  padding: 0.3rem 0.9rem;
   background: transparent;
   border: 2px solid white;
-  margin-bottom: -2px;
+  border-bottom-width: 4px;
   margin-left: -2px;
+  margin-bottom: -4px;
   color: white;
   font-family: "Public Pixel", sans-serif;
   font-size: 0.85rem;
@@ -53,6 +55,8 @@
     background: #000;
     color: #FF9900;
     font-weight: bold;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
     border-bottom-color: #000;
     z-index: 1;
   }
