@@ -4,6 +4,11 @@
   border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
+.keyword-search-link {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .keyword-input {
   font-family: "Public Pixel", monospace;
   border-radius: 0;

@@ -13,8 +13,22 @@
 
 table {
   tr td {
-    padding: 0.1rem 0;
+    padding: 0.45rem 0;
     vertical-align: top;
+    // Thin separator between rows so labels and values stay visually
+    // tied to their own row even when the right-hand column wraps.
+    border-bottom: 1px solid rgba(0, 0, 0, 0.18);
+  }
+
+  // Drop the separator on the last row to avoid a trailing line.
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  // The "Traits" sub-header row spans both columns; the separator
+  // there would draw a heavy line through nothing useful.
+  tr td[colspan="2"] {
+    border-bottom: none;
   }
 }
 
