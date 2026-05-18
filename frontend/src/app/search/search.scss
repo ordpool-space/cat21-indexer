@@ -53,8 +53,8 @@ $panel-color: #6B6B6B;
     font-weight: bold;
     padding-top: 0.55rem;
     padding-bottom: 0.55rem;
-    border-bottom-color: $panel-color;
-    margin-bottom: -2px;
+    border-bottom: 4px solid $panel-color;
+    margin-bottom: -4px;
     z-index: 1;
   }
 
@@ -86,8 +86,8 @@ $panel-color: #6B6B6B;
   background-color: $panel-color;
   color: white;
   border: 2px solid white;
-  border-bottom-color: $panel-color;
-  margin-bottom: -2px;
+  border-bottom: 4px solid $panel-color;
+  margin-bottom: -4px;
   padding: 0.55rem 2.25rem 0.55rem 0.9rem;
   position: relative;
   z-index: 1;
