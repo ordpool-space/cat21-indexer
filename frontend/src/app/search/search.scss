@@ -69,10 +69,14 @@ $panel-color: #6B6B6B;
 // Mobile picker styled to match the desktop active tab — gray fill,
 // white border on three sides, bottom border merges into the panel
 // below. Width is auto so orange page bg shows next to the dropdown.
+// Bootstrap's .form-select class is intentionally NOT applied — its
+// CSS-variable based background-image setup conflicts with overrides
+// and let the native select arrow leak through on Android.
 .category-select {
   font-family: "Public Pixel", sans-serif;
   font-size: 0.85rem;
   font-weight: bold;
+  line-height: 1.2;
   border-radius: 0;
   width: auto;
   background-color: $panel-color;
@@ -83,7 +87,17 @@ $panel-color: #6B6B6B;
   padding: 0.55rem 2.25rem 0.55rem 0.9rem;
   position: relative;
   z-index: 1;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='white' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 14px 14px;
 
-  option { color: black; }
+  option {
+    color: black;
+    background: white;
+  }
 }
