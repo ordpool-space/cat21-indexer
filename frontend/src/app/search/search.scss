@@ -66,19 +66,24 @@ $panel-color: #6B6B6B;
   padding: 1rem;
 }
 
-// Mobile-only category picker. Shares the panel colour so it sits
-// flush against the trait-rows below as one continuous gray strip.
-.category-select-mobile {
-  background: $panel-color;
-  padding: 0.75rem;
-}
-
+// Mobile picker styled to match the desktop active tab — gray fill,
+// white border on three sides, bottom border merges into the panel
+// below. Width is auto so orange page bg shows next to the dropdown.
 .category-select {
   font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  font-weight: bold;
   border-radius: 0;
-  border: 2px solid white;
-  background: transparent;
+  width: auto;
+  background-color: $panel-color;
   color: white;
+  border: 2px solid white;
+  border-bottom-color: $panel-color;
+  margin-bottom: -2px;
+  padding: 0.55rem 2.25rem 0.55rem 0.9rem;
+  position: relative;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
 
   option { color: black; }
 }
