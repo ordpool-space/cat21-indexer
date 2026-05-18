@@ -26,11 +26,12 @@ const CATEGORY_VALUES   = ['sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 's
 // Title Case matches the parser's emitted strings ('Female' | 'Male'),
 // which is what the DB stores after migration 0003.
 const GENDER_VALUES     = ['Male', 'Female'] as const;
-// Twelve buckets total: eight hue buckets (red/orange/yellow/green/cyan/
-// blue/purple/pink) + the two genesis palettes (black/white) + the two
-// fee-rate easter eggs (fire/saturated). See ordpool-parser
-// cat-color-category.ts for the assignment logic.
-const COLOR_VALUES      = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'black', 'white', 'fire', 'saturated'] as const;
+// Eleven buckets total: seven hue buckets (red/orange/yellow/green/blue/
+// purple/pink) + the two genesis palettes (black/white) + the two
+// fee-rate easter eggs (fire/saturated). No `cyan` — feeRateToColor
+// never produces a teal hue. See ordpool-parser cat-color-category.ts
+// for the assignment logic.
+const COLOR_VALUES      = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'black', 'white', 'fire', 'saturated'] as const;
 // ORIGIN trait — separate from category. 'genesis' = the 1-of-1 genesis
 // cat; 'normal' = everything else. Selecting both ORs them (returns
 // everything).
@@ -119,7 +120,7 @@ export class CatSearchQueryDto {
   @Matches(GENDER_CSV, { message: msg('gender', GENDER_VALUES) })
   gender?: string;
 
-  @ApiPropertyOptional({ description: 'Dominant color bucket: red, orange, yellow, green, cyan, blue, purple, pink, black (genesis), white (genesis), fire (feeRate 69 sat/vB), saturated (feeRate 420 sat/vB).', example: 'red' })
+  @ApiPropertyOptional({ description: 'Dominant color bucket: red, orange, yellow, green, blue, purple, pink, black (genesis), white (genesis), fire (feeRate 69 sat/vB), saturated (feeRate 420 sat/vB).', example: 'red' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(COLOR_CSV, { message: msg('color', COLOR_VALUES) })
   color?: string;

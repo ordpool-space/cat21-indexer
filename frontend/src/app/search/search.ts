@@ -15,12 +15,9 @@ import { TraitRow } from './trait-row';
 // category, color, genesis). Labels are what shows on the trait button
 // and what the keyword box accepts.
 //
-// COLOR has 12 parser buckets — see ordpool-parser/CAT21-RARITY-SCORE.md.
-// `cyan` (hue 165-195°) is a valid bucket the parser knows about, but no
-// real cat falls there: feeRateToColor sweeps green → yellow → orange →
-// red → blue and never touches the teal range. Omitted from the UI so
-// users don't see a chip that can never match. Genesis is an ORIGIN row,
-// NOT a category value (the previous version was a bug).
+// COLOR has 11 parser buckets — see ordpool-parser/CAT21-RARITY-SCORE.md.
+// Genesis is an ORIGIN row, NOT a category value (the previous version
+// was a bug).
 const TRAIT_DEFINITIONS = {
   color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink'], ['black', 'black'], ['white', 'white'], ['fire', 'fire'], ['saturated', 'saturated']] },
   eyes:       { label: 'LASER EYES', options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
