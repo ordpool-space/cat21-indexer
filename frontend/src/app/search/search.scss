@@ -66,6 +66,13 @@ $panel-color: #6B6B6B;
   padding: 1rem;
 }
 
+// Mobile-only category picker. Shares the panel colour so it sits
+// flush against the trait-rows below as one continuous gray strip.
+.category-select-mobile {
+  background: $panel-color;
+  padding: 0.75rem;
+}
+
 .category-select {
   font-family: "Public Pixel", sans-serif;
   border-radius: 0;

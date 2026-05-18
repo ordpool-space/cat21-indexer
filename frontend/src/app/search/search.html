@@ -7,7 +7,7 @@
 
 <!-- Category tabs (desktop) — each band is a distinct collection.
      Mobile falls back to a dropdown via CSS. -->
-<nav class="category-tabs mb-2 d-none d-md-flex flex-wrap" aria-label="Cat category">
+<nav class="category-tabs d-none d-md-flex flex-wrap" aria-label="Cat category">
   @for (band of categoryTabs; track band) {
     <button
       type="button"
@@ -18,7 +18,7 @@
     >{{ band }}</button>
   }
 </nav>
-<div class="d-block d-md-none mb-2">
+<div class="category-select-mobile d-block d-md-none">
   <label class="visually-hidden" for="category-select">Cat category</label>
   <select
     id="category-select"
