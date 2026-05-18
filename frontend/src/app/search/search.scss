@@ -64,6 +64,10 @@ $panel-color: #6B6B6B;
 .trait-rows {
   background: $panel-color;
   padding: 1rem;
+  // Active tab / mobile picker have border-bottom-color: $panel-color
+  // and margin-bottom: -2px, so where they sit they mask this top
+  // border — the white outline reads as continuous with the tab.
+  border: 2px solid white;
 }
 
 // Mobile picker styled to match the desktop active tab — gray fill,
