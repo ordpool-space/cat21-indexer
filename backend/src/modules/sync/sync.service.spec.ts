@@ -1,8 +1,12 @@
 import { deriveCategory, SyncService } from './sync.service';
 
 describe('deriveCategory', () => {
-  it('should return sub1k for cats 0-999', () => {
-    expect(deriveCategory(0)).toBe('sub1k');
+  it('should return sub1 for the Genesis Cat (cat #0) only', () => {
+    expect(deriveCategory(0)).toBe('sub1');
+  });
+
+  it('should return sub1k for cats 1-999', () => {
+    expect(deriveCategory(1)).toBe('sub1k');
     expect(deriveCategory(999)).toBe('sub1k');
   });
 

@@ -10,6 +10,7 @@ import { OrdCatDetail, OrdClientService } from './ord-client.service';
 const BATCH_SIZE = 50;
 
 export function deriveCategory(catNumber: number): string {
+  if (catNumber < 1) return 'sub1';
   if (catNumber < 1000) return 'sub1k';
   if (catNumber < 10000) return 'sub10k';
   if (catNumber < 50000) return 'sub50k';
@@ -285,7 +286,7 @@ export class SyncService implements OnModuleInit {
    * anyway, so this is defense in depth).
    */
   private async recomputeRarityForAllCategories(): Promise<void> {
-    const CATEGORIES = ['sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'];
+    const CATEGORIES = ['sub1', 'sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'];
     for (const category of CATEGORIES) {
       await this.recomputeRarityForCategory(category);
     }
@@ -339,21 +340,6 @@ export class SyncService implements OnModuleInit {
     // a tie, the older cat is rarer. See
     // ordpool-parser/CAT21-RARITY-SCORE.md → Tiebreaker.
     const ranked = scoreAndRank(tokens, { tiebreaker: (a, b) => a - b });
-
-    // === The Genesis Cat Bonus ===
-    //
-    // Cat #0 is rank 1 in sub1k. Always. The genesis cat holder has
-    // spoken — this is law, not math. `rarityBits` stays honest; only
-    // the rank label is pinned. See ordpool-parser/CAT21-RARITY-SCORE.md
-    // for the full narrative. Limited to sub1k by definition.
-    if (category === 'sub1k') {
-      const i = ranked.findIndex((r) => r.id === 0);
-      if (i > 0) {
-        const cat0 = ranked.splice(i, 1)[0];
-        ranked.unshift(cat0);
-        ranked.forEach((r, n) => { r.rank = n + 1; });
-      }
-    }
 
     // Sequential UPDATEs. Acceptable on a single-instance backend with
     // current category sizes; the largest open category is sub250k

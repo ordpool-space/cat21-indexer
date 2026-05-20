@@ -43,6 +43,13 @@
       "when": 1779897600000,
       "tag": "0005_add_rarity_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1779984000000,
+      "tag": "0006_genesis_cat_to_sub1",
+      "breakpoints": true
     }
   ]
 }

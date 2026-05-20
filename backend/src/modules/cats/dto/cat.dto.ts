@@ -19,10 +19,12 @@ const PATTERN_VALUES    = ['Solid', 'Striped', 'Eyepatch', 'Half/Half'] as const
 const BACKGROUND_VALUES = ['Block9', 'Cyberpunk', 'Whitepaper', 'Orange'] as const;
 const CROWN_VALUES      = ['Gold', 'Diamond', 'None'] as const;
 const GLASSES_VALUES    = ['Black', 'Cool', '3D', 'Nouns', 'None'] as const;
-// Category bands are pinned to the Dune query. Genesis is NOT a category
-// — it's its own boolean trait (the ORIGIN row in the search UI). See
+// Category bands are mutually exclusive collections, smallest-first.
+// `sub1` is the Genesis Cat's one-cat collection (cat #0 only); the
+// `genesis: true` boolean trait is separate (it fires for ~0.4% of
+// cats — the visual genesis-palette variant — not just cat #0). See
 // ordpool-parser/CAT21-RARITY-SCORE.md for the full narrative.
-const CATEGORY_VALUES   = ['sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'] as const;
+const CATEGORY_VALUES   = ['sub1', 'sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'] as const;
 // Title Case matches the parser's emitted strings ('Female' | 'Male'),
 // which is what the DB stores after migration 0003.
 const GENDER_VALUES     = ['Male', 'Female'] as const;
@@ -110,7 +112,7 @@ export class CatSearchQueryDto {
   // category — its smallest applicable. Multi-select is allowed but
   // semantically discouraged (categories are collections, not filters);
   // the UI presents them as tabs, not chips.
-  @ApiPropertyOptional({ description: 'Rarity category: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple categories OR-combine.', example: 'sub1k' })
+  @ApiPropertyOptional({ description: 'Rarity category: sub1 (Genesis Cat only), sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple categories OR-combine.', example: 'sub1k' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(CATEGORY_CSV, { message: msg('category', CATEGORY_VALUES) })
   category?: string;
@@ -182,7 +184,7 @@ export class CatDto {
   @ApiProperty({ description: 'Value of the first output of the mint transaction (Unit: sats)', example: 546 })
   value!: number;
 
-  @ApiProperty({ description: 'Category based on cat number: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M, or empty', example: 'sub1k' })
+  @ApiProperty({ description: 'Category based on cat number: sub1 (Genesis Cat only), sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M, or empty', example: 'sub1k' })
   category!: string;
 
   @ApiProperty({ description: 'Whether this is a genesis cat (white or black, probability 0.4%)', example: true })
@@ -246,8 +248,8 @@ export class CatDto {
   rarityRank!: number | null;
 
   @ApiPropertyOptional({
-    description: 'Total cats currently in this cat\'s category. For closed categories (sub1k, sub10k, etc.) this is the fixed drop size. For open categories it grows with each new mint. Pairs with rarityRank to read as "rank N of M".',
-    example: 1000,
+    description: 'Total cats currently in this cat\'s category. For closed categories (sub1, sub1k, sub10k, etc.) this is the fixed drop size — `sub1` has size 1 (Genesis Cat only). For open categories it grows with each new mint. Pairs with rarityRank to read as "rank N of M".',
+    example: 999,
   })
   rarityCategoryTotal!: number | null;
 }

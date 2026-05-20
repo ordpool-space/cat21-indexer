@@ -27,7 +27,7 @@ const TRAIT_DEFINITIONS = {
   crown:      { label: 'CROWN',      options: [['Gold', 'gold'], ['Diamond', 'diamond'], ['None', 'none']] },
   glasses:    { label: 'GLASSES',    options: [['Black', 'black'], ['Cool', 'cool'], ['3D', '3D'], ['Nouns', 'nouns'], ['None', 'none']] },
   background: { label: 'BACKGROUND', options: [['Block9', 'block9'], ['Cyberpunk', 'cyberpunk'], ['Whitepaper', 'whitepaper'], ['Orange', 'orange']] },
-  category:   { label: 'CATEGORY',   options: [['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
+  category:   { label: 'CATEGORY',   options: [['sub1', 'sub1'], ['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
   gender:     { label: 'GENDER',     options: [['Male', 'male'], ['Female', 'female']] },
   genesis:    { label: 'ORIGIN',     options: [['genesis', 'genesis cat'], ['normal', 'normal cat']] },
   rarity:     { label: 'RARITY',     options: [['top10', 'top 10'], ['top100', 'top 100'], ['top1k', 'top 1k']] },

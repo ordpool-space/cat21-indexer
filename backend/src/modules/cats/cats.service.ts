@@ -376,9 +376,9 @@ export class CatsService {
 
 /**
  * How many cats are currently in this category. Closed categories
- * return their fixed drop size (sub1k = 1000, etc.); open categories
- * return how many have minted so far. Pairs with `rarityRank` so the
- * detail page can render "rank N of M".
+ * return their fixed drop size (sub1 = 1, sub1k = 999, etc.); open
+ * categories return how many have minted so far. Pairs with
+ * `rarityRank` so the detail page can render "rank N of M".
  *
  * Computed purely from the category name + the latest synced cat
  * number — no extra DB query needed.
@@ -386,7 +386,8 @@ export class CatsService {
 function categoryPopulation(category: string, lastSynced: number): number | null {
   // [minCatNumber, maxCatNumber inclusive, dropSize]
   const RANGES: Record<string, [number, number, number]> = {
-    sub1k:   [0,       999,     1000],
+    sub1:    [0,       0,       1],
+    sub1k:   [1,       999,     999],
     sub10k:  [1000,    9999,    9000],
     sub50k:  [10000,   49999,   40000],
     sub100k: [50000,   99999,   50000],

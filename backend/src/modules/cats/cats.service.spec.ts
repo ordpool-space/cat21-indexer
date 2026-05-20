@@ -226,8 +226,8 @@ describe('CatsService', () => {
       });
       const cache = new CacheService();
       // Seed lastSyncedCatNumber so categoryPopulation computes the
-      // closed-state value (1000) for sub1k. Without this, an empty
-      // cache returns 0.
+      // closed-state value for sub1 (drop size = 1, since cat #0 is
+      // already synced). Without this, an empty cache returns 0.
       cache.setTotals(63749, 63748);
       const service = new CatsService(drizzle as any, cache, createMockSync() as any);
 
