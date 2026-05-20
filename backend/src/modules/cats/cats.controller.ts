@@ -42,7 +42,8 @@ const CAT_DETAIL_CACHE_CONTROL = 'public, max-age=60, s-maxage=300';
 // ordpool-parser/CAT21-RARITY-SCORE.md. A category is "closed" when
 // its current row count equals this max.
 const CATEGORY_FULL_SIZE: Record<string, number> = {
-  sub1k:   1000,
+  sub1:    1,       // Genesis Cat only — closed since the protocol's first mint.
+  sub1k:   999,     // cats 1..999 (cat #0 lives in sub1)
   sub10k:  9000,
   sub50k:  40000,
   sub100k: 50000,
