@@ -3,23 +3,16 @@ import { Interval } from '@nestjs/schedule';
 import { eq, inArray, isNull, max, sum } from 'drizzle-orm';
 import { Cat21ParserService, getCatColorCategory, RarityToken, scoreAndRank } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
+import { CATEGORIES, deriveCategory } from '../shared/categories';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { OrdCatDetail, OrdClientService } from './ord-client.service';
 
 const BATCH_SIZE = 50;
 
-export function deriveCategory(catNumber: number): string {
-  if (catNumber < 1) return 'sub1';
-  if (catNumber < 1000) return 'sub1k';
-  if (catNumber < 10000) return 'sub10k';
-  if (catNumber < 50000) return 'sub50k';
-  if (catNumber < 100000) return 'sub100k';
-  if (catNumber < 250000) return 'sub250k';
-  if (catNumber < 500000) return 'sub500k';
-  if (catNumber < 1000000) return 'sub1M';
-  return '';
-}
+// Re-export so consumers that previously imported deriveCategory from
+// here (e.g. the spec file) keep working without churn.
+export { deriveCategory };
 
 @Injectable()
 export class SyncService implements OnModuleInit {
@@ -286,7 +279,6 @@ export class SyncService implements OnModuleInit {
    * anyway, so this is defense in depth).
    */
   private async recomputeRarityForAllCategories(): Promise<void> {
-    const CATEGORIES = ['sub1', 'sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'];
     for (const category of CATEGORIES) {
       await this.recomputeRarityForCategory(category);
     }

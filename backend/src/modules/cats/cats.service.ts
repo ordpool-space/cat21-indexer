@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { and, count, desc, eq, inArray, lte, max, sql, sum, type SQL } from 'drizzle-orm';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
+import { CATEGORY_RANGES } from '../shared/categories';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { SyncService } from '../sync/sync.service';
@@ -373,20 +374,6 @@ export class CatsService {
     };
   }
 }
-
-// Canonical category ranges, as defined in ordpool-parser/CAT21-RARITY-SCORE.md.
-// [minCatNumber, maxCatNumber inclusive, dropSize]. Exported so the controller
-// can read drop sizes without duplicating the table.
-export const CATEGORY_RANGES: Record<string, [number, number, number]> = {
-  sub1:    [0,       0,       1],
-  sub1k:   [1,       999,     999],
-  sub10k:  [1000,    9999,    9000],
-  sub50k:  [10000,   49999,   40000],
-  sub100k: [50000,   99999,   50000],
-  sub250k: [100000,  249999,  150000],
-  sub500k: [250000,  499999,  250000],
-  sub1M:   [500000,  999999,  500000],
-};
 
 /**
  * How many cats are currently in this category. Closed categories

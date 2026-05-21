@@ -23,7 +23,8 @@ import {
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
-import { CATEGORY_RANGES, CatsService, type SearchFilters } from './cats.service';
+import { CATEGORY_RANGES } from '../shared/categories';
+import { CatsService, type SearchFilters } from './cats.service';
 import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Used for cat IMAGES (SVG/WebP) — the rendered art is truly

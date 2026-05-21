@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { CATEGORY_VALUES } from '../../shared/categories';
 
 // Per-field max length on the comma-separated value list. The longest legit
 // trait name we accept ("Whitepaper") is 10 chars; even a full list of every
@@ -19,12 +20,10 @@ const PATTERN_VALUES    = ['Solid', 'Striped', 'Eyepatch', 'Half/Half'] as const
 const BACKGROUND_VALUES = ['Block9', 'Cyberpunk', 'Whitepaper', 'Orange'] as const;
 const CROWN_VALUES      = ['Gold', 'Diamond', 'None'] as const;
 const GLASSES_VALUES    = ['Black', 'Cool', '3D', 'Nouns', 'None'] as const;
-// Category bands are mutually exclusive collections, smallest-first.
-// `sub1` is the Genesis Cat's one-cat collection (cat #0 only); the
-// `genesis: true` boolean trait is separate (it fires for ~0.4% of
-// cats — the visual genesis-palette variant — not just cat #0). See
-// ordpool-parser/CAT21-RARITY-SCORE.md for the full narrative.
-const CATEGORY_VALUES   = ['sub1', 'sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M'] as const;
+// CATEGORY_VALUES is imported from `../../shared/categories` so it stays
+// in lockstep with the canonical CATEGORY_RANGES table. The DTO's only
+// concern is validating that an incoming filter string matches one of
+// those band names.
 // Title Case matches the parser's emitted strings ('Female' | 'Male'),
 // which is what the DB stores after migration 0003.
 const GENDER_VALUES     = ['Male', 'Female'] as const;
