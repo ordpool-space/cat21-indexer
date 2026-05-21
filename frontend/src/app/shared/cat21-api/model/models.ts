@@ -1,6 +1,7 @@
 export * from './cacheStatsDto';
 export * from './catDto';
 export * from './catNumbersPaginatedResultDto';
+export * from './catsControllerRandomCat200Response';
 export * from './catsPaginatedResultDto';
 export * from './databaseHealthDto';
 export * from './extendedHealthDto';

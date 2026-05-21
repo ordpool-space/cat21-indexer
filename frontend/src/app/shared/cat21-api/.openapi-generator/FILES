@@ -11,6 +11,7 @@ index.ts
 model/cacheStatsDto.ts
 model/catDto.ts
 model/catNumbersPaginatedResultDto.ts
+model/catsControllerRandomCat200Response.ts
 model/catsPaginatedResultDto.ts
 model/databaseHealthDto.ts
 model/extendedHealthDto.ts

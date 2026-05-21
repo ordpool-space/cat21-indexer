@@ -63,9 +63,9 @@ export interface CatDto {
      */
     value: number;
     /**
-     * Category based on cat number: sub1 (Genesis Cat only), sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M, or empty
+     * Category based on cat number. sub1 holds the Genesis Cat only; the rest partition cats 1..999 999 by smallest-applicable band. Empty string is reserved for cats >= 1 000 000 (the TBD band).
      */
-    category: string;
+    category: CatDto.CategoryEnum;
     /**
      * Whether this is a genesis cat (white or black, probability 0.4%)
      */
@@ -75,10 +75,9 @@ export interface CatDto {
      */
     catColors: Array<string>;
     /**
-     * Gender of the cat. Empty string for cats that have neither
-     * (rare edge case, e.g. some fixtures).
+     * Gender of the cat. Empty string for cats that have neither (rare edge case, e.g. some fixtures).
      */
-    gender: string;
+    gender: CatDto.GenderEnum;
     /**
      * Design index (0-127), combination of pose, expression, pattern, and facing
      */
@@ -124,26 +123,37 @@ export interface CatDto {
      */
     glassesColors: Array<string>;
     /**
-     * OpenRarity information-content score for this cat within its
-     * category (raw Σ -log₂(p_i)). Higher = rarer. Each category is
-     * scored independently. Null while the boot-time backfill is in flight.
+     * OpenRarity information-content score for this cat within its category band (raw Σ -log₂(p_i)). Higher = rarer. Each band is scored independently.
      */
-    rarityBits: number | null;
+    rarityBits?: number | null;
     /**
-     * 1-based rarity rank within this cat's category. Strict total
-     * order — when two cats roll the same scored trait combination,
-     * the lower cat number wins the tie. Null while backfill runs.
+     * 1-based rarity rank within this cat\'s category. Strict total order — when two cats roll the same scored trait combination, the lower cat number wins the tie.
      */
-    rarityRank: number | null;
+    rarityRank?: number | null;
     /**
-     * Total cats currently in this cat's category. For closed categories
-     * (sub1, sub1k, sub10k, etc.) this is the fixed drop size — `sub1` has size 1 (Genesis Cat only). For open
-     * categories it grows with each new mint. Pairs with rarityRank so
-     * the UI can render "rank N of M".
+     * Total cats currently in this cat\'s category. For closed categories (sub1, sub1k, sub10k, etc.) this is the fixed drop size — `sub1` has size 1 (Genesis Cat only). For open categories it grows with each new mint. Pairs with rarityRank to read as \"rank N of M\".
      */
-    rarityCategoryTotal: number | null;
+    rarityCategoryTotal?: number | null;
 }
 export namespace CatDto {
+    export const CategoryEnum = {
+        Sub1: 'sub1',
+        Sub1k: 'sub1k',
+        Sub10k: 'sub10k',
+        Sub50k: 'sub50k',
+        Sub100k: 'sub100k',
+        Sub250k: 'sub250k',
+        Sub500k: 'sub500k',
+        Sub1M: 'sub1M',
+        Empty: ''
+    } as const;
+    export type CategoryEnum = typeof CategoryEnum[keyof typeof CategoryEnum];
+    export const GenderEnum = {
+        Female: 'Female',
+        Male: 'Male',
+        Empty: ''
+    } as const;
+    export type GenderEnum = typeof GenderEnum[keyof typeof GenderEnum];
     export const DesignPoseEnum = {
         Standing: 'Standing',
         Sleeping: 'Sleeping',

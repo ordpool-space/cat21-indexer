@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -188,6 +189,7 @@ export class CatsController {
   @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
   @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
   @ApiOkResponse({ type: CatsPaginatedResultDto, description: 'Paginated list of cats with total count' })
+  @ApiBadRequestResponse({ description: 'itemsPerPage or currentPage is not a valid integer' })
   async getCats(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,
@@ -203,6 +205,7 @@ export class CatsController {
   @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
   @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
   @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of cat numbers with total count' })
+  @ApiBadRequestResponse({ description: 'itemsPerPage or currentPage is not a valid integer' })
   async getCatNumbers(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,
@@ -236,6 +239,7 @@ export class CatsController {
     schema: { type: 'object', properties: { catNumber: { type: 'number', example: 42 } } },
   })
   @ApiNotFoundResponse({ description: 'No cat matches the supplied filters' })
+  @ApiBadRequestResponse({ description: 'A filter value is not in the allowed set or exceeds the per-filter length cap' })
   @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded — wait a minute and try again' })
   async randomCat(
     @Query() query: CatSearchQueryDto,
@@ -261,6 +265,7 @@ export class CatsController {
   @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
   @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
   @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of matching cat numbers with total count' })
+  @ApiBadRequestResponse({ description: 'A filter value is not in the allowed set, exceeds the per-filter length cap, or itemsPerPage/currentPage is not a valid integer' })
   async searchCats(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,

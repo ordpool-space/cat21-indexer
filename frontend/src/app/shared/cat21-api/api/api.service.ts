@@ -21,6 +21,8 @@ import { CatDto } from '../model/catDto';
 // @ts-ignore
 import { CatNumbersPaginatedResultDto } from '../model/catNumbersPaginatedResultDto';
 // @ts-ignore
+import { CatsControllerRandomCat200Response } from '../model/catsControllerRandomCat200Response';
+// @ts-ignore
 import { CatsPaginatedResultDto } from '../model/catsPaginatedResultDto';
 // @ts-ignore
 import { ExtendedHealthDto } from '../model/extendedHealthDto';
@@ -542,6 +544,366 @@ export class ApiService extends BaseService {
         return this.httpClient.request<StatusDto>('get', `${basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
+                responseType: <any>responseType_,
+                ...(withCredentials ? { withCredentials } : {}),
+                headers: localVarHeaders,
+                observe: observe,
+                ...(localVarTransferCache !== undefined ? { transferCache: localVarTransferCache } : {}),
+                reportProgress: reportProgress
+            }
+        );
+    }
+
+    /**
+     * Pick one random cat matching the supplied trait filters
+     * Returns a single random cat number from the set that matches the same filter parameters as /cats/search. With no filters it picks a random cat from the entire collection. Returns 404 if no cat matches. Rate-limited to 30 requests per minute per IP.
+     * @endpoint get /api/cats/search/random
+     * @param eyes Laser eyes: Orange, Red, Green, Blue, None
+     * @param pose Pose: Standing, Sleeping, Pouncing, Stalking
+     * @param expression Expression: Smile, Grumpy, Pouting, Shy
+     * @param pattern Coat pattern: Solid, Striped, Eyepatch, Half/Half
+     * @param background Background: Block9, Cyberpunk, Whitepaper, Orange
+     * @param crown Crown: Gold, Diamond, None
+     * @param glasses Glasses: Black, Cool, 3D, Nouns, None
+     * @param category Rarity category: sub1 (Genesis Cat only), sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple categories OR-combine.
+     * @param gender Gender: Male, Female
+     * @param color Dominant color bucket: red, orange, yellow, green, blue, purple, pink, black (genesis), white (genesis), fire (feeRate 69 sat/vB), saturated (feeRate 420 sat/vB).
+     * @param genesis Origin: genesis (the 1-of-1 cat #0) or normal (everything else).
+     * @param rarity Rarity rank ceiling within the active category: top10 (rank ≤ 10), top100 (≤ 100), top1k (≤ 1000). Multi-select takes the broadest ceiling.
+     * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
+     * @param reportProgress flag to report request and response progress.
+     * @param options additional options
+     */
+    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatsControllerRandomCat200Response>;
+    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatsControllerRandomCat200Response>>;
+    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatsControllerRandomCat200Response>>;
+    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+
+        let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'eyes',
+            <any>eyes,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'pose',
+            <any>pose,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'expression',
+            <any>expression,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'pattern',
+            <any>pattern,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'background',
+            <any>background,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'crown',
+            <any>crown,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'glasses',
+            <any>glasses,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'category',
+            <any>category,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'gender',
+            <any>gender,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'color',
+            <any>color,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'genesis',
+            <any>genesis,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'rarity',
+            <any>rarity,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        let localVarHeaders = this.defaultHeaders;
+
+        const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
+            'application/json'
+        ]);
+        if (localVarHttpHeaderAcceptSelected !== undefined) {
+            localVarHeaders = localVarHeaders.set('Accept', localVarHttpHeaderAcceptSelected);
+        }
+
+        const localVarHttpContext: HttpContext = options?.context ?? new HttpContext();
+
+        const localVarTransferCache: boolean = options?.transferCache ?? true;
+
+
+        let responseType_: 'text' | 'json' | 'blob' = 'json';
+        if (localVarHttpHeaderAcceptSelected) {
+            if (localVarHttpHeaderAcceptSelected.startsWith('text')) {
+                responseType_ = 'text';
+            } else if (this.configuration.isJsonMime(localVarHttpHeaderAcceptSelected)) {
+                responseType_ = 'json';
+            } else {
+                responseType_ = 'blob';
+            }
+        }
+
+        let localVarPath = `/api/cats/search/random`;
+        const { basePath, withCredentials } = this.configuration;
+        return this.httpClient.request<CatsControllerRandomCat200Response>('get', `${basePath}${localVarPath}`,
+            {
+                context: localVarHttpContext,
+                params: localVarQueryParameters.toHttpParams(),
+                responseType: <any>responseType_,
+                ...(withCredentials ? { withCredentials } : {}),
+                headers: localVarHeaders,
+                observe: observe,
+                ...(localVarTransferCache !== undefined ? { transferCache: localVarTransferCache } : {}),
+                reportProgress: reportProgress
+            }
+        );
+    }
+
+    /**
+     * Search cats by traits
+     * Returns paginated cat numbers matching the supplied trait filters. Each filter accepts a comma-separated list of values (OR within a filter). Multiple filters are AND-combined. An empty filter (no query params) returns the full result set, equivalent to /cats/numbers/.
+     * @endpoint get /api/cats/search/{itemsPerPage}/{currentPage}
+     * @param itemsPerPage Number of cats per page (max 100)
+     * @param currentPage Page number (1-based)
+     * @param eyes Laser eyes: Orange, Red, Green, Blue, None
+     * @param pose Pose: Standing, Sleeping, Pouncing, Stalking
+     * @param expression Expression: Smile, Grumpy, Pouting, Shy
+     * @param pattern Coat pattern: Solid, Striped, Eyepatch, Half/Half
+     * @param background Background: Block9, Cyberpunk, Whitepaper, Orange
+     * @param crown Crown: Gold, Diamond, None
+     * @param glasses Glasses: Black, Cool, 3D, Nouns, None
+     * @param category Rarity category: sub1 (Genesis Cat only), sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M. Multiple categories OR-combine.
+     * @param gender Gender: Male, Female
+     * @param color Dominant color bucket: red, orange, yellow, green, blue, purple, pink, black (genesis), white (genesis), fire (feeRate 69 sat/vB), saturated (feeRate 420 sat/vB).
+     * @param genesis Origin: genesis (the 1-of-1 cat #0) or normal (everything else).
+     * @param rarity Rarity rank ceiling within the active category: top10 (rank ≤ 10), top100 (≤ 100), top1k (≤ 1000). Multi-select takes the broadest ceiling.
+     * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
+     * @param reportProgress flag to report request and response progress.
+     * @param options additional options
+     */
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatNumbersPaginatedResultDto>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatNumbersPaginatedResultDto>>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatNumbersPaginatedResultDto>>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+        if (itemsPerPage === null || itemsPerPage === undefined) {
+            throw new Error('Required parameter itemsPerPage was null or undefined when calling catsControllerSearchCats.');
+        }
+        if (currentPage === null || currentPage === undefined) {
+            throw new Error('Required parameter currentPage was null or undefined when calling catsControllerSearchCats.');
+        }
+
+        let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'eyes',
+            <any>eyes,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'pose',
+            <any>pose,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'expression',
+            <any>expression,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'pattern',
+            <any>pattern,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'background',
+            <any>background,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'crown',
+            <any>crown,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'glasses',
+            <any>glasses,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'category',
+            <any>category,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'gender',
+            <any>gender,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'color',
+            <any>color,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'genesis',
+            <any>genesis,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'rarity',
+            <any>rarity,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        let localVarHeaders = this.defaultHeaders;
+
+        const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
+            'application/json'
+        ]);
+        if (localVarHttpHeaderAcceptSelected !== undefined) {
+            localVarHeaders = localVarHeaders.set('Accept', localVarHttpHeaderAcceptSelected);
+        }
+
+        const localVarHttpContext: HttpContext = options?.context ?? new HttpContext();
+
+        const localVarTransferCache: boolean = options?.transferCache ?? true;
+
+
+        let responseType_: 'text' | 'json' | 'blob' = 'json';
+        if (localVarHttpHeaderAcceptSelected) {
+            if (localVarHttpHeaderAcceptSelected.startsWith('text')) {
+                responseType_ = 'text';
+            } else if (this.configuration.isJsonMime(localVarHttpHeaderAcceptSelected)) {
+                responseType_ = 'json';
+            } else {
+                responseType_ = 'blob';
+            }
+        }
+
+        let localVarPath = `/api/cats/search/${this.configuration.encodeParam({name: "itemsPerPage", value: itemsPerPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}/${this.configuration.encodeParam({name: "currentPage", value: currentPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}`;
+        const { basePath, withCredentials } = this.configuration;
+        return this.httpClient.request<CatNumbersPaginatedResultDto>('get', `${basePath}${localVarPath}`,
+            {
+                context: localVarHttpContext,
+                params: localVarQueryParameters.toHttpParams(),
                 responseType: <any>responseType_,
                 ...(withCredentials ? { withCredentials } : {}),
                 headers: localVarHeaders,

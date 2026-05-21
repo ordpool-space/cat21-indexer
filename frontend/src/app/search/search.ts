@@ -6,7 +6,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import { environment } from '../../environments/environment';
 import { CatGallery } from '../cat-gallery/cat-gallery';
-import { CatNumbersPaginatedResultDto } from '../shared/cat21-api';
+import { CatDto, CatNumbersPaginatedResultDto } from '../shared/cat21-api';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 import { TraitRow } from './trait-row';
 
@@ -15,9 +15,17 @@ import { TraitRow } from './trait-row';
 // category, color, genesis). Labels are what shows on the trait button
 // and what the keyword box accepts.
 //
+// Category options are derived from the OpenAPI-generated
+// CatDto.CategoryEnum (filtered to drop the '' fallback used for cats
+// >= 1M, which isn't a tab). One source of truth: the backend's
+// CATEGORY_VALUES.
 // COLOR has 11 parser buckets — see ordpool-parser/CAT21-RARITY-SCORE.md.
 // Genesis is an ORIGIN row, NOT a category value (the previous version
 // was a bug).
+const CATEGORY_OPTIONS = Object.values(CatDto.CategoryEnum)
+  .filter((v): v is Exclude<typeof v, ''> => v !== '')
+  .map((v) => [v, v] as const);
+
 const TRAIT_DEFINITIONS = {
   color:      { label: 'COLOR',      options: [['red', 'red'], ['orange', 'orange'], ['yellow', 'yellow'], ['green', 'green'], ['blue', 'blue'], ['purple', 'purple'], ['pink', 'pink'], ['black', 'black'], ['white', 'white'], ['fire', 'fire'], ['saturated', 'saturated']] },
   eyes:       { label: 'LASER EYES', options: [['Orange', 'orange'], ['Red', 'red'], ['Green', 'green'], ['Blue', 'blue'], ['None', 'none']] },
@@ -27,7 +35,7 @@ const TRAIT_DEFINITIONS = {
   crown:      { label: 'CROWN',      options: [['Gold', 'gold'], ['Diamond', 'diamond'], ['None', 'none']] },
   glasses:    { label: 'GLASSES',    options: [['Black', 'black'], ['Cool', 'cool'], ['3D', '3D'], ['Nouns', 'nouns'], ['None', 'none']] },
   background: { label: 'BACKGROUND', options: [['Block9', 'block9'], ['Cyberpunk', 'cyberpunk'], ['Whitepaper', 'whitepaper'], ['Orange', 'orange']] },
-  category:   { label: 'CATEGORY',   options: [['sub1', 'sub1'], ['sub1k', 'sub1k'], ['sub10k', 'sub10k'], ['sub50k', 'sub50k'], ['sub100k', 'sub100k'], ['sub250k', 'sub250k'], ['sub500k', 'sub500k'], ['sub1M', 'sub1M']] },
+  category:   { label: 'CATEGORY',   options: CATEGORY_OPTIONS },
   gender:     { label: 'GENDER',     options: [['Male', 'male'], ['Female', 'female']] },
   genesis:    { label: 'ORIGIN',     options: [['genesis', 'genesis cat'], ['normal', 'normal cat']] },
   rarity:     { label: 'RARITY',     options: [['top10', 'top 10'], ['top100', 'top 100'], ['top1k', 'top 1k']] },

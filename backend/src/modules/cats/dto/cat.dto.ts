@@ -183,7 +183,11 @@ export class CatDto {
   @ApiProperty({ description: 'Value of the first output of the mint transaction (Unit: sats)', example: 546 })
   value!: number;
 
-  @ApiProperty({ description: 'Category based on cat number: sub1 (Genesis Cat only), sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M, or empty', example: 'sub1k' })
+  @ApiProperty({
+    description: 'Category based on cat number. sub1 holds the Genesis Cat only; the rest partition cats 1..999 999 by smallest-applicable band. Empty string is reserved for cats >= 1 000 000 (the TBD band).',
+    enum: [...CATEGORY_VALUES, ''],
+    example: 'sub1k',
+  })
   category!: string;
 
   @ApiProperty({ description: 'Whether this is a genesis cat (white or black, probability 0.4%)', example: true })
