@@ -15,19 +15,19 @@
  * band → [minCatNumber, maxCatNumber inclusive, dropSize].
  *
  * Bands are mutually exclusive collections, smallest-first. Each cat
- * carries exactly one — its smallest applicable (cat #0 → sub1, cat
+ * carries exactly one band: its smallest applicable (cat #0 → sub1, cat
  * 500 → sub1k, cat 5000 → sub10k). The dropSize is the closed
  * population: when a category's current row count equals dropSize,
  * the category is "closed" and its rarity ranks are frozen.
  *
  * `sub1` is the Genesis Cat's one-cat collection (cat #0 only) and
  * has been closed since the protocol's first mint. The `genesis`
- * boolean trait is a separate column — it fires for ~0.4% of cats
+ * boolean trait is a separate column; it fires for ~0.4% of cats
  * (the visual genesis-palette variant), not just cat #0. See
  * ordpool-parser/CAT21-RARITY-SCORE.md for the full narrative.
  */
 export const CATEGORY_RANGES: Record<string, [number, number, number]> = {
-  sub1:    [0,       0,       1],       // Genesis Cat only — closed since the protocol's first mint.
+  sub1:    [0,       0,       1],       // Genesis Cat only. Closed since the protocol's first mint.
   sub1k:   [1,       999,     999],     // cats 1..999 (cat #0 lives in sub1)
   sub10k:  [1000,    9999,    9000],
   sub50k:  [10000,   49999,   40000],
