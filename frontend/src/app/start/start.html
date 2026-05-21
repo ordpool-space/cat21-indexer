@@ -18,54 +18,93 @@
 
 <h2 class="mt-5" id="latest">Minted cats</h2>
 
-@if (catsResource.value(); as data) {
+@if (statusResource.value(); as status) {
   <p class="mb-2">
-    Here you see all {{ data.total | number }} cats that have been minted so far.<br>
+    {{ status.totalCats | number }} cats minted so far.<br>
     <a routerLink="/search">Search by trait →</a>
   </p>
-  @if (statusResource.value()) {
-    <p class="mb-4">
-      Proof of Cat Work:
-      {{ proofOfCatWorkSats() | number }} sats
-      (≈ {{ proofOfCatWorkBtc() | number:'1.2-2' }} BTC).
-      <a href="https://github.com/ordpool-space/cat21#governance" target="_blank" rel="noopener">What is this?</a>
-    </p>
+  <p class="mb-4">
+    Proof of Cat Work:
+    {{ proofOfCatWorkSats() | number }} sats
+    (≈ {{ proofOfCatWorkBtc() | number:'1.2-2' }} BTC).
+    <a href="https://github.com/ordpool-space/cat21#governance" target="_blank" rel="noopener">What is this?</a>
+  </p>
+}
+
+<nav class="category-tabs d-none d-md-flex" aria-label="Cat category">
+  @for (band of categoryTabs; track band) {
+    <button
+      type="button"
+      class="category-tab"
+      [class.category-tab-active]="band === activeCategory()"
+      [attr.aria-pressed]="band === activeCategory()"
+      (click)="setCategory(band)"
+    >{{ band }}</button>
   }
-  <app-cat-gallery [catNumbers]="catNumbers()" />
-  @if (data.total > 0) {
-    <div>
-      <ngb-pagination
-        class="mt-4 d-flex justify-content-center flex-wrap"
-        [collectionSize]="data.total"
-        [page]="data.currentPage"
-        [pageSize]="data.itemsPerPage"
-        aria-label="Cat gallery pagination"
-        [maxSize]="pagerMaxSize()"
-        [rotate]="true"
-        [ellipses]="true"
-        [boundaryLinks]="true"
-        (pageChange)="changePage(data.itemsPerPage, $event)">
-        <ng-template ngbPaginationEllipsis>&hellip;</ng-template>
-        <ng-template ngbPaginationFirst>&laquo;</ng-template>
-        <ng-template ngbPaginationPrevious>&lt;</ng-template>
-        <ng-template ngbPaginationNext>&gt;</ng-template>
-        <ng-template ngbPaginationLast>&raquo;</ng-template>
-      </ngb-pagination>
-      <a (click)="reload()" class="float-end" role="button" aria-label="Reload cat gallery">Reload</a>
-    </div>
-    <div class="d-flex align-items-center gap-2 mt-3">
-      <label class="visually-hidden" for="start-sort-select">Sort order</label>
-      <select
-        id="start-sort-select"
-        class="pixel-select"
-        [value]="activeSort()"
-        (change)="setSort($any($event.target).value)"
-      >
-        @for (opt of sortOptions; track opt[0]) {
-          <option [value]="opt[0]">{{ opt[1] }}</option>
-        }
-      </select>
-    </div>
+</nav>
+<div class="d-block d-md-none">
+  <label class="visually-hidden" for="start-category-select">Cat category</label>
+  <select
+    id="start-category-select"
+    class="pixel-select category-select"
+    [value]="activeCategory()"
+    (change)="setCategory($any($event.target).value)"
+  >
+    @for (band of categoryTabs; track band) {
+      <option [value]="band">{{ band }}</option>
+    }
+  </select>
+</div>
+
+@if (catsResource.value(); as data) {
+  <div class="category-panel mb-3">
+    <app-cat-gallery [catNumbers]="catNumbers()" />
+    @if (data.total > 0) {
+      <div>
+        <ngb-pagination
+          class="mt-4 d-flex justify-content-center flex-wrap"
+          [collectionSize]="data.total"
+          [page]="data.currentPage"
+          [pageSize]="data.itemsPerPage"
+          aria-label="Cat gallery pagination"
+          [maxSize]="pagerMaxSize()"
+          [rotate]="true"
+          [ellipses]="true"
+          [boundaryLinks]="true"
+          (pageChange)="changePage(data.itemsPerPage, $event)">
+          <ng-template ngbPaginationEllipsis>&hellip;</ng-template>
+          <ng-template ngbPaginationFirst>&laquo;</ng-template>
+          <ng-template ngbPaginationPrevious>&lt;</ng-template>
+          <ng-template ngbPaginationNext>&gt;</ng-template>
+          <ng-template ngbPaginationLast>&raquo;</ng-template>
+        </ngb-pagination>
+        <a (click)="reload()" class="float-end" role="button" aria-label="Reload cat gallery">Reload</a>
+      </div>
+      <div class="d-flex align-items-center gap-2 mt-3">
+        <label class="visually-hidden" for="start-sort-select">Sort order</label>
+        <select
+          id="start-sort-select"
+          class="pixel-select"
+          [value]="activeSort()"
+          (change)="setSort($any($event.target).value)"
+        >
+          @for (opt of sortOptions; track opt[0]) {
+            <option [value]="opt[0]">{{ opt[1] }}</option>
+          }
+        </select>
+      </div>
+    }
+  </div>
+} @else if (catsResource.isLoading()) {
+  <p class="category-panel mb-3" aria-live="polite">Loading cats...</p>
+} @else if (catsResource.error()) {
+  @if (isBackendUnavailable()) {
+    <p class="category-panel mb-3" role="alert">
+      The cat21.space backend is temporarily unavailable. The indexer database may be paused or overloaded.
+      <a (click)="catsResource.reload()" role="button">Retry</a>
+    </p>
+  } @else {
+    <p class="category-panel mb-3" role="alert">Failed to load cats. <a (click)="catsResource.reload()" role="button">Retry</a></p>
   }
 } @else if (catsResource.isLoading()) {
   <p class="mb-4" aria-live="polite">Loading cats...</p>

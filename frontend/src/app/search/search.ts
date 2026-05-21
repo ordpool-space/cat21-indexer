@@ -325,17 +325,26 @@ export class Search {
     this.navigateWithSelected({ ...this.selected(), category: [value] }, 1);
   }
 
+  /** Show/hide the keyword input. Refreshes the example placeholder
+   *  each time the box opens so users see syntax variety. */
   toggleKeyword(): void {
     this.keywordOpen.update((v) => !v);
     if (this.keywordOpen()) this.currentExample.set(this.pickExample());
   }
 
+  /** Enter / blur on the keyword box: parse the draft text, navigate to
+   *  the resulting filter set, URL re-binds the chips through `selected()`. */
   submitKeyword(): void {
     this.navigateWithSelected(parseKeyword(this.keywordDraft()), 1);
   }
 
-  // 404 from the backend means "no match"; the zero-results line in the
-  // header already surfaces that, so swallow it here.
+  /**
+   * Lucky pick. Hits /cats/search/random with the current filters and
+   * routes to the cat detail page on success. A 404 from the backend
+   * means "no cat matches"; the zero-results line in the header
+   * already surfaces that, so the error branch just unsets the
+   * loading flag.
+   */
   pickLucky(): void {
     if (this.luckyLoading()) return;
     this.luckyLoading.set(true);
@@ -405,8 +414,15 @@ function filtersToHttpParams(filters: Record<FilterKey, string[]>): HttpParams {
   return httpParams;
 }
 
-// Emits labels (what the buttons show), not URL values, so the keyword
-// box reads naturally and round-trips through parseKeyword.
+/**
+ * Serialize chip state to the keyword-box format:
+ *   `eyes:red,blue pose:sleeping background:cyberpunk`
+ *
+ * Each token is `key:label[,label,…]`. Values are emitted as **labels**
+ * (what the user sees on the buttons), not the URL/backend values, so
+ * the box stays readable and round-trips back to the same chips
+ * through `parseKeyword`.
+ */
 function serializeSelected(sel: Record<FilterKey, string[]>): string {
   const parts: string[] = [];
   for (const key of FILTER_KEYS) {
@@ -418,8 +434,13 @@ function serializeSelected(sel: Record<FilterKey, string[]>): string {
   return parts.join(' ');
 }
 
-// Forgiving: case-insensitive labels, unknown keys/labels dropped so junk
-// input never poisons the URL, empty string clears all selection.
+/**
+ * Parse the keyword box back into chip state. Forgiving:
+ * - case-insensitive on the label side
+ * - extra whitespace is fine
+ * - unknown keys / labels are silently dropped (don't poison the URL)
+ * - empty / whitespace-only input → empty selection (clears everything)
+ */
 function parseKeyword(text: string): Record<FilterKey, string[]> {
   const result = emptySelected();
   const tokens = text.trim().split(/\s+/).filter((t) => t.length > 0);

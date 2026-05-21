@@ -18,57 +18,9 @@
   border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-// Active tab and the trait-rows panel below it share this colour, so
-// the active tab visually merges into the panel. Inactive tabs stay
-// outlined on the page background.
+// Local alias for the global $panel-color so .category-select can
+// keep its panel-merge logic when the global value changes.
 $panel-color: #6B6B6B;
-
-.category-tabs {
-  gap: 0;
-  margin-bottom: 0;
-  align-items: flex-end;
-}
-
-.category-tab {
-  flex: 0 0 auto;
-  padding: 0.35rem 0.9rem;
-  background: transparent;
-  border: 2px solid white;
-  margin-left: -2px;
-  color: white;
-  font-family: "Public Pixel", sans-serif;
-  font-size: 0.85rem;
-  cursor: pointer;
-  border-radius: 0;
-  image-rendering: pixelated;
-  position: relative;
-
-  &:first-child { margin-left: 0; }
-
-  &:hover { background: rgba(0, 0, 0, 0.2); }
-
-  &.category-tab-active {
-    background: $panel-color;
-    color: white;
-    font-weight: bold;
-    padding-top: 0.55rem;
-    padding-bottom: 0.55rem;
-    border-bottom: 4px solid $panel-color;
-    margin-bottom: -4px;
-    z-index: 1;
-  }
-
-  &:focus-visible { outline: 2px solid #000; outline-offset: 2px; }
-}
-
-.trait-rows {
-  background: $panel-color;
-  padding: 1rem;
-  // Active tab / mobile picker have border-bottom-color: $panel-color
-  // and margin-bottom: -2px, so where they sit they mask this top
-  // border — the white outline reads as continuous with the tab.
-  border: 2px solid white;
-}
 
 // Mobile picker styled to match the desktop active tab — gray fill,
 // white border on three sides, bottom border merges into the panel

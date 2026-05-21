@@ -39,10 +39,21 @@ export class SyncService implements OnModuleInit {
     };
   }
 
-  // Genesis cats included: getCatColorCategory now returns 'black' or
-  // 'white' for them (matching the parser's two hardcoded genesis
-  // palettes). The pre-color-expansion version of this code excluded
-  // genesis because the parser returned null.
+  /**
+   * Boot-time backfill chain: fill `dominant_color_category` on any
+   * rows where it's NULL (minted before the column existed), then
+   * recompute per-category rarity ranks.
+   *
+   * Fire-and-forget on purpose: a cold backfill on a large table can
+   * take minutes, and we don't want it to block app readiness or hold
+   * up the HTTP listener. The column is nullable and search queries
+   * against it just don't match the un-backfilled rows until they're
+   * filled in.
+   *
+   * Genesis cats are included: `getCatColorCategory` returns 'black'
+   * or 'white' for them (the parser's two hardcoded genesis palettes),
+   * so they get a valid bucket and stop being NULL once backfill runs.
+   */
   async onModuleInit(): Promise<void> {
     this.backfillDominantColorCategory()
       .then(() => this.recomputeRarityForAllCategories())

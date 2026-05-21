@@ -44,6 +44,60 @@ a.btn {
   text-align: left;
 }
 
+// Shared category tab strip — used by the search page and the
+// homepage's per-band view. Pixelated buttons that merge into a gray
+// $panel-color content surface below (the active tab "drops" into the
+// panel, so the eye reads them as one connected shape).
+$panel-color: #6B6B6B;
+
+.category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 0;
+  align-items: flex-end;
+}
+
+.category-tab {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.9rem;
+  background: transparent;
+  border: 2px solid white;
+  margin-left: -2px;
+  color: white;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 0;
+  image-rendering: pixelated;
+  position: relative;
+
+  &:first-child { margin-left: 0; }
+
+  &:hover { background: rgba(0, 0, 0, 0.2); }
+
+  &.category-tab-active {
+    background: $panel-color;
+    color: white;
+    font-weight: bold;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 4px solid $panel-color;
+    margin-bottom: -4px;
+    z-index: 1;
+  }
+
+  &:focus-visible { outline: 2px solid #000; outline-offset: 2px; }
+}
+
+// Content surface the active tab drops into. Pages compose this with
+// their own contents (chip rows on /search, gallery + pager on /).
+.category-panel {
+  background: $panel-color;
+  padding: 1rem;
+  border: 2px solid white;
+}
+
 // Shared pixelated <select> styling. Gray fill, white border, custom
 // inline-SVG chevron in white. Used wherever a dropdown should match
 // the rest of the UI (sort selector, mobile category picker).
