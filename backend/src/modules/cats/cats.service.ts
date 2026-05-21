@@ -374,6 +374,20 @@ export class CatsService {
   }
 }
 
+// Canonical category ranges, as defined in ordpool-parser/CAT21-RARITY-SCORE.md.
+// [minCatNumber, maxCatNumber inclusive, dropSize]. Exported so the controller
+// can read drop sizes without duplicating the table.
+export const CATEGORY_RANGES: Record<string, [number, number, number]> = {
+  sub1:    [0,       0,       1],
+  sub1k:   [1,       999,     999],
+  sub10k:  [1000,    9999,    9000],
+  sub50k:  [10000,   49999,   40000],
+  sub100k: [50000,   99999,   50000],
+  sub250k: [100000,  249999,  150000],
+  sub500k: [250000,  499999,  250000],
+  sub1M:   [500000,  999999,  500000],
+};
+
 /**
  * How many cats are currently in this category. Closed categories
  * return their fixed drop size (sub1 = 1, sub1k = 999, etc.); open
@@ -384,18 +398,7 @@ export class CatsService {
  * number — no extra DB query needed.
  */
 function categoryPopulation(category: string, lastSynced: number): number | null {
-  // [minCatNumber, maxCatNumber inclusive, dropSize]
-  const RANGES: Record<string, [number, number, number]> = {
-    sub1:    [0,       0,       1],
-    sub1k:   [1,       999,     999],
-    sub10k:  [1000,    9999,    9000],
-    sub50k:  [10000,   49999,   40000],
-    sub100k: [50000,   99999,   50000],
-    sub250k: [100000,  249999,  150000],
-    sub500k: [250000,  499999,  250000],
-    sub1M:   [500000,  999999,  500000],
-  };
-  const range = RANGES[category];
+  const range = CATEGORY_RANGES[category];
   if (!range) return null;
   const [min, max, full] = range;
   if (lastSynced < min) return 0;

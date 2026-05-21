@@ -23,7 +23,7 @@ import {
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
-import { CatsService, type SearchFilters } from './cats.service';
+import { CATEGORY_RANGES, CatsService, type SearchFilters } from './cats.service';
 import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Used for cat IMAGES (SVG/WebP) — the rendered art is truly
@@ -38,20 +38,6 @@ const IMMUTABLE_CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immut
 // absorbs traffic bursts; rarity updates propagate within minutes.
 const CAT_DETAIL_CACHE_CONTROL = 'public, max-age=60, s-maxage=300';
 
-// Full population per category, as defined in
-// ordpool-parser/CAT21-RARITY-SCORE.md. A category is "closed" when
-// its current row count equals this max.
-const CATEGORY_FULL_SIZE: Record<string, number> = {
-  sub1:    1,       // Genesis Cat only — closed since the protocol's first mint.
-  sub1k:   999,     // cats 1..999 (cat #0 lives in sub1)
-  sub10k:  9000,
-  sub50k:  40000,
-  sub100k: 50000,
-  sub250k: 150000,
-  sub500k: 250000,
-  sub1M:   500000,
-};
-
 /**
  * Pick the right Cache-Control for a cat detail response. Cats whose
  * category is closed AND whose rarity has been computed are fully
@@ -59,12 +45,12 @@ const CATEGORY_FULL_SIZE: Record<string, number> = {
  * updates can propagate.
  */
 function cacheControlFor(cat: CatDto): string {
-  const max = CATEGORY_FULL_SIZE[cat.category];
+  const range = CATEGORY_RANGES[cat.category];
   const closed =
     cat.rarityRank !== null &&
     cat.rarityCategoryTotal !== null &&
-    max !== undefined &&
-    cat.rarityCategoryTotal >= max;
+    range !== undefined &&
+    cat.rarityCategoryTotal >= range[2];
   return closed ? IMMUTABLE_CACHE_CONTROL : CAT_DETAIL_CACHE_CONTROL;
 }
 
