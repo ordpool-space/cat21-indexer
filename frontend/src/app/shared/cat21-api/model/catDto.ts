@@ -63,7 +63,7 @@ export interface CatDto {
      */
     value: number;
     /**
-     * Category based on cat number: sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M, or empty
+     * Category based on cat number: sub1 (Genesis Cat only), sub1k, sub10k, sub50k, sub100k, sub250k, sub500k, sub1M, or empty
      */
     category: string;
     /**
@@ -137,7 +137,7 @@ export interface CatDto {
     rarityRank: number | null;
     /**
      * Total cats currently in this cat's category. For closed categories
-     * (sub1k, sub10k, etc.) this is the fixed drop size; for open
+     * (sub1, sub1k, sub10k, etc.) this is the fixed drop size — `sub1` has size 1 (Genesis Cat only). For open
      * categories it grows with each new mint. Pairs with rarityRank so
      * the UI can render "rank N of M".
      */
