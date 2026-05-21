@@ -17,6 +17,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiProduces,
+  ApiQuery,
   ApiServiceUnavailableResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
@@ -201,18 +202,21 @@ export class CatsController {
   }
 
   @Get('cats/numbers/:itemsPerPage/:currentPage')
-  @ApiOperation({ summary: 'Get paginated cat numbers', description: 'Returns only cat numbers (no traits), sorted by newest first. Max 100 items per page. Ideal for gallery views where only thumbnails are needed.' })
+  @ApiOperation({ summary: 'Get paginated cat numbers', description: 'Returns only cat numbers (no traits). Default sort is newest-first (catNumber DESC); pass ?sort=rarity to order by global rarityBits DESC (rarest across the whole collection — the Genesis Cat first). Max 100 items per page.' })
   @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
   @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
+  @ApiQuery({ name: 'sort', required: false, description: 'Sort order: "newest" (default) or "rarity".', enum: ['newest', 'rarity'] })
   @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of cat numbers with total count' })
   @ApiBadRequestResponse({ description: 'itemsPerPage or currentPage is not a valid integer' })
   async getCatNumbers(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,
+    @Query('sort') sort?: string,
   ): Promise<CatNumbersPaginatedResultDto> {
     return this.catsService.getCatNumbers(
       Math.max(1, Math.min(itemsPerPage, 100)),
       Math.max(1, currentPage),
+      sort === 'rarity' ? 'rarity' : 'newest',
     );
   }
 
@@ -275,6 +279,7 @@ export class CatsController {
       toSearchFilters(query),
       Math.max(1, Math.min(itemsPerPage, 100)),
       Math.max(1, currentPage),
+      query.sort === 'rarity' ? 'rarity' : 'newest',
     );
   }
 }

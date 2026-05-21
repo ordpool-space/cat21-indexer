@@ -141,6 +141,11 @@ export class CatSearchQueryDto {
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(RARITY_CSV, { message: msg('rarity', RARITY_VALUES) })
   rarity?: string;
+
+  @ApiPropertyOptional({ description: 'Sort order: "newest" (default, by catNumber DESC) or "rarity" (by rarityRank ASC inside the active category — rarest first).', example: 'rarity', enum: ['newest', 'rarity'] })
+  @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
+  @Matches(/^(newest|rarity)$/, { message: 'sort must be "newest" or "rarity"' })
+  sort?: string;
 }
 
 export class CatDto {
@@ -310,7 +315,17 @@ export class CatSearchResultDto extends CatNumbersPaginatedResultDto {
     additionalProperties: { type: 'object', additionalProperties: { type: 'number' } },
   })
   facets!: FacetCounts;
+
+  @ApiPropertyOptional({
+    description: 'Drop size of the active category when exactly one is selected — independent of the chip filters. Use to render "X of Y cats" and to hide rarity ceilings that exceed the band (e.g. top1k on sub1k). Null if the request did not pin a single category.',
+    example: 999,
+  })
+  categoryTotal!: number | null;
 }
+
+/** Sort order for paginated cat lists. */
+export const CAT_SORT_VALUES = ['newest', 'rarity'] as const;
+export type CatSort = typeof CAT_SORT_VALUES[number];
 
 export class StatusDto {
   @ApiProperty({ description: 'Total number of indexed cats', example: 63732 })

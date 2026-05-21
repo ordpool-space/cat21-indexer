@@ -20,9 +20,22 @@
 
 @if (catsResource.value(); as data) {
   <p class="mb-2">
-    Here you see all {{ data.total | number }} cats that have been minted so far.
+    Here you see all {{ data.total | number }} cats that have been minted so far.<br>
     <a routerLink="/search">Search by trait →</a>
   </p>
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <label class="visually-hidden" for="start-sort-select">Sort order</label>
+    <select
+      id="start-sort-select"
+      class="pixel-select"
+      [value]="activeSort()"
+      (change)="setSort($any($event.target).value)"
+    >
+      @for (opt of sortOptions; track opt[0]) {
+        <option [value]="opt[0]">{{ opt[1] }}</option>
+      }
+    </select>
+  </div>
   @if (statusResource.value()) {
     <p class="mb-4">
       Proof of Cat Work:

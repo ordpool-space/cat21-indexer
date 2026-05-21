@@ -22,7 +22,7 @@
   <label class="visually-hidden" for="category-select">Cat category</label>
   <select
     id="category-select"
-    class="category-select"
+    class="pixel-select category-select"
     [value]="activeCategory()"
     (change)="setCategory($any($event.target).value)"
   >
@@ -52,7 +52,7 @@
       Format <code>trait:label</code>. Comma-separates values within a trait (OR);
       space-separates across traits (AND). Case-insensitive. Press Enter to apply.
       <br>
-      Try: <code>color:fire,saturated eyes:red crown:gold</code>
+      Try: <code>{{ currentExample() }}</code>
     </p>
   </div>
 }
@@ -89,6 +89,18 @@
     >Clear all</button>
   }
 
+  <label class="sort-label visually-hidden" for="sort-select">Sort order</label>
+  <select
+    id="sort-select"
+    class="pixel-select"
+    [value]="activeSort()"
+    (change)="setSort($any($event.target).value)"
+  >
+    @for (opt of sortOptions; track opt[0]) {
+      <option [value]="opt[0]">{{ opt[1] }}</option>
+    }
+  </select>
+
   <span class="ms-auto">
     @if (resultsResource.isLoading()) {
       <span role="status">
@@ -99,6 +111,8 @@
       <span role="alert"><strong>Backend unavailable</strong></span>
     } @else if (total() === 0 && hasAnyFilter()) {
       <strong>0 cats</strong> — try fewer filters
+    } @else if (categoryTotal() !== null && categoryTotal()! > total()) {
+      <strong>{{ total() | number }}</strong> of <strong>{{ categoryTotal() | number }}</strong> cats
     } @else {
       <strong>{{ total() | number }}</strong> cat{{ total() === 1 ? '' : 's' }}
     }

@@ -32,10 +32,22 @@ export class Start {
 
   readonly itemsPerPage = input(48, { transform: numberAttribute });
   readonly currentPage = input(1, { transform: numberAttribute });
+  readonly sort = input<string>('');
+
+  readonly activeSort = computed<'newest' | 'rarity'>(() => this.sort() === 'rarity' ? 'rarity' : 'newest');
+
+  readonly sortOptions = [
+    ['newest', 'newest first'],
+    ['rarity', 'rarest first'],
+  ] as const;
 
   catsResource = rxResourceFixed({
-    params: () => ({ itemsPerPage: this.itemsPerPage() || 48, currentPage: this.currentPage() || 1 }),
-    stream: ({ params }) => this.api.catsControllerGetCatNumbers(params.itemsPerPage, params.currentPage),
+    params: () => ({
+      itemsPerPage: this.itemsPerPage() || 48,
+      currentPage: this.currentPage() || 1,
+      sort: this.activeSort(),
+    }),
+    stream: ({ params }) => this.api.catsControllerGetCatNumbers(params.itemsPerPage, params.currentPage, params.sort),
   });
 
   statusResource = rxResourceFixed({
@@ -70,7 +82,16 @@ export class Start {
   }
 
   changePage(itemsPerPage: number, currentPage: number) {
-    this.router.navigate(['/', 'cats', itemsPerPage, currentPage]);
+    this.router.navigate(['/', 'cats', itemsPerPage, currentPage], {
+      queryParams: { sort: this.activeSort() === 'rarity' ? 'rarity' : null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  setSort(value: string) {
+    this.router.navigate(['/'], {
+      queryParams: { sort: value === 'rarity' ? 'rarity' : null },
+    });
   }
 
   async reload() {

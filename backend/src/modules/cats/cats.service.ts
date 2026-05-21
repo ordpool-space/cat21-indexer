@@ -7,7 +7,7 @@ import { CATEGORY_RANGES } from '../shared/categories';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { SyncService } from '../sync/sync.service';
-import { CatDto, CatNumbersPaginatedResultDto, CatSearchResultDto, CatsPaginatedResultDto, ExtendedHealthDto, FacetCounts, HealthDto, StatusDto } from './dto/cat.dto';
+import { CAT_SORT_VALUES, CatDto, CatNumbersPaginatedResultDto, CatSearchResultDto, CatsPaginatedResultDto, CatSort, ExtendedHealthDto, FacetCounts, HealthDto, StatusDto } from './dto/cat.dto';
 
 /**
  * Trait filters for the cat search endpoint. Each field is a list of accepted
@@ -216,13 +216,35 @@ export class CatsService {
   async getCatNumbers(
     itemsPerPage: number,
     currentPage: number,
+    sort: CatSort = 'newest',
   ): Promise<CatNumbersPaginatedResultDto> {
     // Ensure we know the total before computing page boundaries.
     await this.ensureTotalsPrimed();
-
-    const catNumbers = this.cache.computeCatNumbersForPage(itemsPerPage, currentPage);
     const total = this.cache.getTotalCatCount();
 
+    // Newest-first uses the in-memory shortcut (no DB hop). Rarity sort
+    // hits the DB and orders by rarityRank ASC — across categories, that
+    // means "rank 1 of each band" floats up first (cat #0 from sub1,
+    // then the rank-1 from sub1k, sub10k, ...), then rank 2, then 3.
+    // Tie-break by catNumber so the order is deterministic. Cats whose
+    // rarity hasn't been computed yet (NULL rank) sort last.
+    if (sort === 'rarity') {
+      const offset = (currentPage - 1) * itemsPerPage;
+      const rows = await this.drizzle.db
+        .select({ catNumber: cats.catNumber })
+        .from(cats)
+        .orderBy(sql`${cats.rarityRank} IS NULL`, cats.rarityRank, cats.catNumber)
+        .limit(itemsPerPage)
+        .offset(offset);
+      return {
+        catNumbers: rows.map((r) => r.catNumber),
+        total,
+        currentPage,
+        itemsPerPage,
+      };
+    }
+
+    const catNumbers = this.cache.computeCatNumbersForPage(itemsPerPage, currentPage);
     return {
       catNumbers,
       total,
@@ -247,9 +269,24 @@ export class CatsService {
     filters: SearchFilters,
     itemsPerPage: number,
     currentPage: number,
+    sort: CatSort = 'newest',
   ): Promise<CatSearchResultDto> {
+    // categoryTotal reads from the synced-cat-number cache. Prime it on
+    // cold cache so the very first request to /cats/search returns a
+    // useful "of M" number instead of 0.
+    await this.ensureTotalsPrimed();
+
     const where = buildSearchWhere(filters);
     const offset = (currentPage - 1) * itemsPerPage;
+
+    // Rarity sort: within a category, rarityRank is a strict total order
+    // (lower = rarer, tiebreaker pins cat-number). Across categories, ranks
+    // aren't comparable, but search always pins exactly one category so
+    // we get a meaningful rarest-first list. NULL ranks (rarity not yet
+    // computed) sort last via the `IS NULL` cascade.
+    const orderClause = sort === 'rarity'
+      ? [sql`${cats.rarityRank} IS NULL`, cats.rarityRank, cats.catNumber] as const
+      : [desc(cats.catNumber)] as const;
 
     // Page + total + facets in parallel. Facets fan out into one query per
     // dimension, all dispatched together — see searchFacets for the per-
@@ -260,11 +297,17 @@ export class CatsService {
         .select({ catNumber: cats.catNumber })
         .from(cats)
         .where(where)
-        .orderBy(desc(cats.catNumber))
+        .orderBy(...orderClause)
         .limit(itemsPerPage)
         .offset(offset),
       this.searchFacets(filters),
     ]);
+
+    // `categoryTotal` is the unfiltered drop size of the active category.
+    // Frontend uses it for "X of Y cats" and to hide rarity ceilings that
+    // exceed the band size (e.g. top1k chip on sub1k).
+    const single = filters.category?.length === 1 ? filters.category[0] : null;
+    const categoryTotal = single ? categoryPopulation(single, this.cache.getLastSyncedCatNumber()) : null;
 
     return {
       catNumbers: rows.map((r) => r.catNumber),
@@ -272,6 +315,7 @@ export class CatsService {
       currentPage,
       itemsPerPage,
       facets,
+      categoryTotal,
     };
   }
 

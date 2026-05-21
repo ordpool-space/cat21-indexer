@@ -98,6 +98,16 @@ export class Search {
   readonly gender     = input<string>('');
   readonly genesis    = input<string>('');
   readonly rarity     = input<string>('');
+  readonly sort       = input<string>('');
+
+  /** Sort selector options. 'newest' is the default; 'rarity' switches
+   *  to rarityRank ASC within the active category (rarest first). */
+  readonly sortOptions = [
+    ['newest', 'newest first'],
+    ['rarity', 'rarest first'],
+  ] as const;
+
+  readonly activeSort = computed<'newest' | 'rarity'>(() => this.sort() === 'rarity' ? 'rarity' : 'newest');
 
   /**
    * Per-trait selected-value sets, derived from URL inputs.
@@ -143,6 +153,29 @@ export class Search {
 
   readonly keywordOpen = signal(false);
 
+  // A curated rotation of trait combinations that each return a healthy
+  // number of cats. The shown example is randomized whenever the user
+  // opens the keyword box, so they see syntax variety on repeat visits.
+  // Each entry uses broad-population traits (e.g. pose + color + eyes)
+  // whose intersections are stable as new cats mint.
+  private readonly KEYWORD_EXAMPLES = [
+    'pose:sleeping expression:smile glasses:cool',
+    'color:orange,yellow pose:standing background:cyberpunk',
+    'eyes:red,blue pattern:striped expression:grumpy',
+    'pose:pouncing color:green background:block9',
+    'crown:gold expression:smile background:orange',
+    'pattern:eyepatch glasses:black,cool pose:stalking',
+    'color:fire eyes:red pose:standing',
+    'background:whitepaper pose:sleeping expression:shy',
+  ] as const;
+
+  readonly currentExample = signal(this.pickExample());
+
+  private pickExample(): string {
+    const i = Math.floor(Math.random() * this.KEYWORD_EXAMPLES.length);
+    return this.KEYWORD_EXAMPLES[i];
+  }
+
   // Linked to `selected()` so trait changes overwrite the user's draft.
   // The alternative (an independent signal) lets traits and text drift
   // out of sync silently.
@@ -155,9 +188,10 @@ export class Search {
     params: () => ({
       filters: this.selected(),
       page: this.currentPage() || 1,
+      sort: this.activeSort(),
     }),
     stream: ({ params }) => {
-      const httpParams = filtersToHttpParams(params.filters);
+      const httpParams = filtersToHttpParams(params.filters).set('sort', params.sort);
       const url = `${environment.api}/api/cats/search/${ITEMS_PER_PAGE}/${params.page}`;
       return this.http.get<CatSearchResultDto>(url, { params: httpParams });
     },
@@ -166,6 +200,10 @@ export class Search {
   readonly catNumbers = computed(() => this.resultsResource.value()?.catNumbers ?? []);
   readonly total = computed(() => this.resultsResource.value()?.total ?? 0);
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / ITEMS_PER_PAGE)));
+
+  /** Drop size of the active category (unfiltered). Drives the "X of Y"
+   *  header and the rarity-chip hide rule. Null on first paint. */
+  readonly categoryTotal = computed(() => this.resultsResource.value()?.categoryTotal ?? null);
 
   /** Server-computed facet counts for the current selection. Empty until the
    *  first response arrives — consumers should treat absence as "no info"
@@ -184,19 +222,34 @@ export class Search {
     return CATEGORY_TABS.filter((band) => band === active || (counts[band] ?? 0) > 0);
   });
 
+  /** Rarity threshold for each option, mirroring the backend's
+   *  RARITY_THRESHOLDS. A chip is meaningful only when the active
+   *  category contains more cats than the threshold (otherwise it
+   *  matches every cat in the band, which isn't a filter). */
+  private readonly RARITY_THRESHOLDS: Record<string, number> = {
+    top10: 10,
+    top100: 100,
+    top1k: 1000,
+  };
+
   /** Chip rows scoped to the current facet counts. For each trait family,
    *  options whose count is zero are dropped; the count is attached so
    *  the chip can render "label (N)". Active selections are always kept
-   *  visible, mirroring the category-tab rule. */
+   *  visible, mirroring the category-tab rule. The rarity row gets two
+   *  extra rules: an "all" chip that clears the rarity filter, and
+   *  threshold-aware hiding (top1k chip vanishes in sub1k where the
+   *  whole band IS the top 1k). */
   readonly visibleTraits = computed(() => {
     const facets = this.facets();
     const selected = this.selected();
+    const total = this.categoryTotal();
     return CHIP_TRAIT_KEYS.map((key) => {
       const def = TRAIT_DEFINITIONS[key];
       const counts = facets[key] ?? {};
       const haveAnyCounts = Object.keys(counts).length > 0;
       const selectedSet = new Set(selected[key]);
-      const options = def.options
+
+      let options: { value: string; label: string; count: number }[] = def.options
         .map(([value, label]) => ({ value, label, count: counts[value] ?? 0 }))
         .filter((opt) =>
           // Show the chip if it's selected (so the user can untoggle),
@@ -204,7 +257,28 @@ export class Search {
           // or if facets haven't arrived yet (avoid flashing chips out).
           selectedSet.has(opt.value) || !haveAnyCounts || opt.count > 0,
         );
-      return { key, label: def.label, options };
+
+      let rowSelected: readonly string[] = selected[key];
+
+      if (key === 'rarity') {
+        // Hide rarity chips whose ceiling exceeds the active category's
+        // drop size — e.g. "top 1k" on sub1k matches every cat.
+        if (total !== null) {
+          options = options.filter((opt) => {
+            const threshold = this.RARITY_THRESHOLDS[opt.value];
+            return threshold === undefined || threshold < total;
+          });
+        }
+        // Always offer "all" as a clear-rarity chip, highlighted when
+        // no specific rarity ceiling is selected.
+        options = [
+          { value: 'all', label: 'all', count: total ?? 0 },
+          ...options,
+        ];
+        if (selected.rarity.length === 0) rowSelected = ['all'];
+      }
+
+      return { key, label: def.label, options, selected: rowSelected };
     });
   });
 
@@ -219,12 +293,29 @@ export class Search {
   // OR within a row, AND across rows — the hint in the template tells
   // the user, so two traits in one row stay valid (e.g. Block9 +
   // Cyberpunk = "either background").
+  //
+  // The rarity "all" chip is a clear-filter affordance, not a stored
+  // value — picking it drops the rarity selection so the URL stays
+  // minimal and the backend sees no rarity filter.
   onToggle(key: FilterKey, value: string): void {
+    if (key === 'rarity' && value === 'all') {
+      this.navigateWithSelected({ ...this.selected(), rarity: [] }, 1);
+      return;
+    }
     const current = this.selected()[key];
     const next = current.includes(value)
       ? current.filter((v) => v !== value)
       : [...current, value];
     this.navigateWithSelected({ ...this.selected(), [key]: next }, 1);
+  }
+
+  /** Switch the sort order (newest ↔ rarity). Resets to page 1 so the
+   *  reader sees the top of the newly ordered list. */
+  setSort(value: string): void {
+    void this.router.navigate(['/search', 1], {
+      queryParams: { sort: value === 'rarity' ? 'rarity' : null },
+      queryParamsHandling: 'merge',
+    });
   }
 
   /** Switch the active category tab. Other chip selections survive
@@ -236,6 +327,7 @@ export class Search {
 
   toggleKeyword(): void {
     this.keywordOpen.update((v) => !v);
+    if (this.keywordOpen()) this.currentExample.set(this.pickExample());
   }
 
   submitKeyword(): void {
@@ -283,6 +375,10 @@ export class Search {
       const effective = key === 'category' ? vals.slice(0, 1) : vals;
       queryParams[key] = effective.length > 0 ? effective.join(',') : null;
     }
+    // sort is a separate axis from filters but must survive filter
+    // changes — preserve it explicitly so a chip click doesn't reset
+    // "rarest first" back to "newest first".
+    queryParams['sort'] = this.activeSort() === 'rarity' ? 'rarity' : null;
     void this.router.navigate(['/search', page], { queryParams });
   }
 }

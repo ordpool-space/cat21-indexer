@@ -30,5 +30,9 @@ export interface CatSearchResultDto {
      * Facet counts. facets[dim][value] = how many cats match if the user added (dim=value) to their selection. Use to hide impossible chips and show counts next to live ones.
      */
     facets: { [key: string]: { [key: string]: number; }; };
+    /**
+     * Drop size of the active category when exactly one is selected — independent of the chip filters. Use to render \"X of Y cats\" and to hide rarity ceilings that exceed the band (e.g. top1k on sub1k). Null if the request did not pin a single category.
+     */
+    categoryTotal?: number | null;
 }
 

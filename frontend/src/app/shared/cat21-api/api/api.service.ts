@@ -165,24 +165,36 @@ export class ApiService extends BaseService {
 
     /**
      * Get paginated cat numbers
-     * Returns only cat numbers (no traits), sorted by newest first. Max 100 items per page. Ideal for gallery views where only thumbnails are needed.
+     * Returns only cat numbers (no traits). Default sort is newest-first (catNumber DESC); pass ?sort&#x3D;rarity to order by global rarityBits DESC (rarest across the whole collection — the Genesis Cat first). Max 100 items per page.
      * @endpoint get /api/cats/numbers/{itemsPerPage}/{currentPage}
      * @param itemsPerPage Number of cats per page (max 100)
      * @param currentPage Page number (1-based)
+     * @param sort Sort order: \&quot;newest\&quot; (default) or \&quot;rarity\&quot;.
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatNumbersPaginatedResultDto>;
-    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatNumbersPaginatedResultDto>>;
-    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatNumbersPaginatedResultDto>>;
-    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, sort?: 'newest' | 'rarity', observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatNumbersPaginatedResultDto>;
+    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, sort?: 'newest' | 'rarity', observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatNumbersPaginatedResultDto>>;
+    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, sort?: 'newest' | 'rarity', observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatNumbersPaginatedResultDto>>;
+    public catsControllerGetCatNumbers(itemsPerPage: number, currentPage: number, sort?: 'newest' | 'rarity', observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
         if (itemsPerPage === null || itemsPerPage === undefined) {
             throw new Error('Required parameter itemsPerPage was null or undefined when calling catsControllerGetCatNumbers.');
         }
         if (currentPage === null || currentPage === undefined) {
             throw new Error('Required parameter currentPage was null or undefined when calling catsControllerGetCatNumbers.');
         }
+
+        let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'sort',
+            <any>sort,
+            QueryParamStyle.Form,
+            true,
+        );
+
 
         let localVarHeaders = this.defaultHeaders;
 
@@ -214,6 +226,7 @@ export class ApiService extends BaseService {
         return this.httpClient.request<CatNumbersPaginatedResultDto>('get', `${basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
+                params: localVarQueryParameters.toHttpParams(),
                 responseType: <any>responseType_,
                 ...(withCredentials ? { withCredentials } : {}),
                 headers: localVarHeaders,
@@ -572,14 +585,15 @@ export class ApiService extends BaseService {
      * @param color Dominant color bucket: red, orange, yellow, green, blue, purple, pink, black (genesis), white (genesis), fire (feeRate 69 sat/vB), saturated (feeRate 420 sat/vB).
      * @param genesis Origin: genesis (the 1-of-1 cat #0) or normal (everything else).
      * @param rarity Rarity rank ceiling within the active category: top10 (rank ≤ 10), top100 (≤ 100), top1k (≤ 1000). Multi-select takes the broadest ceiling.
+     * @param sort Sort order: \&quot;newest\&quot; (default, by catNumber DESC) or \&quot;rarity\&quot; (by rarityRank ASC inside the active category — rarest first).
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatsControllerRandomCat200Response>;
-    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatsControllerRandomCat200Response>>;
-    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatsControllerRandomCat200Response>>;
-    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, sort?: 'newest' | 'rarity', observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatsControllerRandomCat200Response>;
+    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, sort?: 'newest' | 'rarity', observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatsControllerRandomCat200Response>>;
+    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, sort?: 'newest' | 'rarity', observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatsControllerRandomCat200Response>>;
+    public catsControllerRandomCat(eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, sort?: 'newest' | 'rarity', observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
 
         let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
 
@@ -691,6 +705,15 @@ export class ApiService extends BaseService {
         );
 
 
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'sort',
+            <any>sort,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
         let localVarHeaders = this.defaultHeaders;
 
         const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
@@ -750,14 +773,15 @@ export class ApiService extends BaseService {
      * @param color Dominant color bucket: red, orange, yellow, green, blue, purple, pink, black (genesis), white (genesis), fire (feeRate 69 sat/vB), saturated (feeRate 420 sat/vB).
      * @param genesis Origin: genesis (the 1-of-1 cat #0) or normal (everything else).
      * @param rarity Rarity rank ceiling within the active category: top10 (rank ≤ 10), top100 (≤ 100), top1k (≤ 1000). Multi-select takes the broadest ceiling.
+     * @param sort Sort order: \&quot;newest\&quot; (default, by catNumber DESC) or \&quot;rarity\&quot; (by rarityRank ASC inside the active category — rarest first).
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatSearchResultDto>;
-    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatSearchResultDto>>;
-    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatSearchResultDto>>;
-    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, sort?: 'newest' | 'rarity', observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatSearchResultDto>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, sort?: 'newest' | 'rarity', observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatSearchResultDto>>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, sort?: 'newest' | 'rarity', observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatSearchResultDto>>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, sort?: 'newest' | 'rarity', observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
         if (itemsPerPage === null || itemsPerPage === undefined) {
             throw new Error('Required parameter itemsPerPage was null or undefined when calling catsControllerSearchCats.');
         }
@@ -870,6 +894,15 @@ export class ApiService extends BaseService {
             localVarQueryParameters,
             'rarity',
             <any>rarity,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'sort',
+            <any>sort,
             QueryParamStyle.Form,
             true,
         );
