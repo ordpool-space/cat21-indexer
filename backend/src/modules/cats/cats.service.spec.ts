@@ -317,4 +317,57 @@ describe('CatsService', () => {
       expect(result.database.error!.length).toBe(200);
     });
   });
+
+  describe('searchFacets', () => {
+    // Chainable mock that lets every Drizzle query terminate at either
+    // .where(), .groupBy(), or .offset() by resolving the chain to [].
+    // Each call to .select() returns a fresh chain so parallel queries
+    // don't interfere with each other.
+    function createChainableDb(resolvedTo: unknown[] = []) {
+      const newChain = (): any => {
+        const chain: any = {};
+        chain.select = jest.fn().mockReturnValue(chain);
+        chain.from = jest.fn().mockReturnValue(chain);
+        chain.where = jest.fn().mockReturnValue(chain);
+        chain.orderBy = jest.fn().mockReturnValue(chain);
+        chain.limit = jest.fn().mockReturnValue(chain);
+        chain.offset = jest.fn().mockReturnValue(chain);
+        chain.groupBy = jest.fn().mockReturnValue(chain);
+        chain.then = (resolve: any) => resolve(resolvedTo);
+        return chain;
+      };
+      const root: any = {};
+      root.select = jest.fn().mockImplementation(() => newChain());
+      return root;
+    }
+
+    it('returns a facet record for every search dimension', async () => {
+      const db = createChainableDb([]);
+      const service = new CatsService({ db } as any, new CacheService(), createMockSync() as any);
+
+      const facets = await service.searchFacets({});
+      expect(Object.keys(facets).sort()).toEqual(
+        ['background', 'category', 'color', 'crown', 'expression', 'eyes', 'gender', 'genesis', 'glasses', 'pattern', 'pose', 'rarity'].sort(),
+      );
+    });
+
+    it('rarity facet exposes the three top-N labels', async () => {
+      const db = createChainableDb([{ count: 0 }]);
+      const service = new CatsService({ db } as any, new CacheService(), createMockSync() as any);
+
+      const facets = await service.searchFacets({});
+      expect(Object.keys(facets.rarity).sort()).toEqual(['top100', 'top10', 'top1k'].sort());
+    });
+
+    it('genesis facet maps boolean rows to genesis/normal URL labels', async () => {
+      const db = createChainableDb([
+        { value: true, count: 1 },
+        { value: false, count: 152 },
+      ]);
+      const service = new CatsService({ db } as any, new CacheService(), createMockSync() as any);
+
+      const facets = await service.searchFacets({});
+      expect(facets.genesis).toEqual({ genesis: 1, normal: 152 });
+    });
+  });
 });

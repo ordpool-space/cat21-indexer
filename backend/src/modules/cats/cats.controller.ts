@@ -26,7 +26,7 @@ import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
 import { CATEGORY_RANGES } from '../shared/categories';
 import { CatsService, type SearchFilters } from './cats.service';
-import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
+import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatSearchResultDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Used for cat IMAGES (SVG/WebP) — the rendered art is truly
 // immutable, so a year-long edge cache is fine. Also used for cat
@@ -264,13 +264,13 @@ export class CatsController {
   })
   @ApiParam({ name: 'itemsPerPage', description: 'Number of cats per page (max 100)', example: 48 })
   @ApiParam({ name: 'currentPage', description: 'Page number (1-based)', example: 1 })
-  @ApiOkResponse({ type: CatNumbersPaginatedResultDto, description: 'Paginated list of matching cat numbers with total count' })
+  @ApiOkResponse({ type: CatSearchResultDto, description: 'Paginated list of matching cat numbers, total count, and per-dimension facet counts for chip rendering' })
   @ApiBadRequestResponse({ description: 'A filter value is not in the allowed set, exceeds the per-filter length cap, or itemsPerPage/currentPage is not a valid integer' })
   async searchCats(
     @Param('itemsPerPage', ParseIntPipe) itemsPerPage: number,
     @Param('currentPage', ParseIntPipe) currentPage: number,
     @Query() query: CatSearchQueryDto,
-  ): Promise<CatNumbersPaginatedResultDto> {
+  ): Promise<CatSearchResultDto> {
     return this.catsService.searchCatNumbers(
       toSearchFilters(query),
       Math.max(1, Math.min(itemsPerPage, 100)),

@@ -6,7 +6,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import { environment } from '../../environments/environment';
 import { CatGallery } from '../cat-gallery/cat-gallery';
-import { CatDto, CatNumbersPaginatedResultDto } from '../shared/cat21-api';
+import { CatDto, CatSearchResultDto } from '../shared/cat21-api';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 import { TraitRow } from './trait-row';
 
@@ -141,9 +141,6 @@ export class Search {
     CHIP_TRAIT_KEYS.some((key) => this.selected()[key].length > 0),
   );
 
-  /** Chip rows rendered in the grid (everything except category). */
-  readonly traits = CHIP_TRAIT_KEYS.map((key) => ({ key, ...TRAIT_DEFINITIONS[key] }));
-
   readonly keywordOpen = signal(false);
 
   // Linked to `selected()` so trait changes overwrite the user's draft.
@@ -162,13 +159,54 @@ export class Search {
     stream: ({ params }) => {
       const httpParams = filtersToHttpParams(params.filters);
       const url = `${environment.api}/api/cats/search/${ITEMS_PER_PAGE}/${params.page}`;
-      return this.http.get<CatNumbersPaginatedResultDto>(url, { params: httpParams });
+      return this.http.get<CatSearchResultDto>(url, { params: httpParams });
     },
   });
 
   readonly catNumbers = computed(() => this.resultsResource.value()?.catNumbers ?? []);
   readonly total = computed(() => this.resultsResource.value()?.total ?? 0);
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.total() / ITEMS_PER_PAGE)));
+
+  /** Server-computed facet counts for the current selection. Empty until the
+   *  first response arrives — consumers should treat absence as "no info"
+   *  (show the chip optimistically), not "zero". */
+  readonly facets = computed(() => this.resultsResource.value()?.facets ?? {});
+
+  /** Category tabs filtered to only those with at least one cat under
+   *  the current non-category selection. The active tab is always kept
+   *  visible, so the user can see what they picked even if filters
+   *  zero it out — clearing the other chips brings the rest back. */
+  readonly visibleCategoryTabs = computed(() => {
+    const counts = this.facets()['category'] ?? {};
+    const active = this.activeCategory();
+    const haveAnyCounts = Object.keys(counts).length > 0;
+    if (!haveAnyCounts) return CATEGORY_TABS;
+    return CATEGORY_TABS.filter((band) => band === active || (counts[band] ?? 0) > 0);
+  });
+
+  /** Chip rows scoped to the current facet counts. For each trait family,
+   *  options whose count is zero are dropped; the count is attached so
+   *  the chip can render "label (N)". Active selections are always kept
+   *  visible, mirroring the category-tab rule. */
+  readonly visibleTraits = computed(() => {
+    const facets = this.facets();
+    const selected = this.selected();
+    return CHIP_TRAIT_KEYS.map((key) => {
+      const def = TRAIT_DEFINITIONS[key];
+      const counts = facets[key] ?? {};
+      const haveAnyCounts = Object.keys(counts).length > 0;
+      const selectedSet = new Set(selected[key]);
+      const options = def.options
+        .map(([value, label]) => ({ value, label, count: counts[value] ?? 0 }))
+        .filter((opt) =>
+          // Show the chip if it's selected (so the user can untoggle),
+          // or if the backend says picking it would yield results,
+          // or if facets haven't arrived yet (avoid flashing chips out).
+          selectedSet.has(opt.value) || !haveAnyCounts || opt.count > 0,
+        );
+      return { key, label: def.label, options };
+    });
+  });
 
   readonly isBackendUnavailable = computed(() => {
     const err = this.resultsResource.error();

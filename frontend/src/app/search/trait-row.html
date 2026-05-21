@@ -1,14 +1,14 @@
 <div class="trait-row">
   <span class="trait-row-label">{{ label() }}</span>
   <div class="trait-row-options" role="group" [attr.aria-label]="label()">
-    @for (opt of options(); track opt[0]) {
+    @for (opt of options(); track opt.value) {
       <button
         type="button"
         class="trait"
-        [class.trait-on]="isSelected(opt[0])"
-        [attr.aria-pressed]="isSelected(opt[0])"
-        (click)="onTraitClick(opt[0])"
-      >{{ opt[1] }}</button>
+        [class.trait-on]="isSelected(opt.value)"
+        [attr.aria-pressed]="isSelected(opt.value)"
+        (click)="onTraitClick(opt.value)"
+      >{{ opt.label }} <span class="trait-count">({{ opt.count | number }})</span></button>
     }
   </div>
 </div>

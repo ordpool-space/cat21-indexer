@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { and, count, desc, eq, inArray, lte, max, sql, sum, type SQL } from 'drizzle-orm';
+import { type MySqlColumn } from 'drizzle-orm/mysql-core';
 import { Cat21ParserService } from 'ordpool-parser';
 import { CacheService } from '../shared/cache/cache.service';
 import { CATEGORY_RANGES } from '../shared/categories';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { SyncService } from '../sync/sync.service';
-import { CatDto, CatNumbersPaginatedResultDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
+import { CatDto, CatNumbersPaginatedResultDto, CatSearchResultDto, CatsPaginatedResultDto, ExtendedHealthDto, FacetCounts, HealthDto, StatusDto } from './dto/cat.dto';
 
 /**
  * Trait filters for the cat search endpoint. Each field is a list of accepted
@@ -246,12 +247,14 @@ export class CatsService {
     filters: SearchFilters,
     itemsPerPage: number,
     currentPage: number,
-  ): Promise<CatNumbersPaginatedResultDto> {
+  ): Promise<CatSearchResultDto> {
     const where = buildSearchWhere(filters);
     const offset = (currentPage - 1) * itemsPerPage;
 
-    // Total + page in parallel; both queries hit the same indexed columns.
-    const [[totalRow], rows] = await Promise.all([
+    // Page + total + facets in parallel. Facets fan out into one query per
+    // dimension, all dispatched together — see searchFacets for the per-
+    // dimension shape.
+    const [[totalRow], rows, facets] = await Promise.all([
       this.drizzle.db.select({ count: count() }).from(cats).where(where),
       this.drizzle.db
         .select({ catNumber: cats.catNumber })
@@ -260,6 +263,7 @@ export class CatsService {
         .orderBy(desc(cats.catNumber))
         .limit(itemsPerPage)
         .offset(offset),
+      this.searchFacets(filters),
     ]);
 
     return {
@@ -267,7 +271,84 @@ export class CatsService {
       total: totalRow.count,
       currentPage,
       itemsPerPage,
+      facets,
     };
+  }
+
+  /**
+   * Compute facet counts for every filter dimension. For each dimension
+   * D, the count for value V is "how many cats match if the user added
+   * (D = V) to their current selection". The trick: when computing
+   * dimension D's facet, apply every filter EXCEPT D. That way the user
+   * can still toggle within D — picking color=red doesn't hide the
+   * other color chips, but it DOES filter every other dimension to
+   * cats that match color=red.
+   *
+   * Dispatched as one query per dimension in parallel. With indexes on
+   * every filtered column this is ~50ms total on the live dataset.
+   */
+  async searchFacets(filters: SearchFilters): Promise<FacetCounts> {
+    const columnFacets: { key: keyof SearchFilters; column: MySqlColumn }[] = [
+      { key: 'eyes',       column: cats.laserEyes },
+      { key: 'pose',       column: cats.designPose },
+      { key: 'expression', column: cats.designExpression },
+      { key: 'pattern',    column: cats.designPattern },
+      { key: 'background', column: cats.background },
+      { key: 'crown',      column: cats.crown },
+      { key: 'glasses',    column: cats.glasses },
+      { key: 'color',      column: cats.dominantColorCategory },
+      { key: 'gender',     column: cats.gender },
+      { key: 'category',   column: cats.category },
+    ];
+
+    const columnPromises = columnFacets.map(async ({ key, column }) => {
+      const where = buildSearchWhere({ ...filters, [key]: undefined });
+      const rows = await this.drizzle.db
+        .select({ value: column, count: count() })
+        .from(cats)
+        .where(where)
+        .groupBy(column);
+      const counts: Record<string, number> = {};
+      for (const r of rows) {
+        if (r.value !== null && r.value !== '') counts[r.value as string] = r.count;
+      }
+      return [key, counts] as const;
+    });
+
+    // genesis: two boolean groups, mapped back to the URL values.
+    const genesisPromise = (async (): Promise<readonly [string, Record<string, number>]> => {
+      const where = buildSearchWhere({ ...filters, genesis: undefined });
+      const rows = await this.drizzle.db
+        .select({ value: cats.genesis, count: count() })
+        .from(cats)
+        .where(where)
+        .groupBy(cats.genesis);
+      const counts: Record<string, number> = {};
+      for (const r of rows) counts[r.value ? 'genesis' : 'normal'] = r.count;
+      return ['genesis', counts] as const;
+    })();
+
+    // rarity: three rank-ceiling counts (top10 ≤ 10, top100 ≤ 100,
+    // top1k ≤ 1000), applying every filter except rarity itself.
+    const rarityPromise = (async (): Promise<readonly [string, Record<string, number>]> => {
+      const baseWhere = buildSearchWhere({ ...filters, rarity: undefined });
+      const entries = await Promise.all(
+        Object.entries(RARITY_THRESHOLDS).map(async ([label, threshold]) => {
+          const clause = baseWhere
+            ? and(baseWhere, lte(cats.rarityRank, threshold))
+            : lte(cats.rarityRank, threshold);
+          const [row] = await this.drizzle.db
+            .select({ count: count() })
+            .from(cats)
+            .where(clause);
+          return [label, row?.count ?? 0] as const;
+        }),
+      );
+      return ['rarity', Object.fromEntries(entries)] as const;
+    })();
+
+    const all = await Promise.all([...columnPromises, genesisPromise, rarityPromise]);
+    return Object.fromEntries(all);
   }
 
   /**

@@ -285,6 +285,33 @@ export class CatNumbersPaginatedResultDto {
   itemsPerPage!: number;
 }
 
+/**
+ * Facet counts per dimension. For each filter dimension (eyes, pose, …,
+ * category, gender, genesis, rarity), maps each candidate value to the
+ * count of cats that would be in the result set if the user added that
+ * value to their current filter selection. The count for value V in
+ * dimension D is computed by applying every filter EXCEPT dimension D —
+ * so the user can still toggle within D without D's chips disappearing.
+ *
+ * Zero counts may be omitted; consumers should treat missing entries as 0.
+ */
+export type FacetCounts = Record<string, Record<string, number>>;
+
+export class CatSearchResultDto extends CatNumbersPaginatedResultDto {
+  @ApiProperty({
+    description: 'Facet counts. facets[dim][value] = how many cats match if the user added (dim=value) to their selection. Use to hide impossible chips and show counts next to live ones.',
+    example: {
+      color:    { red: 153, orange: 4633, yellow: 11332 },
+      eyes:     { Orange: 71, Red: 12, Green: 0, Blue: 0, None: 70 },
+      category: { sub1: 0, sub1k: 8, sub10k: 145 },
+      genesis:  { genesis: 1, normal: 152 },
+      rarity:   { top10: 1, top100: 5, top1k: 32 },
+    },
+    additionalProperties: { type: 'object', additionalProperties: { type: 'number' } },
+  })
+  facets!: FacetCounts;
+}
+
 export class StatusDto {
   @ApiProperty({ description: 'Total number of indexed cats', example: 63732 })
   totalCats!: number;

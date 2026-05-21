@@ -8,7 +8,7 @@
 <!-- Category tabs (desktop) — each band is a distinct collection.
      Mobile falls back to a dropdown via CSS. -->
 <nav class="category-tabs d-none d-md-flex flex-wrap" aria-label="Cat category">
-  @for (band of categoryTabs; track band) {
+  @for (band of visibleCategoryTabs(); track band) {
     <button
       type="button"
       class="category-tab"
@@ -26,7 +26,7 @@
     [value]="activeCategory()"
     (change)="setCategory($any($event.target).value)"
   >
-    @for (band of categoryTabs; track band) {
+    @for (band of visibleCategoryTabs(); track band) {
       <option [value]="band">{{ band }}</option>
     }
   </select>
@@ -58,7 +58,7 @@
 }
 
 <div class="trait-rows mb-3">
-  @for (trait of traits; track trait.key) {
+  @for (trait of visibleTraits(); track trait.key) {
     <app-trait-row
       [label]="trait.label"
       [options]="trait.options"

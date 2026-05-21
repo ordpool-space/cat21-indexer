@@ -21,6 +21,8 @@ import { CatDto } from '../model/catDto';
 // @ts-ignore
 import { CatNumbersPaginatedResultDto } from '../model/catNumbersPaginatedResultDto';
 // @ts-ignore
+import { CatSearchResultDto } from '../model/catSearchResultDto';
+// @ts-ignore
 import { CatsControllerRandomCat200Response } from '../model/catsControllerRandomCat200Response';
 // @ts-ignore
 import { CatsPaginatedResultDto } from '../model/catsPaginatedResultDto';
@@ -752,9 +754,9 @@ export class ApiService extends BaseService {
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatNumbersPaginatedResultDto>;
-    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatNumbersPaginatedResultDto>>;
-    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatNumbersPaginatedResultDto>>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<CatSearchResultDto>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<CatSearchResultDto>>;
+    public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<CatSearchResultDto>>;
     public catsControllerSearchCats(itemsPerPage: number, currentPage: number, eyes?: string, pose?: string, expression?: string, pattern?: string, background?: string, crown?: string, glasses?: string, category?: string, gender?: string, color?: string, genesis?: string, rarity?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
         if (itemsPerPage === null || itemsPerPage === undefined) {
             throw new Error('Required parameter itemsPerPage was null or undefined when calling catsControllerSearchCats.');
@@ -900,7 +902,7 @@ export class ApiService extends BaseService {
 
         let localVarPath = `/api/cats/search/${this.configuration.encodeParam({name: "itemsPerPage", value: itemsPerPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}/${this.configuration.encodeParam({name: "currentPage", value: currentPage, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}`;
         const { basePath, withCredentials } = this.configuration;
-        return this.httpClient.request<CatNumbersPaginatedResultDto>('get', `${basePath}${localVarPath}`,
+        return this.httpClient.request<CatSearchResultDto>('get', `${basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 params: localVarQueryParameters.toHttpParams(),
