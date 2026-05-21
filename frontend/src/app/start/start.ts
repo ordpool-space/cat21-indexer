@@ -44,7 +44,10 @@ export class Start {
   readonly activeSort = computed<'newest' | 'rarity'>(() => this.sort() === 'rarity' ? 'rarity' : 'newest');
 
   readonly activeCategory = computed<string>(() => {
-    const raw = this.category().split(',').map((v) => v.trim()).filter(Boolean);
+    // withComponentInputBinding hands us undefined when the query param
+    // is absent, even though the input() default is ''. Guard against it
+    // before calling .split() or this computed throws on landing.
+    const raw = (this.category() ?? '').split(',').map((v) => v.trim()).filter(Boolean);
     return raw.length > 0 && CATEGORY_TABS.includes(raw[0]) ? raw[0] : DEFAULT_CATEGORY;
   });
 
