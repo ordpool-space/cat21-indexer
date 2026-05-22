@@ -32,7 +32,7 @@
 }
 
 <nav class="category-tabs d-none d-md-flex" aria-label="Cat category">
-  @for (band of categoryTabs; track band) {
+  @for (band of visibleCategoryTabs(); track band) {
     <button
       type="button"
       class="category-tab"
@@ -50,7 +50,7 @@
     [value]="activeCategory()"
     (change)="setCategory($any($event.target).value)"
   >
-    @for (band of categoryTabs; track band) {
+    @for (band of visibleCategoryTabs(); track band) {
       <option [value]="band">{{ band }}</option>
     }
   </select>

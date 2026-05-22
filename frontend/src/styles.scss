@@ -81,8 +81,8 @@ a.btn {
     font-weight: bold;
     padding-top: 0.55rem;
     padding-bottom: 0.55rem;
-    border-bottom: 4px solid white;
-    margin-bottom: -4px;
+    border-bottom: 2px solid white;
+    margin-bottom: -2px;
     z-index: 1;
   }
 
@@ -99,9 +99,11 @@ a.btn {
 }
 
 // Norton-Commander-style half-shade drop shadow. Two pseudo-elements
-// form an L on the bottom-right of any panel-class element, offset 8px
-// down-right. The dither tile (2×2 black checkerboard on 4×4 transparent)
-// renders as the ▒ U+2592 "medium shade" — the classic DOS dialog look.
+// form an L on the bottom-right of any panel-class element, offset
+// 14px down-right (the classic DOS offset gap at the top-right and
+// bottom-left corners stays — that's what reads as "Norton"). Tile is
+// a 2×2 light-gray checkerboard on a 4×4 transparent canvas, rendering
+// as the ▒ U+2592 half-shade.
 .norton-shadow {
   position: relative;
 }
@@ -109,21 +111,23 @@ a.btn {
 .norton-shadow::after {
   content: '';
   position: absolute;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='black'/><rect x='2' y='2' width='2' height='2' fill='black'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
   background-repeat: repeat;
   pointer-events: none;
 }
 .norton-shadow::before {
-  top: 8px;
-  right: -8px;
-  bottom: -8px;
-  width: 8px;
+  // right-side strip
+  top: 14px;
+  right: -14px;
+  bottom: -14px;
+  width: 14px;
 }
 .norton-shadow::after {
-  left: 8px;
-  right: -8px;
-  bottom: -8px;
-  height: 8px;
+  // bottom strip
+  left: 14px;
+  right: -14px;
+  bottom: -14px;
+  height: 14px;
 }
 
 // Shared pixelated <select> styling. Transparent fill, white border,

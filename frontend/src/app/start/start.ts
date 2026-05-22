@@ -20,6 +20,21 @@ const DEFAULT_CATEGORY = 'sub1k';
 const CATEGORY_TABS: readonly string[] = Object.values(CatDto.CategoryEnum)
   .filter((v): v is Exclude<typeof v, ''> => v !== '');
 
+// Lowest cat number that opens each band — mirrors the canonical
+// CATEGORY_RANGES table in cat21-indexer-backend/src/modules/shared/categories.ts.
+// Used to hide tabs for bands that don't have any cats minted yet
+// (e.g. sub250k stays hidden until cat #100 000 lands).
+const CATEGORY_MIN: Record<string, number> = {
+  sub1:    0,
+  sub1k:   1,
+  sub10k:  1_000,
+  sub50k:  10_000,
+  sub100k: 50_000,
+  sub250k: 100_000,
+  sub500k: 250_000,
+  sub1M:   500_000,
+};
+
 @Component({
   selector: 'app-start',
   templateUrl: './start.html',
@@ -52,6 +67,16 @@ export class Start {
   });
 
   readonly categoryTabs = CATEGORY_TABS;
+
+  /** Visible category tabs filtered by the latest synced cat number —
+   *  bands whose first cat hasn't been minted yet stay hidden (sub250k+
+   *  for the current supply). Before status loads, show everything so
+   *  the strip doesn't briefly collapse to a single tab and reflow. */
+  readonly visibleCategoryTabs = computed<readonly string[]>(() => {
+    const last = this.statusResource.value()?.lastSyncedCatNumber ?? -1;
+    if (last < 0) return CATEGORY_TABS;
+    return CATEGORY_TABS.filter((band) => last >= (CATEGORY_MIN[band] ?? 0));
+  });
 
   readonly sortOptions = [
     ['newest', 'newest first'],
