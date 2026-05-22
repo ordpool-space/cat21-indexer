@@ -9,6 +9,17 @@ Two independent projects (native CLIs):
 - **`backend/`** — NestJS 11 + Fastify + Drizzle ORM. Syncs cat data from `ord.cat21.space`, computes traits via `ordpool-parser`, stores in MariaDB. Exposes REST API with Swagger docs. Live at `backend2.cat21.space` (Cloudflare Tunnel → happysrv `127.0.0.1:3333`).
 - **`frontend/`** — Angular 21 (zoneless, signal-first). The **cat21.space** public website. Shows minted CAT-21 cats with SVG rendering, trait display, paginated gallery.
 
+## HARD RULE: Keep useful comments
+
+**Don't strip JSDoc or "why" inline comments under the banner of
+"simplification".** The text inside a comment can be trimmed (no
+bombast, no LLM-speak, no before-after history); the block itself
+stays. Category-band sourcing, rarity-rule citations to
+`CAT21-RARITY-SCORE.md`, and sync-loop fire-and-forget rationale are
+exactly the kind of comment a future reader cannot reconstruct from
+code alone. Full decision tree in the workspace `CLAUDE.md` HARD RULE
+"Keep useful comments (JSDoc AND inline 'why')".
+
 ## Quick Start
 
 ```bash

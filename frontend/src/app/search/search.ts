@@ -273,11 +273,12 @@ export class Search {
             return threshold === undefined || threshold < total;
           });
         }
-        // Always offer "all" as a clear-rarity chip, highlighted when
-        // no specific rarity ceiling is selected.
+        // Always offer "all" as a clear-rarity chip, appended at the
+        // end of the row, highlighted when no specific rarity ceiling
+        // is selected.
         options = [
-          { value: 'all', label: 'all', count: total ?? 0 },
           ...options,
+          { value: 'all', label: 'all', count: total ?? 0 },
         ];
         if (selected.rarity.length === 0) rowSelected = ['all'];
       }

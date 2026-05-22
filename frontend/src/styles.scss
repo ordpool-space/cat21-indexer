@@ -101,9 +101,15 @@ a.btn {
 // Norton-Commander-style half-shade drop shadow. Two pseudo-elements
 // form an L on the bottom-right of any panel-class element, offset
 // 14px down-right (the classic DOS offset gap at the top-right and
-// bottom-left corners stays — that's what reads as "Norton"). Tile is
-// a 2×2 light-gray checkerboard on a 4×4 transparent canvas, rendering
-// as the ▒ U+2592 half-shade.
+// bottom-left corners stays — that's what reads as "Norton").
+//
+// Offset arithmetic: position: absolute anchors offsets to the
+// parent's PADDING box, not the border box. The shadow needs to sit
+// outside the panel's white border, so all values that point at the
+// panel's right/bottom edge add the 2px border width back in. Anchor
+// values that point at the panel's top/left edge subtract it. Result:
+// strips align with the OUTER edges of the panel, no overlap of the
+// white outline.
 .norton-shadow {
   position: relative;
 }
@@ -116,17 +122,17 @@ a.btn {
   pointer-events: none;
 }
 .norton-shadow::before {
-  // right-side strip
-  top: 14px;
-  right: -14px;
-  bottom: -14px;
+  // right-side strip — flush past the panel's outer right edge
+  top: 12px;
+  right: -16px;
+  bottom: -16px;
   width: 14px;
 }
 .norton-shadow::after {
-  // bottom strip
-  left: 14px;
-  right: -14px;
-  bottom: -14px;
+  // bottom strip — flush past the panel's outer bottom edge
+  left: 12px;
+  right: -16px;
+  bottom: -16px;
   height: 14px;
 }
 
