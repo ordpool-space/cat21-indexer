@@ -7,6 +7,7 @@ import { Router, RouterLink } from '@angular/router';
 import { environment } from '../../environments/environment';
 import { CatGallery } from '../cat-gallery/cat-gallery';
 import { CatDto, CatSearchResultDto } from '../shared/cat21-api';
+import { CategoryTabs } from '../shared/category-tabs/category-tabs';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 import { TraitRow } from './trait-row';
 
@@ -72,7 +73,7 @@ const LABEL_TO_VALUE = buildLabelToValue();
   selector: 'app-search',
   templateUrl: './search.html',
   styleUrl: './search.scss',
-  imports: [RouterLink, CatGallery, TraitRow, DecimalPipe],
+  imports: [RouterLink, CatGallery, CategoryTabs, TraitRow, DecimalPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Search {

@@ -1,0 +1,14 @@
+// Mobile picker styled to match the desktop active tab — white fill,
+// orange text + orange chevron, white bottom border that merges with
+// the panel below via a 2px negative margin (same -2px overlap the
+// active desktop tab uses). Lives inside the CategoryTabs component
+// so it can't drift away from the markup that needs it.
+.category-select {
+  background-color: white;
+  color: #FF9900;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='%23FF9900' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/></svg>");
+  border-bottom: 2px solid white;
+  margin-bottom: -2px;
+  position: relative;
+  z-index: 1;
+}

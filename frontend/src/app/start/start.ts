@@ -14,6 +14,7 @@ import {
 import { environment } from '../../environments/environment';
 import { CatGallery } from '../cat-gallery/cat-gallery';
 import { ApiService, CatDto, CatSearchResultDto } from '../shared/cat21-api';
+import { CategoryTabs } from '../shared/category-tabs/category-tabs';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 
 const DEFAULT_CATEGORY = 'sub1k';
@@ -38,7 +39,7 @@ const CATEGORY_MIN: Record<string, number> = {
 @Component({
   selector: 'app-start',
   templateUrl: './start.html',
-  imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, CatGallery, DecimalPipe],
+  imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, CatGallery, CategoryTabs, DecimalPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:keydown.ArrowLeft)': 'navigatePrev()',

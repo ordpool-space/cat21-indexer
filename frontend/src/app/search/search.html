@@ -5,32 +5,10 @@
   Or use <a (click)="toggleKeyword()" role="button" class="keyword-search-link">keyword search</a>.
 </p>
 
-<!-- Category tabs (desktop) — each band is a distinct collection.
-     Mobile falls back to a dropdown via CSS. -->
-<nav class="category-tabs d-none d-md-flex flex-wrap" aria-label="Cat category">
-  @for (band of visibleCategoryTabs(); track band) {
-    <button
-      type="button"
-      class="category-tab"
-      [class.category-tab-active]="band === activeCategory()"
-      [attr.aria-pressed]="band === activeCategory()"
-      (click)="setCategory(band)"
-    >{{ band }}</button>
-  }
-</nav>
-<div class="d-block d-md-none">
-  <label class="visually-hidden" for="category-select">Cat category</label>
-  <select
-    id="category-select"
-    class="pixel-select category-select"
-    [value]="activeCategory()"
-    (change)="setCategory($any($event.target).value)"
-  >
-    @for (band of visibleCategoryTabs(); track band) {
-      <option [value]="band">{{ band }}</option>
-    }
-  </select>
-</div>
+<app-category-tabs
+  [tabs]="visibleCategoryTabs()"
+  [active]="activeCategory()"
+  (categoryChange)="setCategory($event)" />
 
 @if (keywordOpen()) {
   <div class="mb-3">

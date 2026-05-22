@@ -31,30 +31,10 @@
   </p>
 }
 
-<nav class="category-tabs d-none d-md-flex" aria-label="Cat category">
-  @for (band of visibleCategoryTabs(); track band) {
-    <button
-      type="button"
-      class="category-tab"
-      [class.category-tab-active]="band === activeCategory()"
-      [attr.aria-pressed]="band === activeCategory()"
-      (click)="setCategory(band)"
-    >{{ band }}</button>
-  }
-</nav>
-<div class="d-block d-md-none">
-  <label class="visually-hidden" for="start-category-select">Cat category</label>
-  <select
-    id="start-category-select"
-    class="pixel-select category-select"
-    [value]="activeCategory()"
-    (change)="setCategory($any($event.target).value)"
-  >
-    @for (band of visibleCategoryTabs(); track band) {
-      <option [value]="band">{{ band }}</option>
-    }
-  </select>
-</div>
+<app-category-tabs
+  [tabs]="visibleCategoryTabs()"
+  [active]="activeCategory()"
+  (categoryChange)="setCategory($event)" />
 
 @if (catsResource.value(); as data) {
   <div class="category-panel norton-shadow mb-3">

@@ -18,18 +18,3 @@
   border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-// Mobile picker styled to match the desktop active tab — white fill,
-// orange text, white border on three sides, bottom border merges into
-// the panel below (same white as the panel's top border, with a
-// negative margin overlapping by 4px). Base look comes from
-// .pixel-select in styles.scss; this class layers on top to invert it.
-// Chevron is overridden to orange so it shows on the white fill.
-.category-select {
-  background-color: white;
-  color: #FF9900;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='%23FF9900' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/></svg>");
-  border-bottom: 2px solid white;
-  margin-bottom: -2px;
-  position: relative;
-  z-index: 1;
-}

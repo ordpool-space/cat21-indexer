@@ -1,0 +1,23 @@
+<nav class="category-tabs d-none d-md-flex" aria-label="Cat category">
+  @for (band of tabs(); track band) {
+    <button
+      type="button"
+      class="category-tab"
+      [class.category-tab-active]="band === active()"
+      [attr.aria-pressed]="band === active()"
+      (click)="onTabClick(band)"
+    >{{ band }}</button>
+  }
+</nav>
+<div class="d-block d-md-none">
+  <label class="visually-hidden">Cat category</label>
+  <select
+    class="pixel-select category-select"
+    [value]="active()"
+    (change)="onSelectChange($event)"
+  >
+    @for (band of tabs(); track band) {
+      <option [value]="band">{{ band }}</option>
+    }
+  </select>
+</div>
