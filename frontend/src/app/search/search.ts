@@ -213,12 +213,14 @@ export class Search {
   /** Category tabs filtered to only those with at least one cat under
    *  the current non-category selection. The active tab is always kept
    *  visible, so the user can see what they picked even if filters
-   *  zero it out — clearing the other chips brings the rest back. */
+   *  zero it out — clearing the other chips brings the rest back.
+   *  Before facets arrive we show ONLY the active tab — hide-first,
+   *  reveal-on-data avoids the flicker of "all tabs → some vanish". */
   readonly visibleCategoryTabs = computed(() => {
     const counts = this.facets()['category'] ?? {};
     const active = this.activeCategory();
     const haveAnyCounts = Object.keys(counts).length > 0;
-    if (!haveAnyCounts) return CATEGORY_TABS;
+    if (!haveAnyCounts) return [active];
     return CATEGORY_TABS.filter((band) => band === active || (counts[band] ?? 0) > 0);
   });
 
@@ -252,10 +254,12 @@ export class Search {
       let options: { value: string; label: string; count: number }[] = def.options
         .map(([value, label]) => ({ value, label, count: counts[value] ?? 0 }))
         .filter((opt) =>
-          // Show the chip if it's selected (so the user can untoggle),
-          // or if the backend says picking it would yield results,
-          // or if facets haven't arrived yet (avoid flashing chips out).
-          selectedSet.has(opt.value) || !haveAnyCounts || opt.count > 0,
+          // Show the chip if it's selected (so the user can untoggle)
+          // or if the backend says picking it would yield results.
+          // Before facets arrive we render NO chips for this row — the
+          // user sees rows reveal as data lands, never sees a chip
+          // appear and then vanish.
+          selectedSet.has(opt.value) || (haveAnyCounts && opt.count > 0),
         );
 
       let rowSelected: readonly string[] = selected[key];

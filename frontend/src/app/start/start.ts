@@ -70,11 +70,12 @@ export class Start {
 
   /** Visible category tabs filtered by the latest synced cat number —
    *  bands whose first cat hasn't been minted yet stay hidden (sub250k+
-   *  for the current supply). Before status loads, show everything so
-   *  the strip doesn't briefly collapse to a single tab and reflow. */
+   *  for the current supply). Before status arrives we show ONLY the
+   *  active tab. Hiding first and revealing on data avoids the flicker
+   *  of "everything → some things vanish" on first paint. */
   readonly visibleCategoryTabs = computed<readonly string[]>(() => {
     const last = this.statusResource.value()?.lastSyncedCatNumber ?? -1;
-    if (last < 0) return CATEGORY_TABS;
+    if (last < 0) return [this.activeCategory()];
     return CATEGORY_TABS.filter((band) => last >= (CATEGORY_MIN[band] ?? 0));
   });
 
