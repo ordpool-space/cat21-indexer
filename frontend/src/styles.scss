@@ -37,6 +37,42 @@ a.btn {
   text-decoration: none;
 }
 
+// ngb-pagination — pixel-style buttons matching .category-tab. Tight
+// padding + small font-size so the bar fits on narrow phones (320px+)
+// even with « < > » + ellipses + a few page numbers.
+.pagination {
+  --bs-pagination-padding-x: 0.45rem;
+  --bs-pagination-padding-y: 0.2rem;
+  --bs-pagination-font-size: 0.8rem;
+  --bs-pagination-border-radius: 0;
+  gap: 2px;
+}
+.page-link {
+  font-family: "Public Pixel", sans-serif;
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  image-rendering: pixelated;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.15);
+    color: white;
+  }
+  &:focus {
+    box-shadow: none;
+  }
+}
+.page-item.active .page-link {
+  background: white;
+  color: #FF9900;
+  border-color: white;
+  font-weight: bold;
+}
+.page-item.disabled .page-link {
+  opacity: 0.4;
+  background: transparent;
+}
+
 // ngbTooltip body content. Bootstrap's default centers it, which
 // reads awkwardly for multi-line tooltips (lists of ranges, prose
 // paragraphs). Left-align everywhere.
