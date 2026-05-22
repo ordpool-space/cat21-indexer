@@ -45,11 +45,10 @@ a.btn {
 }
 
 // Shared category tab strip — used by the search page and the
-// homepage's per-band view. Pixelated buttons that merge into a gray
-// $panel-color content surface below (the active tab "drops" into the
-// panel, so the eye reads them as one connected shape).
-$panel-color: #6B6B6B;
-
+// homepage's per-band view. Pixelated buttons that merge into a
+// transparent content surface below (the active tab "drops" into the
+// panel via the shared white border so the eye reads them as one
+// connected shape). Page bg (orange) shows through the panel.
 .category-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -77,12 +76,12 @@ $panel-color: #6B6B6B;
   &:hover { background: rgba(0, 0, 0, 0.2); }
 
   &.category-tab-active {
-    background: $panel-color;
-    color: white;
+    background: white;
+    color: #FF9900;
     font-weight: bold;
     padding-top: 0.55rem;
     padding-bottom: 0.55rem;
-    border-bottom: 4px solid $panel-color;
+    border-bottom: 4px solid white;
     margin-bottom: -4px;
     z-index: 1;
   }
@@ -90,17 +89,47 @@ $panel-color: #6B6B6B;
   &:focus-visible { outline: 2px solid #000; outline-offset: 2px; }
 }
 
-// Content surface the active tab drops into. Pages compose this with
-// their own contents (chip rows on /search, gallery + pager on /).
+// Content surface the active tab drops into. Transparent fill (orange
+// page bg shows through), white outline. Pair with .norton-shadow for
+// the dithered DOS-dialog drop shadow.
 .category-panel {
-  background: $panel-color;
+  background: transparent;
   padding: 1rem;
   border: 2px solid white;
 }
 
-// Shared pixelated <select> styling. Gray fill, white border, custom
-// inline-SVG chevron in white. Used wherever a dropdown should match
-// the rest of the UI (sort selector, mobile category picker).
+// Norton-Commander-style half-shade drop shadow. Two pseudo-elements
+// form an L on the bottom-right of any panel-class element, offset 8px
+// down-right. The dither tile (2×2 black checkerboard on 4×4 transparent)
+// renders as the ▒ U+2592 "medium shade" — the classic DOS dialog look.
+.norton-shadow {
+  position: relative;
+}
+.norton-shadow::before,
+.norton-shadow::after {
+  content: '';
+  position: absolute;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='black'/><rect x='2' y='2' width='2' height='2' fill='black'/></svg>");
+  background-repeat: repeat;
+  pointer-events: none;
+}
+.norton-shadow::before {
+  top: 8px;
+  right: -8px;
+  bottom: -8px;
+  width: 8px;
+}
+.norton-shadow::after {
+  left: 8px;
+  right: -8px;
+  bottom: -8px;
+  height: 8px;
+}
+
+// Shared pixelated <select> styling. Transparent fill, white border,
+// custom inline-SVG chevron in white. Used by the standalone sort
+// dropdown. The mobile category picker layers .category-select on top
+// to swap to the active-tab look (white fill, orange text + chevron).
 .pixel-select {
   font-family: "Public Pixel", sans-serif;
   font-size: 0.85rem;
@@ -108,7 +137,7 @@ $panel-color: #6B6B6B;
   line-height: 1.2;
   border-radius: 0;
   width: auto;
-  background-color: #6B6B6B;
+  background-color: transparent;
   color: white;
   border: 2px solid white;
   padding: 0.55rem 2.25rem 0.55rem 0.9rem;

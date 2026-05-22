@@ -57,7 +57,7 @@
 </div>
 
 @if (catsResource.value(); as data) {
-  <div class="category-panel mb-3">
+  <div class="category-panel norton-shadow mb-3">
     <app-cat-gallery [catNumbers]="catNumbers()" />
     @if (data.total > 0) {
       <div>
@@ -96,15 +96,15 @@
     }
   </div>
 } @else if (catsResource.isLoading()) {
-  <p class="category-panel mb-3" aria-live="polite">Loading cats...</p>
+  <p class="category-panel norton-shadow mb-3" aria-live="polite">Loading cats...</p>
 } @else if (catsResource.error()) {
   @if (isBackendUnavailable()) {
-    <p class="category-panel mb-3" role="alert">
+    <p class="category-panel norton-shadow mb-3" role="alert">
       The cat21.space backend is temporarily unavailable. The indexer database may be paused or overloaded.
       <a (click)="catsResource.reload()" role="button">Retry</a>
     </p>
   } @else {
-    <p class="category-panel mb-3" role="alert">Failed to load cats. <a (click)="catsResource.reload()" role="button">Retry</a></p>
+    <p class="category-panel norton-shadow mb-3" role="alert">Failed to load cats. <a (click)="catsResource.reload()" role="button">Retry</a></p>
   }
 } @else if (catsResource.isLoading()) {
   <p class="mb-4" aria-live="polite">Loading cats...</p>

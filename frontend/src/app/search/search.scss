@@ -18,24 +18,17 @@
   border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-// Local alias for the global $panel-color so .category-select can
-// keep its panel-merge logic when the global value changes.
-$panel-color: #6B6B6B;
-
-// Mobile picker styled to match the desktop active tab — gray fill,
-// white border on three sides, bottom border merges into the panel
-// below. Width is auto so orange page bg shows next to the dropdown.
-// Bootstrap's .form-select class is intentionally NOT applied — its
-// CSS-variable based background-image setup conflicts with overrides
-// and let the native select arrow leak through on Android.
-// Base look comes from .pixel-select in styles.scss (global, so it's
-// reachable from this component's encapsulated styles). The category
-// picker adds the panel-merge: a 4px bottom border in the panel colour
-// plus a negative margin, so it visually drops into the trait-rows
-// panel as a tab. Templates apply class="pixel-select category-select"
-// for that combined effect.
+// Mobile picker styled to match the desktop active tab — white fill,
+// orange text, white border on three sides, bottom border merges into
+// the panel below (same white as the panel's top border, with a
+// negative margin overlapping by 4px). Base look comes from
+// .pixel-select in styles.scss; this class layers on top to invert it.
+// Chevron is overridden to orange so it shows on the white fill.
 .category-select {
-  border-bottom: 4px solid $panel-color;
+  background-color: white;
+  color: #FF9900;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='%23FF9900' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/></svg>");
+  border-bottom: 4px solid white;
   margin-bottom: -4px;
   position: relative;
   z-index: 1;

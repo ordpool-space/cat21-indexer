@@ -9,7 +9,7 @@
   <nav class="clearfix" aria-label="Cat navigation">
     <span class="fw-bold mt-4 mb-4 float-start">&nbsp;</span>
   </nav>
-  <article class="cat-box" aria-live="polite">
+  <article class="cat-box norton-shadow" aria-live="polite">
     <app-cat21-viewer [cat]="undefined" [showDetails]="true" />
   </article>
   <a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">« Back</a>
@@ -27,7 +27,7 @@
         [attr.aria-label]="'Older: CAT #' + (cat.catNumber - 1)">Older »</a>
     }
   </nav>
-  <article class="cat-box">
+  <article class="cat-box norton-shadow">
     <app-cat21-viewer
       [cat]="cat"
       [showDetails]="true"
