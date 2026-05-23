@@ -27,7 +27,7 @@ import type { FastifyReply } from 'fastify';
 import * as sharp from 'sharp';
 import { CATEGORY_RANGES } from '../shared/categories';
 import { CatsService, type SearchFilters } from './cats.service';
-import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatSearchResultDto, CatsPaginatedResultDto, ExtendedHealthDto, HealthDto, StatusDto } from './dto/cat.dto';
+import { CatDto, CatNumbersPaginatedResultDto, CatSearchQueryDto, CatSearchResultDto, CatsPaginatedResultDto, ExtendedHealthDto, FeeRateSampleDto, HealthDto, StatusDto } from './dto/cat.dto';
 
 // Used for cat IMAGES (SVG/WebP) — the rendered art is truly
 // immutable, so a year-long edge cache is fine. Also used for cat
@@ -281,6 +281,29 @@ export class CatsController {
       Math.max(1, currentPage),
       query.sort === 'rarity' ? 'rarity' : 'newest',
     );
+  }
+
+  @Get('cats/debug/samples-by-feerate')
+  @ApiOperation({
+    summary: 'Sample cats by fee rate (debug)',
+    description:
+      'For each fee rate in the `rates` query parameter, returns the cat ' +
+      'closest to that rate within ±0.5 sat/vB. Used by the frontend color ' +
+      'debug page to anchor each fee-rate row to a real minted cat.',
+  })
+  @ApiQuery({ name: 'rates', description: 'Comma-separated list of fee rates (sat/vB), max 200 entries', example: '1,2,5,10,69,75,420,600' })
+  @ApiOkResponse({ type: FeeRateSampleDto, isArray: true })
+  @ApiBadRequestResponse({ description: 'rates query is missing, malformed, or has more than 200 entries' })
+  async sampleCatsByFeeRate(@Query('rates') rates?: string): Promise<FeeRateSampleDto[]> {
+    if (!rates) return [];
+    const parsed = rates
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .slice(0, 200)
+      .map((s) => Number(s))
+      .filter((n) => Number.isFinite(n) && n >= 0);
+    return this.catsService.findSamplesByFeeRate(parsed);
   }
 }
 

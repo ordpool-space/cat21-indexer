@@ -327,6 +327,18 @@ export class CatSearchResultDto extends CatNumbersPaginatedResultDto {
 export const CAT_SORT_VALUES = ['newest', 'rarity'] as const;
 export type CatSort = typeof CAT_SORT_VALUES[number];
 
+/**
+ * One sample cat for a requested fee rate. `catNumber` is null when no
+ * minted cat exists within ±0.5 sat/vB of the requested rate.
+ */
+export class FeeRateSampleDto {
+  @ApiProperty({ description: 'Requested fee rate (sat/vB)', example: 75 })
+  feeRate!: number;
+
+  @ApiProperty({ description: 'Cat number of the closest match within ±0.5 sat/vB, or null when no cat falls in that window', example: 12345, nullable: true })
+  catNumber!: number | null;
+}
+
 export class StatusDto {
   @ApiProperty({ description: 'Total number of indexed cats', example: 63732 })
   totalCats!: number;

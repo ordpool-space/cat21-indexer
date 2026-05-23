@@ -1,0 +1,53 @@
+<h1 class="mt-2">Debug: cat colors</h1>
+
+<p class="mt-2">
+  Visual sandbox for the bucketing in
+  <code>hueToColorCategory</code>. Each row is one fee rate: the swatch
+  is the actual pixel a human sees as the cat's body, the hue is read
+  back from that pixel, the bucket is what the search assigns. If a
+  swatch reads "green" to your eye but the chip says "yellow", that's a
+  threshold to push. Boundaries between buckets are outlined.
+</p>
+
+<div class="controls mt-3">
+  <label>min fee rate
+    <input type="number" min="0" step="1" [ngModel]="minRate()" (ngModelChange)="minRate.set($event)" class="form-control">
+  </label>
+  <label>max fee rate
+    <input type="number" min="0" step="1" [ngModel]="maxRate()" (ngModelChange)="maxRate.set($event)" class="form-control">
+  </label>
+  <label>step
+    <input type="number" min="0.1" step="0.1" [ngModel]="step()" (ngModelChange)="step.set($event)" class="form-control">
+  </label>
+  <label>saturation seed (0..255)
+    <input type="range" min="0" max="255" step="1" [ngModel]="saturationSeed()" (ngModelChange)="saturationSeed.set(+$event)">
+    <span>{{ saturationSeed() }}</span>
+  </label>
+</div>
+
+<div class="grid">
+  <div class="header">fee rate</div>
+  <div class="header">body</div>
+  <div class="header">hue</div>
+  <div class="header">sat</div>
+  <div class="header">bucket</div>
+  <div class="header">real cat (closest ±0.5)</div>
+
+  @for (row of rows(); let i = $index; track row.feeRate) {
+    <div class="row" [class.boundary]="isBoundary(row, rows()[i - 1])">{{ row.feeRate }}</div>
+    <div class="swatch" [style.background]="row.bodyHex"></div>
+    <div>{{ row.hue.toFixed(1) }}°</div>
+    <div>{{ row.saturation.toFixed(2) }}</div>
+    <div class="bucket-chip" [style.background]="row.bucketHex">{{ row.bucket }}</div>
+    <div class="real-cat">
+      @if (catFor(row.feeRate); as catNumber) {
+        <img [src]="apiBase + '/api/cat/' + catNumber + '/image.svg'" [alt]="'cat #' + catNumber">
+        <a [href]="'/cat/' + catNumber" target="_blank">#{{ catNumber }}</a>
+      } @else if (samples.isLoading()) {
+        <span class="missing">...</span>
+      } @else {
+        <span class="missing">none in range</span>
+      }
+    </div>
+  }
+</div>

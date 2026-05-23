@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 
 import { Address } from './address/address';
 import { Block } from './block/block';
+import { DebugColors } from './debug-colors/debug-colors';
 import { Details } from './details/details';
 import { Sat } from './sat/sat';
 import { Search } from './search/search';
@@ -17,5 +18,6 @@ export const routes: Routes = [
   { path: 'sat/:sat', component: Sat, data: { smallHeader: true }, title: 'CAT-21 - Sat' },
   { path: 'search', component: Search, data: { smallHeader: true }, title: 'CAT-21 - Search by trait' },
   { path: 'search/:currentPage', component: Search, data: { smallHeader: true }, title: 'CAT-21 - Search by trait' },
+  { path: 'debug/colors', component: DebugColors, data: { smallHeader: true }, title: 'CAT-21 - Debug colors' },
   { path: '**', component: Start, title: 'CAT-21 - Rescue the cats!' },
 ];

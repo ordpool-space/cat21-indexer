@@ -437,6 +437,36 @@ export class CatsService {
     this.cache.setProofOfCatWork(Number(result.proofOfCatWork ?? 0));
   }
 
+  /**
+   * Find the cat closest to each requested fee rate. Used by the color
+   * debug page to anchor every fee-rate row to a real minted cat.
+   *
+   * For each rate we run an indexed point query against the
+   * idx_cats_feerate index, returning the cat with the smallest
+   * |feeRate - rate| within a ±0.5 sat/vB window (so we don't pull cats
+   * from across the easter-egg boundaries at 69/70 or 420/421). Rates
+   * with no cat in window come back as `null`.
+   *
+   * Returns rates in the same order as the input.
+   */
+  async findSamplesByFeeRate(rates: number[]): Promise<{ feeRate: number; catNumber: number | null }[]> {
+    if (rates.length === 0) return [];
+    const tolerance = 0.5;
+    return Promise.all(
+      rates.map(async (rate) => {
+        const lo = rate - tolerance;
+        const hi = rate + tolerance;
+        const [row] = await this.drizzle.db
+          .select({ catNumber: cats.catNumber })
+          .from(cats)
+          .where(sql`${cats.feeRate} >= ${lo} AND ${cats.feeRate} < ${hi}`)
+          .orderBy(sql`ABS(${cats.feeRate} - ${rate}) ASC`)
+          .limit(1);
+        return { feeRate: rate, catNumber: row?.catNumber ?? null };
+      }),
+    );
+  }
+
   async getCatSvg(catNumber: number): Promise<string | null> {
     // SVGs are cached at Cloudflare edge (1 year, immutable).
     // No in-memory cache needed here.
