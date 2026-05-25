@@ -57,6 +57,13 @@
       "when": 1780070400000,
       "tag": "0007_reset_yellow_for_rederive",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1780243200000,
+      "tag": "0008_reset_color_for_yellow_window",
+      "breakpoints": true
     }
   ]
 }
