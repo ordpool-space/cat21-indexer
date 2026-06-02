@@ -1,0 +1,160 @@
+// Header wallet control. Visually matches .category-tab (pixelated,
+// white border on transparent, white-fills-orange when active).
+
+:host { display: inline-flex; }
+
+.wallet-button {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.8rem;
+  font-weight: bold;
+  padding: 0.4rem 0.8rem;
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  border-radius: 0;
+  cursor: pointer;
+  image-rendering: pixelated;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1.1;
+
+  &:hover { background: rgba(0, 0, 0, 0.15); }
+  &:focus-visible { outline: 2px solid black; outline-offset: 2px; }
+}
+
+.wallet-button-connected {
+  background: white;
+  color: #FF9900;
+
+  &:hover { background: #f5f5f5; }
+  img { background: white; padding: 1px; }
+}
+
+.addr-short {
+  font-family: monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+}
+
+// --- Modal: wallet picker ---
+.wallet-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+
+  li { margin-top: 0.5rem; }
+  li:first-child { margin-top: 0; }
+}
+
+.wallet-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  image-rendering: pixelated;
+
+  &:hover:not(:disabled) { background: rgba(0, 0, 0, 0.15); }
+  &:disabled { opacity: 0.5; cursor: progress; }
+
+  img { flex: 0 0 28px; background: white; padding: 2px; border-radius: 2px; }
+
+  .label { flex: 1 1 auto; }
+  .sub-label { font-size: 0.7rem; opacity: 0.8; font-family: inherit; }
+}
+
+.wallet-pick-download {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.not-installed-heading {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  color: white;
+  opacity: 0.85;
+}
+
+.no-installed {
+  opacity: 0.8;
+  font-size: 0.9rem;
+}
+
+.connect-error {
+  border: 2px solid white;
+  padding: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+}
+
+// --- Popover content ---
+.addr-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.addr-label {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin-bottom: 0.15rem;
+}
+
+.addr-value {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+  font-family: monospace;
+}
+
+.copy-btn {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: 2px solid currentColor;
+  color: inherit;
+  cursor: pointer;
+
+  &:hover { background: rgba(0, 0, 0, 0.1); }
+}
+
+.pop-link {
+  display: block;
+  margin: 0.75rem 0 0.5rem 0;
+  text-align: center;
+  font-family: "Public Pixel", sans-serif;
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.disconnect-btn {
+  display: block;
+  width: 100%;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.8rem;
+  font-weight: bold;
+  padding: 0.4rem 0.8rem;
+  margin-top: 0.5rem;
+  background: white;
+  border: 2px solid #FF9900;
+  color: #FF9900;
+  cursor: pointer;
+
+  &:hover { background: #f5f5f5; }
+}

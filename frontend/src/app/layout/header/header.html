@@ -1,3 +1,11 @@
+<nav class="header-nav">
+  <a routerLink="/search" class="nav-link">Search</a>
+  @if (connectedWallet()) {
+    <a routerLink="/my-cats" class="nav-link">My cats</a>
+  }
+  <app-wallet-connect />
+</nav>
+
 @if (smallHeader()) {
   <div>
     <h1 class="logo mx-auto d-block mt-3 mb-2">

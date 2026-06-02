@@ -4,6 +4,7 @@ import { Address } from './address/address';
 import { Block } from './block/block';
 import { DebugColors } from './debug-colors/debug-colors';
 import { Details } from './details/details';
+import { MyCats } from './my-cats/my-cats';
 import { Sat } from './sat/sat';
 import { Search } from './search/search';
 import { Start } from './start/start';
@@ -19,5 +20,6 @@ export const routes: Routes = [
   { path: 'search', component: Search, data: { smallHeader: true }, title: 'CAT-21 - Search by trait' },
   { path: 'search/:currentPage', component: Search, data: { smallHeader: true }, title: 'CAT-21 - Search by trait' },
   { path: 'debug/colors', component: DebugColors, data: { smallHeader: true }, title: 'CAT-21 - Debug colors' },
+  { path: 'my-cats', component: MyCats, data: { smallHeader: true }, title: 'CAT-21 - My cats' },
   { path: '**', component: Start, title: 'CAT-21 - Rescue the cats!' },
 ];

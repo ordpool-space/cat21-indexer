@@ -1,0 +1,38 @@
+<h1 data-testid="my-cats-heading">My cats</h1>
+
+@if (wallet(); as connectedWallet) {
+  <p class="text-break mb-2" data-testid="my-cats-address">
+    <small>{{ connectedWallet.ordinalsAddress }}</small>
+  </p>
+  <p class="mb-4">
+    <a href="{{ env.ordpoolExplorer }}/address/{{ connectedWallet.ordinalsAddress }}" target="_blank" rel="noopener">
+      View on ordpool
+    </a>
+  </p>
+
+  @if (catsResource.value(); as data) {
+    <h2 data-testid="my-cats-count">You hold {{ catNumbers().length }} cats</h2>
+    <app-cat-gallery [catNumbers]="catNumbers()" emptyMessage="Your wallet doesn't hold any cats yet. Mint one!" />
+  } @else if (catsResource.isLoading()) {
+    <p aria-live="polite" data-testid="my-cats-loading">Loading your cats...</p>
+  } @else if (catsResource.error()) {
+    <p role="alert" data-testid="my-cats-error">
+      Failed to load cats for your wallet.
+      <a (click)="catsResource.reload()" role="button">Retry</a>
+    </p>
+  }
+} @else {
+  <div class="connect-card" data-testid="my-cats-cta">
+    <h2>Connect your wallet to see your cats</h2>
+    <p class="mb-3">
+      CAT-21 cats live on Bitcoin sats. Connect the wallet that holds them —
+      we'll ask ord for the current owner of each cat sat and show you what you own.
+    </p>
+    <p class="mb-4">
+      <strong>Safe wallets:</strong> Xverse and Leather won't accidentally spend cat sats.
+      Other supported wallets (Unisat, Wizz, OKX, Phantom, Oyl) work for read-only viewing too —
+      we never sign anything from this page.
+    </p>
+    <app-wallet-connect />
+  </div>
+}

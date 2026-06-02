@@ -27,9 +27,14 @@
     "@angular/platform-browser-dynamic": "21.2.4",
     "@angular/router": "21.2.4",
     "@ng-bootstrap/ng-bootstrap": "^20.0.0",
+    "@noble/curves": "^1.6.0",
     "@popperjs/core": "^2.11.8",
+    "@scure/base": "^1.2.6",
+    "@scure/btc-signer": "1.2.x",
     "bootstrap": "^5.3.1",
+    "ordpool-sdk": "github:ordpool-space/ordpool-sdk#b079fd2390d72a90c675e4b837f8240af5d3ed3e",
     "rxjs": "~7.8.0",
+    "sats-connect": "^4.0.0",
     "tslib": "^2.3.0"
   },
   "devDependencies": {

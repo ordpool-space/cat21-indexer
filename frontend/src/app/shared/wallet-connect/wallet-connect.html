@@ -1,0 +1,84 @@
+<ng-template #connectModal let-modal>
+  <div class="modal-header">
+    <h4 class="modal-title" id="wallet-connect-title">Connect wallet</h4>
+    <button type="button" class="btn-close" aria-label="Close" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body">
+    @if (connectError(); as err) {
+      <p class="connect-error" role="alert">Connection failed: {{ err }}</p>
+    }
+
+    @if (wallets().installedWallets.length > 0) {
+      <ul class="wallet-list">
+        @for (w of wallets().installedWallets; track w.type) {
+          <li>
+            <button class="wallet-pick" [disabled]="connectButtonDisabled()" (click)="connectWallet(w.type)">
+              <img [src]="w.logo" alt="" width="28" height="28" (error)="hideBrokenLogo($event)">
+              <span class="label">{{ w.label }}</span>
+              @if (w.subLabel) {
+                <small class="sub-label">{{ w.subLabel }}</small>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="no-installed">No supported wallets detected in this browser.</p>
+    }
+
+    @if (wallets().notInstalledWallets.length > 0) {
+      <h5 class="not-installed-heading">Not installed — click to download:</h5>
+      <ul class="wallet-list">
+        @for (w of wallets().notInstalledWallets; track w.type) {
+          <li>
+            <a class="wallet-pick wallet-pick-download" [href]="w.downloadLink" target="_blank" rel="noopener">
+              <img [src]="w.logo" alt="" width="28" height="28" (error)="hideBrokenLogo($event)">
+              <span class="label">{{ w.label }}</span>
+              @if (w.subLabel) {
+                <small class="sub-label">{{ w.subLabel }}</small>
+              }
+            </a>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+</ng-template>
+
+@if (connectedWallet(); as wallet) {
+  <button
+    #walletPopover="ngbPopover"
+    type="button"
+    class="wallet-button wallet-button-connected"
+    [ngbPopover]="popContent"
+    [popoverTitle]="popTitle"
+    [autoClose]="'outside'"
+    popoverClass="wallet-popover"
+    [title]="'Connected via ' + knownOrdinalWallets[wallet.type].label">
+    <img [src]="knownOrdinalWallets[wallet.type].logo" alt="" width="24" height="24" (error)="hideBrokenLogo($event)">
+    <span class="addr-short">{{ shortAddress(wallet.ordinalsAddress) }}</span>
+  </button>
+
+  <ng-template #popTitle>
+    <strong>Connected — {{ knownOrdinalWallets[wallet.type].label }}</strong>
+  </ng-template>
+
+  <ng-template #popContent>
+    <div class="addr-row">
+      <div class="addr-label">Ordinals (where your cats live)</div>
+      <code class="addr-value" [title]="wallet.ordinalsAddress">{{ shortAddress(wallet.ordinalsAddress) }}</code>
+      <button type="button" class="copy-btn" (click)="copyToClipboard(wallet.ordinalsAddress)" title="Copy">copy</button>
+    </div>
+    <div class="addr-row">
+      <div class="addr-label">Payment</div>
+      <code class="addr-value" [title]="wallet.paymentAddress">{{ shortAddress(wallet.paymentAddress) }}</code>
+      <button type="button" class="copy-btn" (click)="copyToClipboard(wallet.paymentAddress)" title="Copy">copy</button>
+    </div>
+    <a routerLink="/my-cats" class="pop-link" (click)="walletPopover.close()">View my cats →</a>
+    <button type="button" class="disconnect-btn" (click)="disconnect(walletPopover)">Disconnect</button>
+  </ng-template>
+} @else {
+  <button type="button" class="wallet-button wallet-button-connect" (click)="open()">
+    Connect wallet
+  </button>
+}
