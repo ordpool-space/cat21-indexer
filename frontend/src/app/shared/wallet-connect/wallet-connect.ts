@@ -79,8 +79,4 @@ export class WalletConnect {
     if (!text || typeof navigator === 'undefined' || !navigator.clipboard) return;
     navigator.clipboard.writeText(text).catch(() => {/* ignore */});
   }
-
-  hideBrokenLogo(event: Event): void {
-    (event.target as HTMLElement).style.display = 'none';
-  }
 }

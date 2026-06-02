@@ -13,7 +13,6 @@
         @for (w of wallets().installedWallets; track w.type) {
           <li>
             <button class="wallet-pick" [disabled]="connectButtonDisabled()" (click)="connectWallet(w.type)">
-              <img [src]="w.logo" alt="" width="28" height="28" (error)="hideBrokenLogo($event)">
               <span class="label">{{ w.label }}</span>
               @if (w.subLabel) {
                 <small class="sub-label">{{ w.subLabel }}</small>
@@ -32,7 +31,6 @@
         @for (w of wallets().notInstalledWallets; track w.type) {
           <li>
             <a class="wallet-pick wallet-pick-download" [href]="w.downloadLink" target="_blank" rel="noopener">
-              <img [src]="w.logo" alt="" width="28" height="28" (error)="hideBrokenLogo($event)">
               <span class="label">{{ w.label }}</span>
               @if (w.subLabel) {
                 <small class="sub-label">{{ w.subLabel }}</small>
@@ -55,7 +53,7 @@
     [autoClose]="'outside'"
     popoverClass="wallet-popover"
     [title]="'Connected via ' + knownOrdinalWallets[wallet.type].label">
-    <img [src]="knownOrdinalWallets[wallet.type].logo" alt="" width="24" height="24" (error)="hideBrokenLogo($event)">
+    <span class="wallet-label">{{ knownOrdinalWallets[wallet.type].label }}</span>
     <span class="addr-short">{{ shortAddress(wallet.ordinalsAddress) }}</span>
   </button>
 
