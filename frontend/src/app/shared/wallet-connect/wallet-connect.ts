@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, TemplateRef, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef, NgbPopover, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
@@ -25,7 +25,23 @@ export class WalletConnect {
   private cdr = inject(ChangeDetectorRef);
 
   readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
-  readonly wallets = toSignal(this.walletService.wallets$, { initialValue: { installedWallets: [], notInstalledWallets: [] } });
+  private readonly walletsRaw = toSignal(this.walletService.wallets$, { initialValue: { installedWallets: [], notInstalledWallets: [] } });
+
+  /**
+   * cat21.space is ordinals-only — Alby's Lightning+Nostr surface can't
+   * hold cat sats, so we drop wallets whose `onChainOrdinals` flag is
+   * explicitly false. Wallets where the flag is omitted are kept (the
+   * default semantic in the SDK is "yes, on-chain"). Filter both
+   * buckets so Alby disappears from the picker AND from the "not
+   * installed — download" list.
+   */
+  readonly wallets = computed(() => {
+    const raw = this.walletsRaw();
+    return {
+      installedWallets: raw.installedWallets.filter((w) => w.onChainOrdinals !== false),
+      notInstalledWallets: raw.notInstalledWallets.filter((w) => w.onChainOrdinals !== false),
+    };
+  });
 
   readonly knownOrdinalWallets = KnownOrdinalWallets;
   readonly connectButtonDisabled = signal(false);
