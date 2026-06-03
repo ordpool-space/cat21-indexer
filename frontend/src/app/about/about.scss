@@ -1,0 +1,27 @@
+.about-section {
+  margin-top: 2rem;
+  max-width: 720px;
+
+  h2 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  p, ul {
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+
+  .small { font-size: 0.75rem; opacity: 0.85; }
+}
+
+.team-list, .link-list {
+  list-style: square;
+  padding-left: 1.25rem;
+
+  li { margin-bottom: 0.3rem; }
+}
+
+.back {
+  margin-top: 2.5rem;
+}

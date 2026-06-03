@@ -1,0 +1,72 @@
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
+import { WalletService } from 'ordpool-sdk';
+
+import { WalletConnect } from '../shared/wallet-connect/wallet-connect';
+
+interface DashboardCard {
+  title: string;
+  description: string;
+  /** Either an in-app routerLink target or an external URL. */
+  link: string;
+  external?: boolean;
+  status: 'active' | 'soon';
+}
+
+/**
+ * Dashboard hub for the connected user. Lists workspace tools as
+ * pixel-themed cards. New tools land here as soon as they have a
+ * /dashboard/<slug> route, even if the page is just a "coming soon"
+ * placeholder.
+ *
+ * Gated on a connected wallet — disconnected visitors see a CTA card
+ * that reuses the wallet-connect component (same modal, same code path
+ * as the header). Reactively flips back to the hub when a wallet
+ * connects.
+ */
+@Component({
+  selector: 'app-dashboard',
+  templateUrl: './dashboard.html',
+  styleUrl: './dashboard.scss',
+  imports: [RouterLink, WalletConnect],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class Dashboard {
+  private walletService = inject(WalletService);
+
+  readonly wallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
+
+  readonly shortAddress = computed(() => {
+    const addr = this.wallet()?.ordinalsAddress ?? '';
+    return addr.length > 16 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
+  });
+
+  readonly cards: readonly DashboardCard[] = [
+    {
+      title: 'My cats',
+      description: 'See the cats your wallet currently holds, with rarity and traits.',
+      link: '/dashboard/cats',
+      status: 'active',
+    },
+    {
+      title: 'Mint a cat',
+      description: 'Lock a new cat to a Bitcoin sat. Lives on ordpool.space for now; native mint coming to cat21.space later.',
+      link: 'https://ordpool.space/cat21-mint',
+      external: true,
+      status: 'active',
+    },
+    {
+      title: 'Transfer a cat',
+      description: 'Send one of your cats to another address. Coming soon.',
+      link: '/dashboard/transfer',
+      status: 'soon',
+    },
+    {
+      title: 'Trade a cat',
+      description: 'The native CAT-21 marketplace. The ultimate goal — list, bid, settle on-chain. Coming soon.',
+      link: '/dashboard/trade',
+      status: 'soon',
+    },
+  ];
+}

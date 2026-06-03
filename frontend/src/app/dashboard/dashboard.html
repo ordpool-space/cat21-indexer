@@ -1,0 +1,41 @@
+<h1 data-testid="dashboard-heading">Dashboard</h1>
+
+@if (wallet(); as connectedWallet) {
+  <p class="mb-4">
+    <small>Connected as <code>{{ shortAddress() }}</code></small>
+  </p>
+
+  <div class="card-grid" data-testid="dashboard-cards">
+    @for (card of cards; track card.title) {
+      @if (card.status === 'active' && !card.external) {
+        <a [routerLink]="card.link" class="tool-card tool-card-active">
+          <h2 class="tool-title">{{ card.title }}</h2>
+          <p class="tool-desc">{{ card.description }}</p>
+          <span class="tool-cta">Open →</span>
+        </a>
+      } @else if (card.status === 'active' && card.external) {
+        <a [href]="card.link" target="_blank" rel="noopener" class="tool-card tool-card-active">
+          <h2 class="tool-title">{{ card.title }}</h2>
+          <p class="tool-desc">{{ card.description }}</p>
+          <span class="tool-cta">Open ↗</span>
+        </a>
+      } @else {
+        <div class="tool-card tool-card-soon" data-testid="card-soon">
+          <h2 class="tool-title">{{ card.title }}</h2>
+          <p class="tool-desc">{{ card.description }}</p>
+          <span class="tool-cta">Coming soon</span>
+        </div>
+      }
+    }
+  </div>
+} @else {
+  <div class="connect-card" data-testid="dashboard-cta">
+    <h2>Connect your wallet to open the dashboard</h2>
+    <p class="mb-3">
+      The dashboard is your workspace: cats you hold, mint new ones,
+      transfer them, trade them. None of it makes sense without a
+      wallet connected — so connect first.
+    </p>
+    <app-wallet-connect />
+  </div>
+}

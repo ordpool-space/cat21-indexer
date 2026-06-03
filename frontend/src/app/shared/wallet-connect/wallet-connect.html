@@ -72,7 +72,7 @@
       <code class="addr-value" [title]="wallet.paymentAddress">{{ shortAddress(wallet.paymentAddress) }}</code>
       <button type="button" class="copy-btn" (click)="copyToClipboard(wallet.paymentAddress)" title="Copy">copy</button>
     </div>
-    <a routerLink="/my-cats" class="pop-link" (click)="walletPopover.close()">View my cats →</a>
+    <a routerLink="/dashboard" class="pop-link" (click)="walletPopover.close()">Open dashboard →</a>
     <button type="button" class="disconnect-btn" (click)="disconnect(walletPopover)">Disconnect</button>
   </ng-template>
 } @else {

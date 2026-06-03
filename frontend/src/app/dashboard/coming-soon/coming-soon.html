@@ -1,0 +1,11 @@
+<h1 data-testid="coming-soon-heading">{{ heading() }}</h1>
+
+<div class="soon-card" data-testid="coming-soon-card">
+  <h2>Coming soon</h2>
+  @if (subtitle()) {
+    <p>{{ subtitle() }}</p>
+  }
+  <p class="mt-3">
+    <a routerLink="/dashboard">← Back to dashboard</a>
+  </p>
+</div>

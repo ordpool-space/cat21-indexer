@@ -1,0 +1,68 @@
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  border: 2px solid white;
+  background: transparent;
+  color: white;
+  text-decoration: none;
+  font-family: "Public Pixel", sans-serif;
+  image-rendering: pixelated;
+  min-height: 160px;
+}
+
+.tool-card-active {
+  cursor: pointer;
+  &:hover { background: rgba(0, 0, 0, 0.15); color: white; }
+}
+
+.tool-card-soon {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.tool-title {
+  font-size: 1.05rem;
+  margin: 0 0 0.5rem 0;
+  font-weight: bold;
+}
+
+.tool-desc {
+  font-size: 0.8rem;
+  flex: 1 1 auto;
+  margin: 0 0 0.75rem 0;
+  font-family: "Public Pixel", sans-serif;
+  line-height: 1.45;
+}
+
+.tool-cta {
+  font-size: 0.8rem;
+  font-weight: bold;
+  align-self: flex-start;
+  padding: 0.3rem 0.6rem;
+  border: 2px solid white;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tool-card-soon .tool-cta {
+  border-style: dashed;
+}
+
+.connect-card {
+  border: 2px solid white;
+  padding: 1.5rem;
+  margin-top: 1rem;
+  max-width: 640px;
+
+  h2 {
+    margin-top: 0;
+    font-size: 1.25rem;
+  }
+}
