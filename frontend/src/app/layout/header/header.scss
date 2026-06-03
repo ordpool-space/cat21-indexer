@@ -12,6 +12,12 @@
   justify-content: flex-end;
   gap: 0.75rem;
   flex-wrap: wrap;
+  // The Genesis Cat SVG that follows has a solid orange background
+  // (#ff9900) and renders with negative top margin (mt-n5), drifting
+  // up into this row. Stack the nav above it so links + wallet-connect
+  // stay clickable instead of getting covered by orange.
+  position: relative;
+  z-index: 2;
 }
 
 .nav-link {
