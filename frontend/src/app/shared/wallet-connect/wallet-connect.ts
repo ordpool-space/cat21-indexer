@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, TemplateRef, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef, NgbPopover, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
@@ -22,6 +22,7 @@ import { KnownOrdinalWalletType, KnownOrdinalWallets, WalletService } from 'ordp
 export class WalletConnect {
   private walletService = inject(WalletService);
   private modalService = inject(NgbModal);
+  private cdr = inject(ChangeDetectorRef);
 
   readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
   readonly wallets = toSignal(this.walletService.wallets$, { initialValue: { installedWallets: [], notInstalledWallets: [] } });
@@ -62,10 +63,19 @@ export class WalletConnect {
     }
     this.connectError.set(null);
     this.walletService.connectWallet(type).subscribe({
-      next: () => this.closeModal(),
+      next: () => {
+        this.closeModal();
+        // Zoneless safety: the wallet's connect resolution often runs
+        // outside any tracked context (postMessage from the extension's
+        // popup → tap() that calls connectedWallet$.next). Nudge CD so
+        // the button repaints with the connected state immediately
+        // instead of waiting for the next user interaction.
+        this.cdr.markForCheck();
+      },
       error: (err) => {
         this.connectError.set(err instanceof Error ? err.message : String(err));
         this.connectButtonDisabled.set(false);
+        this.cdr.markForCheck();
       },
     });
   }

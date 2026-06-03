@@ -1,9 +1,16 @@
+// Match .cover-container in app.scss so the nav sits flush with the
+// page content's right edge (otherwise the wallet button drifts past
+// the right viewport edge on narrow screens — the cover-container has
+// 1em padding, the bare header didn't).
 .header-nav {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0.5rem 1rem 0 1rem;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
-  padding: 0.5rem 0.5rem 0 0.5rem;
   flex-wrap: wrap;
 }
 
