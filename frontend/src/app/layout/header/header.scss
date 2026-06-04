@@ -39,3 +39,26 @@ h1.logo {
   color: white;
   font-size: 50px;
 }
+
+// Phone-sized viewports: shrink the wordmark + the inline genesis-cat
+// next to it. The CAT-21 text gets narrower naturally as the font
+// drops, and the smaller cat keeps the mt-n5 lift from spilling all
+// the way up into the wrapped nav row.
+@media (max-width: 600px) {
+  h1.logo {
+    width: auto;
+    font-size: 34px;
+  }
+
+  // Big-header hero on the home page.
+  header > a > img {
+    max-width: 70%;
+    height: auto;
+  }
+
+  // Inline cat next to the CAT-21 wordmark on every other page.
+  h1.logo img {
+    width: 70px !important;
+    height: 70px !important;
+  }
+}
