@@ -1,52 +1,120 @@
 <h1 data-testid="about-heading">About CAT-21</h1>
 
 <section class="about-section">
-  <h2>What is a CAT-21?</h2>
-  <p>
-    CAT-21 is the cryptopunks of <code>nLockTime</code>. Every Bitcoin
-    transaction whose <code>nLockTime</code> is exactly <strong>21</strong>
-    is a CAT-21 mint. The cat's image is generated deterministically from
-    <code>SHA256(txid + blockId)</code> — no off-chain server, no API key,
-    no centralized renderer. Pure consensus data.
-  </p>
-  <p>
-    Each cat lives on a single Bitcoin sat. The cat number is the order in
-    which it was mined. Cat #0 is the Genesis Cat, minted in block 824,205.
+  <p class="lede">
+    CAT-21 is a protocol that associates unique cat art with individual
+    satoshis on Bitcoin. Every cat lives on a single sat — that sat
+    becomes a <em>CAT-21 ordinal</em>, and ownership of the cat follows
+    ownership of the sat. There is no off-chain database, no API key,
+    no rendering server. The image is in the math.
   </p>
 </section>
 
 <section class="about-section">
-  <h2>Why nLockTime?</h2>
+  <h2>Minting</h2>
   <p>
-    Bitcoin Knots (Luke-jr's fork) added a policy rule to reject
-    "parasite-cat21" transactions, officially recognising CAT-21 as worth
-    blocking. That's mempool-relay policy, not consensus — miners still
-    include the transactions. And if anyone blocks <code>nLockTime=21</code>,
-    we move to 2121. You can't play whack-a-mole with a core transaction
-    field.
+    A CAT-21 mint transaction is any Bitcoin transaction whose
+    <code>nLockTime</code> is set to <strong>21</strong>. No
+    exceptions. The first sat of the first output receives the cat.
+    Every mint reveals exactly one cat. The image and traits are
+    derived from <code>SHA256(transactionHash + blockHash)</code> — a
+    hash that no one can choose in advance.
   </p>
   <p>
-    <code>nLockTime</code> is a legitimate consensus field, not "data
-    storage". BIP-110 would kill inscriptions, atomicals, and labitbu —
-    CAT-21 survives.
-  </p>
-</section>
-
-<section class="about-section">
-  <h2>Origin</h2>
-  <p>
-    Inspired by 1440000bytes' "inscriptionless inscriptions" post on
-    Delving Bitcoin. CAT-21 took that idea and ran with it: minimal data,
-    deterministic art, ordinals-compatible ownership tracking.
+    Pay-to-taproot outputs (<code>bc1p…</code>) are recommended for
+    best compatibility with Ordinals-aware wallets, but the protocol
+    does not require it.
   </p>
 </section>
 
 <section class="about-section">
-  <h2>Team</h2>
+  <h2>Consensus, not permission</h2>
+  <p>
+    Bitcoin is consensus. Ordinal Theory is consensus. CAT-21 is the
+    same shape: if we agree that <code>nLockTime=21</code> reveals a
+    cat, it does. No authority enforces this. The protocol exists
+    because its participants choose to follow it — the same mechanism
+    that gives Bitcoin its value.
+  </p>
+</section>
+
+<section class="about-section">
+  <h2>Cat identity</h2>
+  <p>
+    Each cat is unpredictable. The seed formula uses the block hash,
+    which can only be known after the block is mined. No one chooses
+    their cat. The cat was always there, waiting in the math — minting
+    just reveals it.
+  </p>
+  <p>
+    Every Bitcoin transaction that does <em>not</em> set
+    <code>nLockTime=21</code> is a cat that will never be revealed.
+    The choice to mint is the choice to reveal.
+  </p>
+</section>
+
+<section class="about-section">
+  <h2>Scarcity is time</h2>
+  <p>
+    There is no supply cap. Anyone can mint a cat at any time. The
+    protocol is permissionless and unstoppable. But scarcity here is
+    not artificial — it is temporal. Cat #0 can never be minted again.
+    Lower numbers can never be reassigned. Categories like
+    <strong>sub1k</strong>, <strong>sub10k</strong>,
+    <strong>sub100k</strong> emerge naturally as more cats are
+    revealed. Every new mint makes every previous cat rarer. You are
+    never late.
+  </p>
+</section>
+
+<section class="about-section">
+  <h2>Proof of Cat Work</h2>
+  <p>
+    Bitcoin secures itself through accumulated proof of work. CAT-21
+    secures itself through accumulated mint fees. Every cat mint pays
+    a fee to miners. Those fees, summed across every mint in history,
+    are the <em>Proof of Cat Work</em>. The number only grows. It
+    never weakens — not even during quiet periods. Each mint is one
+    more entity declaring that the protocol matters.
+  </p>
+</section>
+
+<section class="about-section">
+  <h2>The Genesis Cat</h2>
+  <p>
+    Cat #0 is the Genesis Cat. The first Bitcoin transaction in all of
+    history to set <code>nLockTime=21</code>, minted at block height
+    <strong>824,205</strong>. It carries a price tag the protocol
+    pins to it alone: <strong>one satoshi equals 21 BTC</strong>.
+    The ultimate flip.
+  </p>
+  <p>
+    Whoever controls the Genesis Cat is the sole authority over
+    protocol changes, future development, and the definition of the
+    art. Governance updates are inscribed on the Genesis Cat's sat
+    and become effective after 21 confirmations. The current holder
+    has chosen the pixelated cat style you see across this site, and
+    considers the cats perfect as they are.
+  </p>
+</section>
+
+<section class="about-section">
+  <h2>Immutability</h2>
+  <p>
+    CAT-21 cats can't be destroyed. They are immutable on the Bitcoin
+    blockchain. If a CAT-21 ordinal ever becomes unspendable, the cat
+    still exists — it just no longer has an owner. The cat is free.
+  </p>
+</section>
+
+<section class="about-section">
+  <h2>Credits</h2>
   <ul class="team-list">
-    <li><a href="https://twitter.com/HausHoppe" target="_blank" rel="noopener">@HausHoppe</a> (Johannes)</li>
-    <li><a href="https://twitter.com/ethspresso" target="_blank" rel="noopener">@ethspresso</a></li>
-    <li><a href="https://twitter.com/LightRider5" target="_blank" rel="noopener">@LightRider5</a></li>
+    <li><strong>1440000bytes</strong> — initial idea to use the <code>nLockTime</code> field for data storage</li>
+    <li><strong><a href="https://twitter.com/HausHoppe" target="_blank" rel="noopener">@HausHoppe</a></strong> (Johannes) — protocol, reference implementation, indexer, ecosystem; first genesis cat holder</li>
+    <li><strong><a href="https://twitter.com/ethspresso" target="_blank" rel="noopener">@ethspresso</a></strong> — laser eyes and crown traits</li>
+    <li><strong><a href="https://twitter.com/LightRider5" target="_blank" rel="noopener">@LightRider5</a></strong> — initial PSBT minting script</li>
+    <li>The original <a href="https://mooncatrescue.com/" target="_blank" rel="noopener">Mooncats</a> (2017) — paved the way for on-chain generative cat art</li>
   </ul>
   <p class="small">
     All unpaid, no VC, no pre-allocation. Community-driven.
@@ -56,22 +124,16 @@
 <section class="about-section">
   <h2>Resources</h2>
   <ul class="link-list">
-    <li><a href="https://github.com/ordpool-space/cat21" target="_blank" rel="noopener">Protocol specification</a></li>
     <li><a href="https://dune.com/ethspresso/cat21" target="_blank" rel="noopener">Dune analytics dashboard</a></li>
     <li><a href="https://ordpool.space" target="_blank" rel="noopener">ordpool.space — the explorer</a></li>
     <li><a href="https://ordpool.space/cat21-mint" target="_blank" rel="noopener">Mint a cat on ordpool.space</a></li>
     <li><a href="https://magisat.io/" target="_blank" rel="noopener">Trade cats on magisat.io</a></li>
+    <li>
+      <a href="https://github.com/ordpool-space/cat21" target="_blank" rel="noopener">
+        Read the full protocol specification →
+      </a>
+    </li>
   </ul>
-</section>
-
-<section class="about-section">
-  <h2>Wallet safety</h2>
-  <p>
-    Cats live on Bitcoin sats — your wallet has to know not to spend them.
-    Confirmed-safe wallets: <strong>Xverse</strong> and <strong>Leather</strong>.
-    Unisat is not safe (will spend cat sats). Other wallets supported on this
-    site for read-only viewing.
-  </p>
 </section>
 
 <p class="back">
