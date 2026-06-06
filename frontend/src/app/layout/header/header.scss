@@ -6,18 +6,40 @@
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
-  padding: 0.5rem 1rem 0 1rem;
+  margin-bottom: 12px; // make room for the dithered drop strip below
+  padding: 0.5rem 1rem 0.5rem 1rem;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
   flex-wrap: wrap;
+  // White hairline at the bottom turns the nav into a distinct band.
+  // The Norton-shadow strip below the border separates the nav from
+  // the page content underneath.
+  border-bottom: 2px solid white;
   // The Genesis Cat SVG that follows has a solid orange background
   // (#ff9900) and renders with negative top margin (mt-n5), drifting
   // up into this row. Stack the nav above it so links + wallet-connect
-  // stay clickable instead of getting covered by orange.
+  // (and the shadow strip below) stay visible instead of getting
+  // covered by orange.
   position: relative;
   z-index: 2;
+}
+
+// Dithered Norton-Commander drop shadow under the nav band. Same SVG
+// checkerboard as .norton-shadow on panels; positioned absolute so it
+// hangs off the bottom of the nav without affecting layout. Offset to
+// the right by a few pixels for the classic DOS-dialog look.
+.header-nav::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: -6px;
+  bottom: -8px;
+  height: 6px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
+  background-repeat: repeat;
+  pointer-events: none;
 }
 
 .nav-link {
@@ -35,38 +57,11 @@
   }
 }
 
-// Selected page in the nav. Marked with a Norton-Commander dithered
-// L-shape at the bottom-right of the link — same visual language as
-// the .norton-shadow on panels, just scaled to the link's size.
-// Positioned absolutely outside the link's padding box so it doesn't
-// shift surrounding layout.
+// Selected page in the nav — minimal underline marker so users still
+// see where they are. The whole nav band's bottom shadow handles the
+// "separator" visual; per-link shadows just added noise.
 .nav-link-active {
   text-decoration: underline;
-}
-
-.nav-link-active::before,
-.nav-link-active::after {
-  content: '';
-  position: absolute;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
-  background-repeat: repeat;
-  pointer-events: none;
-}
-
-.nav-link-active::before {
-  // right-side strip
-  top: 4px;
-  right: -6px;
-  bottom: -6px;
-  width: 4px;
-}
-
-.nav-link-active::after {
-  // bottom strip
-  left: 4px;
-  right: -6px;
-  bottom: -6px;
-  height: 4px;
 }
 
 h1.logo {
