@@ -1,9 +1,9 @@
 <nav class="header-nav">
-  <a routerLink="/search" class="nav-link">Search</a>
+  <a routerLink="/search" routerLinkActive="nav-link-active" class="nav-link">Search</a>
   @if (connectedWallet()) {
-    <a routerLink="/dashboard" class="nav-link">Dashboard</a>
+    <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link">Dashboard</a>
   }
-  <a routerLink="/about" class="nav-link">About</a>
+  <a routerLink="/about" routerLinkActive="nav-link-active" class="nav-link">About</a>
   <app-wallet-connect />
 </nav>
 

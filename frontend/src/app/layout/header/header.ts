@@ -1,7 +1,7 @@
 import { NgOptimizedImage } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { RouterLink, RouterLinkActive } from '@angular/router';
 import { WalletService } from 'ordpool-sdk';
 
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
@@ -11,7 +11,7 @@ import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
   styleUrl: './header.scss',
   // eslint-disable-next-line @angular-eslint/component-selector
   selector: 'header',
-  imports: [RouterLink, NgOptimizedImage, WalletConnect],
+  imports: [RouterLink, RouterLinkActive, NgOptimizedImage, WalletConnect],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Header {

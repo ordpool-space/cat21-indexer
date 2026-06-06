@@ -21,6 +21,7 @@
 }
 
 .nav-link {
+  position: relative;
   font-family: "Public Pixel", sans-serif;
   font-size: 0.8rem;
   font-weight: bold;
@@ -32,6 +33,40 @@
     text-decoration: underline;
     color: white;
   }
+}
+
+// Selected page in the nav. Marked with a Norton-Commander dithered
+// L-shape at the bottom-right of the link — same visual language as
+// the .norton-shadow on panels, just scaled to the link's size.
+// Positioned absolutely outside the link's padding box so it doesn't
+// shift surrounding layout.
+.nav-link-active {
+  text-decoration: underline;
+}
+
+.nav-link-active::before,
+.nav-link-active::after {
+  content: '';
+  position: absolute;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
+  background-repeat: repeat;
+  pointer-events: none;
+}
+
+.nav-link-active::before {
+  // right-side strip
+  top: 4px;
+  right: -6px;
+  bottom: -6px;
+  width: 4px;
+}
+
+.nav-link-active::after {
+  // bottom strip
+  left: 4px;
+  right: -6px;
+  bottom: -6px;
+  height: 4px;
 }
 
 h1.logo {
@@ -57,8 +92,13 @@ h1.logo {
   }
 
   // Inline cat next to the CAT-21 wordmark on every other page.
+  // Override the desktop mt-n5 (-3rem lift) and center the smaller
+  // cat on the wordmark's optical middle instead — the desktop lift
+  // was tuned to 50px text + 100px cat, neither of which applies here.
   h1.logo img {
     width: 70px !important;
     height: 70px !important;
+    margin-top: 0 !important;
+    vertical-align: middle;
   }
 }
