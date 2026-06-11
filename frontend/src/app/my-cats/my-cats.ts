@@ -35,10 +35,14 @@ export class MyCats {
   readonly wallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
   readonly ordinalsAddress = computed<string | null>(() => this.wallet()?.ordinalsAddress ?? null);
 
+  // getAddressPolled re-fetches every 30s so a cat that confirms while
+  // the user is on this page surfaces without a manual reload. Pairs
+  // with the pending-feed panel above the gallery — the pending tx
+  // drops out of the mempool feed as the gallery picks the new cat up.
   catsResource = rxResourceFixed({
     params: () => ({ address: this.ordinalsAddress() }),
     stream: ({ params }) =>
-      params.address ? this.ordApi.getAddress(params.address) : EMPTY,
+      params.address ? this.ordApi.getAddressPolled(params.address) : EMPTY,
   });
 
   catNumbers = computed(() => this.catsResource.value()?.cat_numbers ?? []);
