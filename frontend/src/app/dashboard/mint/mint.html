@@ -1,0 +1,146 @@
+<h1 data-testid="mint-heading">Mint a cat</h1>
+
+@if (!connectedWallet()) {
+  <div class="connect-card" data-testid="mint-cta">
+    <h2>Connect your wallet to mint a cat</h2>
+    <p class="mb-3">
+      A cat is minted by sending a Bitcoin transaction with
+      <code>nLockTime = 21</code> from your wallet. The cat lands on
+      the first sat of the first output — your ordinals address. The
+      image is generated deterministically from
+      <code>SHA256(txid + blockId)</code>.
+    </p>
+    <p class="mb-4">
+      <strong>Safe wallets:</strong> Xverse and Leather won't
+      accidentally spend cat sats. Unisat is also supported but uses
+      a single address for payments and ordinals — be cautious.
+    </p>
+    <app-wallet-connect />
+  </div>
+} @else {
+  @if (state() === 'loading-utxos') {
+    <p aria-live="polite" data-testid="mint-loading">Loading UTXOs for your wallet…</p>
+  } @else if (utxoError(); as err) {
+    <p role="alert" class="mint-alert mint-alert-error">{{ err }}</p>
+  } @else if (viableRows().length === 0 && state() === 'ready') {
+    <div class="mint-no-utxos">
+      <p>
+        No UTXOs in your payment wallet have enough value to cover the
+        miner fee plus the 546 sat output. Fund your payment address
+        with at least 10 000 sats and try again.
+      </p>
+      <p>
+        Payment address: <code>{{ connectedWallet()!.paymentAddress }}</code>
+      </p>
+    </div>
+  } @else if (state() !== 'success') {
+    <section class="mint-section" data-testid="mint-fee-section">
+      <h2 class="mint-section-heading">1. Pick a fee rate</h2>
+      <app-fees-picker [minFeeRate]="1" />
+    </section>
+
+    @if (selectedRow(); as sel) {
+      <section class="mint-section" data-testid="mint-summary-section">
+        <h2 class="mint-section-heading">2. Confirm</h2>
+        <div class="mint-summary norton-shadow">
+          <div class="mint-summary-row">
+            <span class="lbl">UTXO</span>
+            <code class="val">{{ sel.utxo.txid }}:{{ sel.utxo.vout }}</code>
+          </div>
+          <div class="mint-summary-row">
+            <span class="lbl">Available</span>
+            <span class="val">{{ sel.utxo.value | number }} sat</span>
+          </div>
+          <div class="mint-summary-row">
+            <span class="lbl">Miner fee</span>
+            <span class="val">{{ toNumber(sel.simulation.finalTransactionFee) | number }} sat</span>
+          </div>
+          <div class="mint-summary-row">
+            <span class="lbl">To recipient (CAT-21 sat)</span>
+            <span class="val">{{ toNumber(sel.simulation.amountToRecipient) | number }} sat</span>
+          </div>
+          <div class="mint-summary-row">
+            <span class="lbl">Change back</span>
+            <span class="val">
+              {{ toNumber(sel.simulation.changeAmount) | number }} sat
+              @if (toNumber(sel.simulation.changeAmount) === 0) {
+                <small>(absorbed into miner fee — dust)</small>
+              }
+            </span>
+          </div>
+        </div>
+      </section>
+
+      @if (showUnisatWarning()) {
+        <p class="mint-alert mint-alert-warning" data-testid="unisat-warning">
+          ⚠ Unisat uses a single address for both payments and
+          ordinals. UTXOs under 10 000 sats might hold inscriptions or
+          other ordinal-bound value. Confirm this UTXO does not before
+          minting.
+        </p>
+      }
+
+      <details class="mint-expert" [open]="expertMode()" (toggle)="toggleExpertMode()">
+        <summary>Expert mode — pick a different UTXO</summary>
+        <ul class="mint-utxo-list">
+          @for (row of viableRows(); track row.utxo.txid + ':' + row.utxo.vout) {
+            <li class="mint-utxo-row" [class.mint-utxo-row-selected]="row === selectedRow()">
+              <button type="button" class="mint-utxo-pick" (click)="selectUtxo(row)">
+                @if (row === selectedRow()) { ✓ } @else { Pick }
+              </button>
+              <code class="mint-utxo-id">{{ row.utxo.txid }}:{{ row.utxo.vout }}</code>
+              <span class="mint-utxo-val">{{ row.utxo.value | number }} sat</span>
+              <span class="mint-utxo-fee">fee {{ toNumber(row.simulation.finalTransactionFee) | number }} sat</span>
+              <span class="mint-utxo-status" [class.confirmed]="row.utxo.status.confirmed">
+                {{ row.utxo.status.confirmed ? 'confirmed' : 'unconfirmed' }}
+              </span>
+            </li>
+          }
+        </ul>
+      </details>
+    }
+
+    <section class="mint-section mint-action">
+      <button
+        type="button"
+        class="mint-btn"
+        [disabled]="!canMint() || state() === 'minting'"
+        (click)="mint()"
+        data-testid="mint-btn"
+      >
+        @if (state() === 'minting') {
+          Minting… please confirm in your wallet
+        } @else {
+          Mint my cat
+        }
+      </button>
+    </section>
+
+    @if (mintError(); as err) {
+      <p role="alert" class="mint-alert mint-alert-error" data-testid="mint-error">{{ err }}</p>
+    }
+  } @else {
+    <div class="mint-success" data-testid="mint-success">
+      <h2>✓ Your CAT-21 transaction is in the mempool</h2>
+      <p>
+        The cat will be revealed once a block confirms your
+        transaction. Track it on ordpool.space:
+      </p>
+      @if (successTxId(); as txid) {
+        <p class="mint-success-link">
+          <a [href]="txLinkBase + txid" target="_blank" rel="noopener">
+            ↗ {{ txid }}
+          </a>
+        </p>
+      }
+      <p class="mint-success-actions">
+        <button type="button" class="mint-btn" (click)="mintAnother()">
+          Mint another cat
+        </button>
+        <a routerLink="/dashboard/cats" class="mint-success-cats-link">
+          Or open my cats →
+        </a>
+      </p>
+    </div>
+  }
+}

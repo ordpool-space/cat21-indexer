@@ -6,6 +6,7 @@ import { WalletService } from 'ordpool-sdk';
 import { environment } from '../../environments/environment';
 import { CatGallery } from '../cat-gallery/cat-gallery';
 import { OrdApiService } from '../shared/ord-api.service';
+import { PendingCats } from '../shared/pending-cats/pending-cats';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 import { WalletConnect } from '../shared/wallet-connect/wallet-connect';
 
@@ -23,7 +24,7 @@ import { WalletConnect } from '../shared/wallet-connect/wallet-connect';
   selector: 'app-my-cats',
   templateUrl: './my-cats.html',
   styleUrl: './my-cats.scss',
-  imports: [CatGallery, WalletConnect],
+  imports: [CatGallery, PendingCats, WalletConnect],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MyCats {

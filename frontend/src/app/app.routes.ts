@@ -5,6 +5,7 @@ import { Address } from './address/address';
 import { Block } from './block/block';
 import { Dashboard } from './dashboard/dashboard';
 import { ComingSoon } from './dashboard/coming-soon/coming-soon';
+import { Mint } from './dashboard/mint/mint';
 import { DebugColors } from './debug-colors/debug-colors';
 import { Details } from './details/details';
 import { MyCats } from './my-cats/my-cats';
@@ -30,6 +31,7 @@ export const routes: Routes = [
   // produces a useful "connect to continue" screen).
   { path: 'dashboard', component: Dashboard, data: { smallHeader: true }, title: 'CAT-21 - Dashboard' },
   { path: 'dashboard/cats', component: MyCats, data: { smallHeader: true }, title: 'CAT-21 - My cats' },
+  { path: 'dashboard/mint', component: Mint, data: { smallHeader: true }, title: 'CAT-21 - Mint a cat' },
   {
     path: 'dashboard/transfer',
     component: ComingSoon,

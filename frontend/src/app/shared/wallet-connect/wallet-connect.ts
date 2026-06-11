@@ -4,6 +4,8 @@ import { RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef, NgbPopover, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { KnownOrdinalWalletType, KnownOrdinalWallets, WalletService } from 'ordpool-sdk';
 
+import { PendingCats } from '../pending-cats/pending-cats';
+
 /**
  * Wallet connection control for the header. Shows "Connect" when no
  * wallet is connected and opens a modal picker; once connected, shows
@@ -16,7 +18,7 @@ import { KnownOrdinalWalletType, KnownOrdinalWallets, WalletService } from 'ordp
   selector: 'app-wallet-connect',
   templateUrl: './wallet-connect.html',
   styleUrl: './wallet-connect.scss',
-  imports: [RouterLink, NgbPopoverModule],
+  imports: [RouterLink, NgbPopoverModule, PendingCats],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WalletConnect {

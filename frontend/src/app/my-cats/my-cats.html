@@ -10,6 +10,10 @@
     </a>
   </p>
 
+  <app-pending-cats
+    [addresses]="[connectedWallet.ordinalsAddress]"
+    heading="Pending cats — not yet confirmed" />
+
   @if (catsResource.value(); as data) {
     <h2 data-testid="my-cats-count">You hold {{ catNumbers().length }} cats</h2>
     <app-cat-gallery [catNumbers]="catNumbers()" emptyMessage="Your wallet doesn't hold any cats yet. Mint one!" />

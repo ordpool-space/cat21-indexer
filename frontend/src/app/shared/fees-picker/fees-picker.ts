@@ -47,8 +47,8 @@ export class FeesPicker {
   /** Current fee rate the user has picked, bridged from the orchestrator's signal. */
   readonly feeRate = this.orchestrator.feeRate;
 
-  /** Polled tier values from the SDK. */
-  readonly fees = toSignal(this.orchestrator.recommendedFees$, { initialValue: null as RecommendedFees | null });
+  /** Polled tier values from the SDK. `undefined` until the first emission. */
+  readonly fees = toSignal(this.orchestrator.recommendedFees$);
 
   readonly tiers = TIERS;
 

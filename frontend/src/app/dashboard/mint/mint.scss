@@ -1,0 +1,181 @@
+.connect-card {
+  border: 2px solid white;
+  padding: 1.5rem;
+  margin-top: 1rem;
+  max-width: 640px;
+
+  h2 {
+    margin-top: 0;
+    font-size: 1.2rem;
+  }
+}
+
+.mint-section {
+  margin-top: 1.5rem;
+}
+
+.mint-section-heading {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.mint-summary {
+  border: 2px solid white;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  position: relative;
+  background: transparent;
+}
+
+.mint-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+
+  .lbl { font-family: "Public Pixel", sans-serif; font-size: 0.75rem; opacity: 0.85; }
+  .val { font-family: monospace; font-size: 0.85rem; word-break: break-all; }
+  small { opacity: 0.75; font-size: 0.7rem; margin-left: 0.4rem; }
+}
+
+.mint-no-utxos {
+  border: 2px solid white;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  code { background: rgba(0, 0, 0, 0.15); padding: 0.1rem 0.3rem; word-break: break-all; }
+}
+
+.mint-expert {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+
+  > summary {
+    cursor: pointer;
+    font-family: "Public Pixel", sans-serif;
+    font-size: 0.85rem;
+    padding: 0.4rem 0;
+  }
+}
+
+.mint-utxo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mint-utxo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.4rem 0.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  font-size: 0.75rem;
+}
+
+.mint-utxo-row-selected { border-color: white; background: rgba(0, 0, 0, 0.15); }
+
+.mint-utxo-pick {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.4rem;
+  background: transparent;
+  border: 2px solid currentColor;
+  color: white;
+  cursor: pointer;
+
+  &:hover { background: rgba(0, 0, 0, 0.15); }
+}
+
+.mint-utxo-id {
+  font-family: monospace;
+  word-break: break-all;
+  flex: 1 1 240px;
+}
+
+.mint-utxo-val,
+.mint-utxo-fee,
+.mint-utxo-status {
+  opacity: 0.9;
+  font-family: monospace;
+}
+
+.mint-utxo-status { text-transform: uppercase; font-size: 0.65rem; opacity: 0.7; }
+.mint-utxo-status.confirmed { color: #c6f6c6; opacity: 1; }
+
+.mint-action {
+  text-align: center;
+}
+
+.mint-btn {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.9rem;
+  font-weight: bold;
+  padding: 0.6rem 1.5rem;
+  background: white;
+  color: #FF9900;
+  border: 2px solid white;
+  cursor: pointer;
+  image-rendering: pixelated;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
+    background: #f5f5f5;
+  }
+}
+
+.mint-alert {
+  border: 2px solid white;
+  padding: 0.6rem 0.8rem;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.mint-alert-error { border-color: #ff6b6b; }
+.mint-alert-warning { border-style: dashed; }
+
+.mint-success {
+  border: 2px solid white;
+  padding: 1rem 1.25rem;
+  margin-top: 1rem;
+  max-width: 720px;
+
+  h2 { font-family: "Public Pixel", sans-serif; font-size: 1.05rem; margin: 0 0 0.6rem 0; }
+  p { font-size: 0.85rem; margin-bottom: 0.6rem; }
+  code { font-family: monospace; }
+}
+
+.mint-success-link a {
+  word-break: break-all;
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: white;
+}
+
+.mint-success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.mint-success-cats-link {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  color: white;
+  text-decoration: underline;
+}

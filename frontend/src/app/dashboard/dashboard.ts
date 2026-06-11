@@ -51,9 +51,8 @@ export class Dashboard {
     },
     {
       title: 'Mint a cat',
-      description: 'Lock a new cat to a Bitcoin sat. Lives on ordpool.space for now; native mint coming to cat21.space later.',
-      link: 'https://ordpool.space/cat21-mint',
-      external: true,
+      description: 'Lock a new cat to a Bitcoin sat. Image generated deterministically once the tx confirms.',
+      link: '/dashboard/mint',
       status: 'active',
     },
     {
