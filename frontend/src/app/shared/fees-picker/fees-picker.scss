@@ -1,0 +1,98 @@
+.fees-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tier-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tier-btn {
+  flex: 1 1 auto;
+  min-width: 140px;
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.8rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  text-align: left;
+  position: relative;
+  image-rendering: pixelated;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: progress;
+  }
+
+  &:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.15);
+  }
+}
+
+.tier-btn-active {
+  background: white;
+  color: #FF9900;
+  font-weight: bold;
+}
+
+.tier-btn-active::after {
+  // Norton-Commander dithered shadow stripe under the active tier —
+  // matches the .nav-link-active treatment on the header nav band.
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: -6px;
+  bottom: -8px;
+  height: 6px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
+  background-repeat: repeat;
+  pointer-events: none;
+}
+
+.tier-label {
+  font-size: 0.75rem;
+}
+
+.tier-rate {
+  font-size: 0.9rem;
+}
+
+.manual-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.8rem;
+}
+
+.manual-label {
+  opacity: 0.85;
+}
+
+.manual-input {
+  width: 90px;
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  padding: 0.3rem 0.45rem;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  appearance: textfield;
+
+  &::-webkit-inner-spin-button,
+  &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+}
+
+.manual-unit {
+  font-size: 0.75rem;
+  opacity: 0.85;
+}

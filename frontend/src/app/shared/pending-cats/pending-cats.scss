@@ -1,0 +1,54 @@
+.pending-cats {
+  border: 2px solid white;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 1rem;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.pending-heading {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem 0;
+  color: white;
+}
+
+.pending-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.pending-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  font-family: monospace;
+  font-size: 0.8rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.35);
+
+  &:last-child { border-bottom: 0; }
+}
+
+.pending-link {
+  color: white;
+  text-decoration: underline;
+
+  &:hover { color: white; opacity: 0.85; }
+}
+
+.pending-txid {
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.1rem 0.3rem;
+}
+
+.pending-fee,
+.pending-seen {
+  font-size: 0.75rem;
+  opacity: 0.85;
+}

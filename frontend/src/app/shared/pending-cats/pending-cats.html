@@ -1,0 +1,16 @@
+@if (pendingMints().length > 0) {
+  <div class="pending-cats">
+    <h3 class="pending-heading">{{ heading() }}</h3>
+    <ul class="pending-list">
+      @for (mint of pendingMints(); track mint.txid) {
+        <li class="pending-item">
+          <a class="pending-link" [href]="txLinkBase + mint.txid" target="_blank" rel="noopener">
+            <code class="pending-txid">{{ shortTxid(mint.txid) }}</code>
+          </a>
+          <span class="pending-fee">{{ mint.feeRate | number:'1.0-1' }} sat/vB</span>
+          <span class="pending-seen">since {{ mint.seenAt | date:'HH:mm' }}</span>
+        </li>
+      }
+    </ul>
+  </div>
+}

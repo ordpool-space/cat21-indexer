@@ -1,0 +1,30 @@
+<div class="fees-picker">
+  <div class="tier-row">
+    @for (t of tiers; track t.key) {
+      <button
+        type="button"
+        class="tier-btn"
+        [class.tier-btn-active]="activeTier() === t.key"
+        [disabled]="!fees()"
+        (click)="pickTier(t)"
+      >
+        <span class="tier-label">{{ t.label }}</span>
+        <span class="tier-rate">{{ fees() ? fees()![t.payloadKey] : '…' }} sat/vB</span>
+      </button>
+    }
+  </div>
+
+  <label class="manual-row">
+    <span class="manual-label">or manual</span>
+    <input
+      type="number"
+      class="manual-input"
+      [min]="minFeeRate()"
+      step="1"
+      [ngModel]="manualInput()"
+      (ngModelChange)="onManualInputChange($event)"
+      [attr.aria-label]="'Fee rate in sat/vB'"
+    >
+    <span class="manual-unit">sat/vB</span>
+  </label>
+</div>
