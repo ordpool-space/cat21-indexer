@@ -18,7 +18,14 @@
   color: white;
   font-family: "Public Pixel", sans-serif;
   font-size: 0.8rem;
-  padding: 0.45rem 0.6rem;
+  // Bottom padding leaves room for the active-tier Norton shadow
+  // INSIDE the button's own box so the pseudo-element never extends
+  // beyond the button bounds. Previously the shadow used right: -6px
+  // and bottom: -8px which leaked into the next tier's hit area on a
+  // wrapping flex row and into the manual-input below on a wide one,
+  // making the cursor flicker between pointer and default at the
+  // overlap and the next tier hard to click cleanly.
+  padding: 0.45rem 0.6rem 0.95rem 0.6rem;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -41,17 +48,18 @@
 .tier-btn-active {
   background: white;
   color: #FF9900;
-  font-weight: bold;
 }
 
 .tier-btn-active::after {
   // Norton-Commander dithered shadow stripe under the active tier —
   // matches the .nav-link-active treatment on the header nav band.
+  // Positioned ENTIRELY inside the button via the extra padding-bottom
+  // above so it can't intercept hover/click on neighbours.
   content: '';
   position: absolute;
   left: 6px;
-  right: -6px;
-  bottom: -8px;
+  right: 6px;
+  bottom: 2px;
   height: 6px;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
   background-repeat: repeat;

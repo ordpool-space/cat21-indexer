@@ -38,8 +38,14 @@ const TIERS: readonly TierOption[] = [
 export class FeesPicker {
   private orchestrator = inject(Cat21MintOrchestrator);
 
-  /** Minimum sat/vB the form allows. The mint page enforces a hint above this; the input itself accepts anything ≥ this. */
-  readonly minFeeRate = input<number>(1);
+  /**
+   * Minimum sat/vB the manual input will accept. Defaults to 0.1 —
+   * which matches Bitcoin Core's default `-minrelaytxfee` since v27.0
+   * (April 2024 lowered it from 1 sat/vB to 0.1 sat/vB). Set higher
+   * via [minFeeRate]="N" on the caller if the page wants a harder
+   * floor; anything below 0.1 won't relay on a default-config node.
+   */
+  readonly minFeeRate = input<number>(0.1);
 
   /** Fires every time the active fee rate changes (tier click or manual edit). */
   readonly feeRateChange = output<number>();

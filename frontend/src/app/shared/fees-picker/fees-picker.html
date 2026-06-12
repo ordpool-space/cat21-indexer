@@ -20,7 +20,7 @@
       type="number"
       class="manual-input"
       [min]="minFeeRate()"
-      step="1"
+      step="any"
       [ngModel]="manualInput()"
       (ngModelChange)="onManualInputChange($event)"
       [attr.aria-label]="'Fee rate in sat/vB'"

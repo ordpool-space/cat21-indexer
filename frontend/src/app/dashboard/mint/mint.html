@@ -25,7 +25,7 @@
   } @else if (state() !== 'success') {
     <section class="mint-section" data-testid="mint-fee-section">
       <h2 class="mint-section-heading">1. Pick a fee rate</h2>
-      <app-fees-picker [minFeeRate]="1" />
+      <app-fees-picker [minFeeRate]="0.1" />
     </section>
 
     @if (viableRows().length === 0 && state() === 'ready') {
@@ -159,6 +159,7 @@
               <span class="mint-utxo-val">{{ row.utxo.value | number }} sat</span>
               <span class="mint-utxo-fee">fee {{ toNumber(row.simulation.finalTransactionFee) | number }} sat</span>
               <span class="mint-utxo-bucket"
+                    [title]="bucketTooltip(row.bucket)"
                     [class.mint-utxo-bucket-clean]="row.bucket === 'clean'"
                     [class.mint-utxo-bucket-assets]="row.bucket === 'assets'"
                     [class.mint-utxo-bucket-unscanned]="row.bucket === 'unscanned'"

@@ -36,8 +36,8 @@ export const appConfig: ApplicationConfig = {
     //    tx hex, mempool txs) + mempool framework (recommended fees)
     //  - cat21ApiUrl     → backend2.cat21.space — cat21-indexer REST API
     //    (status, latest cat numbers, cat image URL)
-    //  - ordApiUrl       → ord.ordpool.space — ord-proxy, per-outpoint
-    //    inscription + rune detection for UtxoContentScanner
+    //  - ordApiUrl       → ord.ordpool.space — our ord instance, per-
+    //    outpoint inscription + rune detection for UtxoContentScanner
     //  - cat21OrdApiUrl  → ord.cat21.space — cat21-ord, per-outpoint
     //    CAT-21 cat detection for the same scanner
     {
