@@ -146,6 +146,46 @@
 
 .mint-alert-error { border-color: #ff6b6b; }
 .mint-alert-warning { border-style: dashed; }
+.mint-alert-danger { border-color: #ff6b6b; background: rgba(255, 107, 107, 0.08); }
+.mint-alert-info { border-style: dotted; opacity: 0.9; }
+
+.mint-alert a { color: inherit; text-decoration: underline; word-break: break-all; }
+
+.link-button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  margin-left: 0.4rem;
+
+  &:hover { opacity: 0.8; }
+}
+
+.mint-utxo-row-assets { border-color: #ff6b6b; }
+.mint-utxo-row-clean { border-color: rgba(198, 246, 198, 0.7); }
+
+.mint-utxo-pick-override {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+.mint-utxo-bucket {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.6rem;
+  padding: 0.15rem 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.mint-utxo-bucket-clean     { color: #c6f6c6; }
+.mint-utxo-bucket-assets    { color: #ff6b6b; }
+.mint-utxo-bucket-unscanned { opacity: 0.7; }
+.mint-utxo-bucket-scanning  { opacity: 0.85; }
+.mint-utxo-bucket-failed    { color: #ffc36b; }
 
 .mint-success {
   border: 2px solid white;

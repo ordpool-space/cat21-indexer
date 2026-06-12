@@ -30,17 +30,23 @@ export const appConfig: ApplicationConfig = {
     provideEnvironmentInitializer(() => inject(SmartScrollService)),
     { provide: bitcoinNetwork, useValue: Network.Mainnet },
     { provide: storage, useExisting: BrowserStorageAdapter },
-    // cat21Config feeds the SDK's mint pipeline. Both endpoints are
+    // cat21Config feeds the SDK's mint pipeline. All four endpoints are
     // ours (no third-party deps):
-    //  - mempoolApiUrl → api.ordpool.space — electrs (UTXOs, broadcast,
+    //  - mempoolApiUrl   → api.ordpool.space — electrs (UTXOs, broadcast,
     //    tx hex, mempool txs) + mempool framework (recommended fees)
-    //  - cat21ApiUrl  → backend2.cat21.space — cat21-indexer REST API
+    //  - cat21ApiUrl     → backend2.cat21.space — cat21-indexer REST API
     //    (status, latest cat numbers, cat image URL)
+    //  - ordApiUrl       → ord.ordpool.space — ord-proxy, per-outpoint
+    //    inscription + rune detection for UtxoContentScanner
+    //  - cat21OrdApiUrl  → ord.cat21.space — cat21-ord, per-outpoint
+    //    CAT-21 cat detection for the same scanner
     {
       provide: cat21Config,
       useValue: {
         mempoolApiUrl: 'https://api.ordpool.space',
         cat21ApiUrl: 'https://backend2.cat21.space',
+        ordApiUrl: 'https://ord.ordpool.space',
+        cat21OrdApiUrl: 'https://ord.cat21.space',
       },
     },
   ],

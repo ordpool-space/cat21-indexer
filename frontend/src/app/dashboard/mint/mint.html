@@ -74,7 +74,57 @@
         </div>
       </section>
 
-      @if (showSmallUtxoWarning()) {
+      @if (sel.bucket === 'assets' && sel.scan.kind === 'scanned-with-assets') {
+        <div class="mint-alert mint-alert-danger" data-testid="asset-found-warning">
+          <p>
+            <strong>⚠ Asset detected on this UTXO.</strong>
+            Spending it as a mint input would send the asset away to
+            the miner as fee. Review what's here before continuing.
+          </p>
+          @if (sel.scan.content.inscriptionIds.length > 0) {
+            <p>
+              <strong>Inscription{{ sel.scan.content.inscriptionIds.length === 1 ? '' : 's' }}:</strong>
+              @for (id of sel.scan.content.inscriptionIds; track id) {
+                <a [href]="ordReviewBase + '/inscription/' + id" target="_blank" rel="noopener">{{ id }}</a>
+                @if (!$last) { , }
+              }
+            </p>
+          }
+          @if (runeNames(sel.scan.content).length > 0) {
+            <p>
+              <strong>Rune{{ runeNames(sel.scan.content).length === 1 ? '' : 's' }}:</strong>
+              @for (name of runeNames(sel.scan.content); track name) {
+                <a [href]="ordReviewBase + '/rune/' + name" target="_blank" rel="noopener">{{ name }}</a>
+                @if (!$last) { , }
+              }
+            </p>
+          }
+          @if (sel.scan.content.catIds.length > 0) {
+            <p>
+              <strong>CAT-21 cat{{ sel.scan.content.catIds.length === 1 ? '' : 's' }}:</strong>
+              @for (id of sel.scan.content.catIds; track id) {
+                <a [href]="cat21OrdReviewBase + '/inscription/' + id" target="_blank" rel="noopener">{{ id }}</a>
+                @if (!$last) { , }
+              }
+            </p>
+          }
+        </div>
+      } @else if (sel.bucket === 'unscanned') {
+        <p class="mint-alert mint-alert-info" data-testid="unscanned-info">
+          This UTXO is above {{ autoScanThreshold | number }} sat — probably a
+          plain payment. We haven't scanned it for ordinal-bound assets.
+          <button type="button" class="link-button" (click)="scanRow(sel)">Scan anyway</button>
+        </p>
+      } @else if (sel.bucket === 'scanning') {
+        <p class="mint-alert mint-alert-info" data-testid="scanning-info" aria-live="polite">
+          Scanning UTXO for inscriptions, runes, and cats…
+        </p>
+      } @else if (sel.bucket === 'failed') {
+        <p class="mint-alert mint-alert-warning" data-testid="scan-failed-info">
+          Couldn't scan this UTXO for ordinal-bound assets.
+          <button type="button" class="link-button" (click)="scanRow(sel)">Retry scan</button>
+        </p>
+      } @else if (showSmallUtxoWarning()) {
         <p class="mint-alert mint-alert-warning" data-testid="small-utxo-warning">
           ⚠ Your wallet uses a single address for both payments and
           ordinals. UTXOs at or below 10 000 sats can hold inscriptions,
@@ -88,13 +138,43 @@
         <summary>Expert mode — pick a different UTXO</summary>
         <ul class="mint-utxo-list">
           @for (row of viableRows(); track row.utxo.txid + ':' + row.utxo.vout) {
-            <li class="mint-utxo-row" [class.mint-utxo-row-selected]="row === selectedRow()">
-              <button type="button" class="mint-utxo-pick" (click)="selectUtxo(row)">
-                @if (row === selectedRow()) { ✓ } @else { Pick }
-              </button>
+            <li class="mint-utxo-row"
+                [class.mint-utxo-row-selected]="row === selectedRow()"
+                [class.mint-utxo-row-assets]="row.bucket === 'assets'"
+                [class.mint-utxo-row-clean]="row.bucket === 'clean'">
+              @if (row.bucket === 'assets') {
+                <button type="button" class="mint-utxo-pick mint-utxo-pick-override" (click)="selectUtxo(row)">
+                  @if (row === selectedRow()) { ✓ Selected } @else { Use anyway }
+                </button>
+              } @else if (row.bucket === 'unscanned') {
+                <button type="button" class="mint-utxo-pick" (click)="selectUtxo(row)">
+                  @if (row === selectedRow()) { ✓ } @else { Pick }
+                </button>
+              } @else {
+                <button type="button" class="mint-utxo-pick" (click)="selectUtxo(row)">
+                  @if (row === selectedRow()) { ✓ } @else { Pick }
+                </button>
+              }
               <code class="mint-utxo-id">{{ row.utxo.txid }}:{{ row.utxo.vout }}</code>
               <span class="mint-utxo-val">{{ row.utxo.value | number }} sat</span>
               <span class="mint-utxo-fee">fee {{ toNumber(row.simulation.finalTransactionFee) | number }} sat</span>
+              <span class="mint-utxo-bucket"
+                    [class.mint-utxo-bucket-clean]="row.bucket === 'clean'"
+                    [class.mint-utxo-bucket-assets]="row.bucket === 'assets'"
+                    [class.mint-utxo-bucket-unscanned]="row.bucket === 'unscanned'"
+                    [class.mint-utxo-bucket-scanning]="row.bucket === 'scanning'"
+                    [class.mint-utxo-bucket-failed]="row.bucket === 'failed'">
+                @switch (row.bucket) {
+                  @case ('clean')     { ✓ safe }
+                  @case ('assets')    { ⚠ asset found }
+                  @case ('unscanned') { not scanned }
+                  @case ('scanning')  { scanning… }
+                  @case ('failed')    { scan failed }
+                }
+              </span>
+              @if (row.bucket === 'unscanned') {
+                <button type="button" class="link-button" (click)="scanRow(row); $event.stopPropagation()">Scan</button>
+              }
               <span class="mint-utxo-status" [class.confirmed]="row.utxo.status.confirmed">
                 {{ row.utxo.status.confirmed ? 'confirmed' : 'unconfirmed' }}
               </span>

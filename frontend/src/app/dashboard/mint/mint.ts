@@ -6,8 +6,12 @@ import {
   Cat21MintOrchestrator,
   SimulateTransactionResult,
   TxnOutput,
+  UtxoContent,
+  UtxoContentScanner,
+  UtxoScanState,
   UtxoSimulation,
   WalletService,
+  AUTO_SCAN_MAX_VALUE_SAT,
 } from 'ordpool-sdk';
 
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
@@ -16,6 +20,8 @@ import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 interface ViableUtxoRow {
   utxo: TxnOutput;
   simulation: SimulateTransactionResult;
+  scan: UtxoScanState;
+  bucket: 'clean' | 'unscanned' | 'assets' | 'scanning' | 'failed';
 }
 
 /**
@@ -37,10 +43,18 @@ const SMALL_UTXO_WARNING_THRESHOLD_SATS = 10_000;
 })
 export class Mint {
   private orchestrator = inject(Cat21MintOrchestrator);
+  private scanner = inject(UtxoContentScanner);
   private wallet = inject(WalletService);
 
   /** Where successfully minted tx ids link out (ordpool owns the tx-detail page). */
   readonly txLinkBase = 'https://ordpool.space/tx/';
+
+  /** Asset-detail links for the "asset found" row. */
+  readonly ordReviewBase = 'https://ord.ordpool.space';
+  readonly cat21OrdReviewBase = 'https://ord.cat21.space';
+
+  /** Auto-scan threshold passed through to the template for the "Scan anyway" label. */
+  readonly autoScanThreshold = AUTO_SCAN_MAX_VALUE_SAT;
 
   // ---------- Live state from the orchestrator ----------
 
@@ -52,17 +66,23 @@ export class Mint {
   readonly selectedUtxo = this.orchestrator.selectedUtxo;
 
   private readonly simulations = toSignal(this.orchestrator.simulations$, { initialValue: [] as UtxoSimulation[] });
+  private readonly scanStates = toSignal(this.scanner.states$, { initialValue: new Map<string, UtxoScanState>() as ReadonlyMap<string, UtxoScanState> });
 
-  /** Viable rows only — insufficient UTXOs are dropped here, sorted desc by UTXO value, capped at 10. */
+  /** Viable rows only — insufficient UTXOs are dropped, sorted desc by UTXO value, capped at 10, annotated with scan state + bucket. */
   readonly viableRows = computed<ViableUtxoRow[]>(() => {
     const rows = this.simulations();
+    const scanMap = this.scanStates();
     return rows
       .filter((r): r is { utxo: TxnOutput; simulation: SimulateTransactionResult; insufficient: false } =>
         !r.insufficient && r.simulation !== null,
       )
       .sort((a, b) => b.utxo.value - a.utxo.value)
       .slice(0, 10)
-      .map((r) => ({ utxo: r.simulation ? r.utxo : r.utxo, simulation: r.simulation! }));
+      .map((r): ViableUtxoRow => {
+        const outpoint = `${r.utxo.txid}:${r.utxo.vout}`;
+        const scan = scanMap.get(outpoint) ?? { kind: 'not-scanned' };
+        return { utxo: r.utxo, simulation: r.simulation, scan, bucket: bucketOf(scan) };
+      });
   });
 
   /** Whether the form has at least one viable UTXO + a fee rate set. */
@@ -86,8 +106,6 @@ export class Mint {
    * (real CAT-21 mints are ~150–170 vB depending on wallet type),
    * rounded up to the next 100 sat so the number reads cleanly.
    * At 1 sat/vB that's ~800 sat; at 100 sat/vB it's ~20,600 sat.
-   * Reference vsize stays above the largest known CAT-21 mint so
-   * the displayed floor is never under the SDK's real check.
    */
   readonly recommendedFundingSats = computed<number>(() => {
     const rate = this.feeRate() ?? 1;
@@ -110,14 +128,18 @@ export class Mint {
   });
 
   /**
-   * Whether to show the "small UTXO on single-address wallet" warning.
-   * Independent of fee rate — purely about content-safety on UTXOs at
-   * or below the small-utxo threshold.
+   * Whether to show the "small UTXO on single-address wallet" warning
+   * for the currently selected row. Stays fee-rate-agnostic; purely
+   * a content-safety hint about small UTXOs that we couldn't (or
+   * weren't asked to) scan. Once a row is `scanned-clean`, this
+   * disappears; once a row is `scanned-with-assets`, the more
+   * specific asset-found warning takes over.
    */
   readonly showSmallUtxoWarning = computed<boolean>(() => {
     const sel = this.selectedRow();
     if (!sel) return false;
     if (!this.isSingleAddressWallet()) return false;
+    if (sel.bucket === 'clean' || sel.bucket === 'assets') return false;
     return sel.utxo.value <= SMALL_UTXO_WARNING_THRESHOLD_SATS;
   });
 
@@ -132,9 +154,17 @@ export class Mint {
   // ---------- Lifecycle ----------
 
   constructor() {
-    // Auto-pick the largest viable UTXO whenever the simulation list
-    // refreshes — unless the user has already picked one that's still
-    // present.
+    // Eager-scan small UTXOs the moment they arrive from electrs. The
+    // scanner dedupes by outpoint, so repeat triggers are free.
+    effect(() => {
+      const rows = this.viableRows();
+      this.scanner.autoScan(rows.map((r) => ({ txid: r.utxo.txid, vout: r.utxo.vout, value: r.utxo.value })));
+    });
+
+    // Auto-pick the largest "safe-enough" UTXO whenever the row list
+    // changes. Priority: scanned-clean → unscanned (probably-safe big
+    // UTXO) → scan-failed. NEVER auto-pick scanned-with-assets — that
+    // row requires an explicit "Use anyway" click.
     effect(() => {
       const rows = this.viableRows();
       if (rows.length === 0) {
@@ -145,9 +175,13 @@ export class Mint {
       const stillThere = current && rows.find(
         (r) => r.utxo.txid === current.txid && r.utxo.vout === current.vout,
       );
-      if (!stillThere) {
-        this.orchestrator.setSelectedUtxo(rows[0].utxo);
-      }
+      if (stillThere) return;
+      const pick =
+        rows.find((r) => r.bucket === 'clean')
+        ?? rows.find((r) => r.bucket === 'unscanned')
+        ?? rows.find((r) => r.bucket === 'failed')
+        ?? null;
+      this.orchestrator.setSelectedUtxo(pick ? pick.utxo : null);
     });
   }
 
@@ -155,6 +189,10 @@ export class Mint {
 
   selectUtxo(row: ViableUtxoRow): void {
     this.orchestrator.setSelectedUtxo(row.utxo);
+  }
+
+  scanRow(row: ViableUtxoRow): void {
+    this.scanner.scan(`${row.utxo.txid}:${row.utxo.vout}`).subscribe();
   }
 
   toggleExpertMode(): void {
@@ -173,6 +211,29 @@ export class Mint {
     this.orchestrator.reset();
   }
 
+  // ---------- Template helpers ----------
+
   /** Helper for template — bigint → number for the | number pipe. */
   toNumber(n: bigint): number { return Number(n); }
+
+  /** Extract the rune names from a UtxoContent. */
+  runeNames(content: UtxoContent): string[] {
+    return content.runes ? Object.keys(content.runes) : [];
+  }
+}
+
+/**
+ * Map a raw UtxoScanState to the picker's display bucket. The bucket
+ * is what drives badges, button labels, and auto-pick priority. Kept
+ * as a free function so the computed in `viableRows` stays inline-
+ * declarative.
+ */
+function bucketOf(s: UtxoScanState): ViableUtxoRow['bucket'] {
+  switch (s.kind) {
+    case 'not-scanned': return 'unscanned';
+    case 'scanning': return 'scanning';
+    case 'scanned-clean': return 'clean';
+    case 'scanned-with-assets': return 'assets';
+    case 'scan-failed': return 'failed';
+  }
 }
