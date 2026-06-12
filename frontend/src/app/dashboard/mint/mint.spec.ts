@@ -40,30 +40,34 @@ function utxo(over: Partial<TxnOutput> = {}): TxnOutput {
     value: 50_000,
     status: { confirmed: true, block_height: 800_000, block_hash: 'b'.repeat(64), block_time: 1_700_000_000 },
     ...over,
-  } as TxnOutput;
+  };
 }
 
 function simulation(over: Partial<SimulateTransactionResult> = {}): SimulateTransactionResult {
   return {
     finalTransactionFee: 200n,
     amountToRecipient: 546n,
+    singleInputAmount: 50_000n,
     changeAmount: 49_254n,
     vsize: 150,
-    tx: {} as unknown as SimulateTransactionResult['tx'],
+    // The component never reads `tx`; fixtures keep it as an empty
+    // object cast to the real btc.Transaction type to satisfy
+    // structural checks without dragging in @scure/btc-signer.
+    tx: {} as SimulateTransactionResult['tx'],
     ...over,
-  } as SimulateTransactionResult;
+  };
 }
 
 function wallet(over: Partial<WalletInfo> = {}): WalletInfo {
   return {
     type: KnownOrdinalWalletType.xverse,
-    label: 'Xverse',
     ordinalsAddress: 'bc1p-ordinals-addr',
     paymentAddress: '3-payment-addr',
     paymentPublicKey: '02' + 'aa'.repeat(32),
     ordinalsPublicKey: '02' + 'bb'.repeat(32),
+    signingSupported: true,
     ...over,
-  } as WalletInfo;
+  };
 }
 
 /**
