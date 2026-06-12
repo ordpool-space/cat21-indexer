@@ -3,15 +3,22 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } 
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
+  AUTO_SCAN_MAX_VALUE_SAT,
   Cat21MintOrchestrator,
+  cat21Config,
+  SMALL_UTXO_WARNING_THRESHOLD_SAT,
   SimulateTransactionResult,
   TxnOutput,
   UtxoContent,
   UtxoContentScanner,
+  UtxoScanBucket,
   UtxoScanState,
   UtxoSimulation,
   WalletService,
-  AUTO_SCAN_MAX_VALUE_SAT,
+  bucketOf,
+  calculateRecommendedFundingSats,
+  findAutoPickCandidate,
+  runeNamesFromContent,
 } from 'ordpool-sdk';
 
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
@@ -21,18 +28,8 @@ interface ViableUtxoRow {
   utxo: TxnOutput;
   simulation: SimulateTransactionResult;
   scan: UtxoScanState;
-  bucket: 'clean' | 'unscanned' | 'assets' | 'scanning' | 'failed';
+  bucket: UtxoScanBucket;
 }
-
-/**
- * UTXOs at or below this value, on a single-address wallet, are flagged
- * as potentially holding an ordinal-bound asset (inscription, rune, sat
- * rarity, CAT-21 cat). The 10k sat figure is the de-facto industry cut-
- * off: most ordinal-bearing UTXOs are 546 sat (the dust limit) or
- * slightly above; almost none exceed 10k. This is content-safety
- * heuristics, not fee math — it stays fee-rate-agnostic.
- */
-const SMALL_UTXO_WARNING_THRESHOLD_SATS = 10_000;
 
 @Component({
   selector: 'app-mint',
@@ -45,13 +42,14 @@ export class Mint {
   private orchestrator = inject(Cat21MintOrchestrator);
   private scanner = inject(UtxoContentScanner);
   private wallet = inject(WalletService);
+  private config = inject(cat21Config);
 
   /** Where successfully minted tx ids link out (ordpool owns the tx-detail page). */
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
-  /** Asset-detail links for the "asset found" row. */
-  readonly ordReviewBase = 'https://ord.ordpool.space';
-  readonly cat21OrdReviewBase = 'https://ord.cat21.space';
+  /** Asset-detail link bases sourced from cat21Config so dev / regtest / prod stay aligned with the scanner's own endpoints. */
+  readonly ordReviewBase = this.config.ordApiUrl;
+  readonly cat21OrdReviewBase = this.config.cat21OrdApiUrl;
 
   /** Auto-scan threshold passed through to the template for the "Scan anyway" label. */
   readonly autoScanThreshold = AUTO_SCAN_MAX_VALUE_SAT;
@@ -100,17 +98,7 @@ export class Mint {
   /** Expert mode toggle — collapsed by default. */
   readonly expertMode = signal(false);
 
-  /**
-   * Funding target shown in the empty-state hint. Derived from the
-   * currently-picked fee rate using a conservative ~200 vB vsize
-   * (real CAT-21 mints are ~150–170 vB depending on wallet type),
-   * rounded up to the next 100 sat so the number reads cleanly.
-   * At 1 sat/vB that's ~800 sat; at 100 sat/vB it's ~20,600 sat.
-   */
-  readonly recommendedFundingSats = computed<number>(() => {
-    const rate = this.feeRate() ?? 1;
-    return Math.ceil((546 + 200 * rate) / 100) * 100;
-  });
+  readonly recommendedFundingSats = computed<number>(() => calculateRecommendedFundingSats(this.feeRate() ?? 1));
 
   /**
    * Whether the connected wallet exposes one address for both payments
@@ -140,7 +128,7 @@ export class Mint {
     if (!sel) return false;
     if (!this.isSingleAddressWallet()) return false;
     if (sel.bucket === 'clean' || sel.bucket === 'assets') return false;
-    return sel.utxo.value <= SMALL_UTXO_WARNING_THRESHOLD_SATS;
+    return sel.utxo.value <= SMALL_UTXO_WARNING_THRESHOLD_SAT;
   });
 
   /** Was a UTXO-load error from the orchestrator. */
@@ -150,21 +138,36 @@ export class Mint {
   readonly mintError = computed(() => this.state() === 'error' && this.mintAttempted() ? this.errorMessage() : null);
 
   private mintAttempted = signal(false);
+  private lastWalletAddress: string | null = null;
 
   // ---------- Lifecycle ----------
 
   constructor() {
+    // Wipe the scanner cache when one wallet swaps out for another —
+    // the previous wallet's UTXO outpoints aren't relevant to the new
+    // one and would otherwise accumulate forever on a long-lived
+    // session. Initial null → wallet is excluded: the scanner is
+    // already empty so a reset would be a no-op anyway, and skipping
+    // it avoids clobbering scan state any consumer pushed in early.
+    effect(() => {
+      const addr = this.connectedWallet()?.ordinalsAddress ?? null;
+      if (this.lastWalletAddress !== null && addr !== this.lastWalletAddress) {
+        this.scanner.reset();
+      }
+      this.lastWalletAddress = addr;
+    });
+
     // Eager-scan small UTXOs the moment they arrive from electrs. The
-    // scanner dedupes by outpoint, so repeat triggers are free.
+    // scanner dedupes by outpoint + throttles fan-out internally, so
+    // repeat triggers are free.
     effect(() => {
       const rows = this.viableRows();
       this.scanner.autoScan(rows.map((r) => ({ txid: r.utxo.txid, vout: r.utxo.vout, value: r.utxo.value })));
     });
 
     // Auto-pick the largest "safe-enough" UTXO whenever the row list
-    // changes. Priority: scanned-clean → unscanned (probably-safe big
-    // UTXO) → scan-failed. NEVER auto-pick scanned-with-assets — that
-    // row requires an explicit "Use anyway" click.
+    // changes. Priority lives in the SDK (findAutoPickCandidate) so
+    // ordpool and cat21.space can't drift.
     effect(() => {
       const rows = this.viableRows();
       if (rows.length === 0) {
@@ -176,11 +179,7 @@ export class Mint {
         (r) => r.utxo.txid === current.txid && r.utxo.vout === current.vout,
       );
       if (stillThere) return;
-      const pick =
-        rows.find((r) => r.bucket === 'clean')
-        ?? rows.find((r) => r.bucket === 'unscanned')
-        ?? rows.find((r) => r.bucket === 'failed')
-        ?? null;
+      const pick = findAutoPickCandidate(rows);
       this.orchestrator.setSelectedUtxo(pick ? pick.utxo : null);
     });
   }
@@ -216,24 +215,6 @@ export class Mint {
   /** Helper for template — bigint → number for the | number pipe. */
   toNumber(n: bigint): number { return Number(n); }
 
-  /** Extract the rune names from a UtxoContent. */
-  runeNames(content: UtxoContent): string[] {
-    return content.runes ? Object.keys(content.runes) : [];
-  }
-}
-
-/**
- * Map a raw UtxoScanState to the picker's display bucket. The bucket
- * is what drives badges, button labels, and auto-pick priority. Kept
- * as a free function so the computed in `viableRows` stays inline-
- * declarative.
- */
-function bucketOf(s: UtxoScanState): ViableUtxoRow['bucket'] {
-  switch (s.kind) {
-    case 'not-scanned': return 'unscanned';
-    case 'scanning': return 'scanning';
-    case 'scanned-clean': return 'clean';
-    case 'scanned-with-assets': return 'assets';
-    case 'scan-failed': return 'failed';
-  }
+  /** Pass-through to the SDK helper so the template can read rune names off a UtxoContent. */
+  runeNames(content: UtxoContent): string[] { return runeNamesFromContent(content); }
 }

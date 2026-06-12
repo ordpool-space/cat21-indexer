@@ -23,6 +23,7 @@ import {
   UtxoSimulation,
   WalletInfo,
   WalletService,
+  cat21Config,
 } from 'ordpool-sdk';
 
 import { Mint } from './mint';
@@ -116,6 +117,9 @@ class ScannerStub {
   readonly states$ = this.statesSubject.asObservable();
   scan = jest.fn((_: string) => of<UtxoScanState>({ kind: 'scanned-clean' }));
   autoScan = jest.fn((_: unknown[]) => undefined);
+  reset = jest.fn(() => {
+    this.statesSubject.next(new Map());
+  });
   getState = jest.fn((outpoint: string): UtxoScanState => this.statesSubject.value.get(outpoint) ?? { kind: 'not-scanned' });
 
   /** Test helper: push a state map update. */
@@ -154,6 +158,15 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
         { provide: Cat21MintOrchestrator, useValue: orch },
         { provide: UtxoContentScanner, useValue: scanner },
         { provide: WalletService, useValue: wallets },
+        {
+          provide: cat21Config,
+          useValue: {
+            mempoolApiUrl: 'http://test-mempool',
+            cat21ApiUrl: 'http://test-cat21',
+            ordApiUrl: 'http://test-ord',
+            cat21OrdApiUrl: 'http://test-cat21-ord',
+          },
+        },
       ],
     })
       // Mint imports FeesPicker + WalletConnect. We don't care about
