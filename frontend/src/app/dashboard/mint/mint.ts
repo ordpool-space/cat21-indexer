@@ -73,6 +73,20 @@ export class Mint {
   /** Expert mode toggle — collapsed by default. */
   readonly expertMode = signal(false);
 
+  /**
+   * Funding target shown in the empty-state hint. Derived from the
+   * currently-picked fee rate using a conservative ~200 vB vsize
+   * (real CAT-21 mints are ~150–170 vB depending on wallet type),
+   * rounded up to the next 100 sat so the number reads cleanly.
+   * At 1 sat/vB that's ~800 sat; at 100 sat/vB it's ~20,600 sat.
+   * Reference vsize stays above the largest known CAT-21 mint so
+   * the displayed floor is never under the SDK's real check.
+   */
+  readonly recommendedFundingSats = computed<number>(() => {
+    const rate = this.feeRate() ?? 1;
+    return Math.ceil((546 + 200 * rate) / 100) * 100;
+  });
+
   /** Whether to show the Unisat single-address warning. */
   readonly showUnisatWarning = computed(() => {
     const w = this.connectedWallet();

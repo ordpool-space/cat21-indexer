@@ -75,6 +75,18 @@ export class FeesPicker {
         this.manualInput.set(current);
       }
     });
+
+    // Auto-pick the "fastest" tier as soon as recommendedFees$ first
+    // emits, but only if the orchestrator's fee rate is still null. The
+    // orchestrator gates simulations on feeRate, so without this seed a
+    // freshly-connected wallet would render "no viable UTXOs" until the
+    // user manually clicked a tier — even when their UTXOs are fine.
+    effect(() => {
+      const fees = this.fees();
+      if (fees && this.feeRate() === null && fees.fastestFee > 0) {
+        this.orchestrator.setFeeRate(fees.fastestFee);
+      }
+    });
   }
 
   pickTier(t: TierOption): void {

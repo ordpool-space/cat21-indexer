@@ -26,8 +26,11 @@
     <div class="mint-no-utxos">
       <p>
         No UTXOs in your payment wallet have enough value to cover the
-        miner fee plus the 546 sat output. Fund your payment address
-        with at least 10 000 sats and try again.
+        miner fee plus the 546 sat output at
+        <strong>{{ feeRate() ?? 1 }} sat/vB</strong>.
+        Fund your payment address with at least
+        <strong>{{ recommendedFundingSats() | number }} sat</strong>
+        and try again, or pick a lower fee rate above.
       </p>
       <p>
         Payment address: <code>{{ connectedWallet()!.paymentAddress }}</code>
