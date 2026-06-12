@@ -62,6 +62,20 @@
   }
 }
 
+.mint-expert-intro {
+  margin: 0.5rem 0 0.75rem 0;
+  font-size: 0.8rem;
+  opacity: 0.85;
+  line-height: 1.45;
+}
+
+.mint-found-funds {
+  margin: 0 0 0.6rem 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  em { font-style: normal; text-decoration: underline; }
+}
+
 .mint-utxo-list {
   list-style: none;
   padding: 0;

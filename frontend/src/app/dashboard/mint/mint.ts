@@ -95,8 +95,18 @@ export class Mint {
     ) ?? null;
   });
 
-  /** Expert mode toggle — collapsed by default. */
-  readonly expertMode = signal(false);
+  /**
+   * Whether the "Choose a different funding source" panel opens
+   * pre-expanded. True in the shallow-water cases (no auto-pick
+   * possible, or auto-pick landed on a row whose safety we couldn't
+   * verify), false on the happy path (auto-pick found a clean or
+   * probably-clean source). Users can still toggle either way.
+   */
+  readonly pickerOpenByDefault = computed<boolean>(() => {
+    const sel = this.selectedRow();
+    if (!sel) return this.viableRows().length > 0;
+    return sel.bucket === 'assets' || sel.bucket === 'failed';
+  });
 
   readonly recommendedFundingSats = computed<number>(() => calculateRecommendedFundingSats(this.feeRate() ?? 1));
 
@@ -192,10 +202,6 @@ export class Mint {
 
   scanRow(row: ViableUtxoRow): void {
     this.scanner.scan(`${row.utxo.txid}:${row.utxo.vout}`).subscribe();
-  }
-
-  toggleExpertMode(): void {
-    this.expertMode.update((v) => !v);
   }
 
   mint(): void {

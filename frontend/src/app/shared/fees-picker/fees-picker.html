@@ -9,7 +9,7 @@
         (click)="pickTier(t)"
       >
         <span class="tier-label">{{ t.label }}</span>
-        <span class="tier-rate">{{ fees() ? fees()![t.payloadKey] : '…' }} sat/vB</span>
+        <span class="tier-rate">{{ fees() ? (fees()![t.payloadKey] | number:'1.0-2') : '…' }} sat/vB</span>
       </button>
     }
   </div>

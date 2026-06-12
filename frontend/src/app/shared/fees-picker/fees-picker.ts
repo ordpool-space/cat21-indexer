@@ -1,3 +1,4 @@
+import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -33,7 +34,7 @@ const TIERS: readonly TierOption[] = [
   selector: 'app-fees-picker',
   templateUrl: './fees-picker.html',
   styleUrl: './fees-picker.scss',
-  imports: [FormsModule],
+  imports: [DecimalPipe, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FeesPicker {

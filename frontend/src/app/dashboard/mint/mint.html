@@ -31,12 +31,13 @@
     @if (viableRows().length === 0 && state() === 'ready') {
       <div class="mint-no-utxos" data-testid="mint-no-utxos">
         <p>
-          No UTXOs in your payment wallet have enough value to cover the
+          We didn't find funds in your wallet that can cover the
           miner fee plus the 546 sat output at
           <strong>{{ feeRate() ?? 1 }} sat/vB</strong>.
-          Fund your payment address with at least
-          <strong>{{ recommendedFundingSats() | number }} sat</strong>,
-          or lower the fee rate above to unlock smaller UTXOs.
+          Send at least
+          <strong>{{ recommendedFundingSats() | number }} sat</strong>
+          to your payment address, or lower the fee rate above to
+          unlock smaller amounts.
         </p>
         <p>
           Payment address: <code>{{ connectedWallet()!.paymentAddress }}</code>
@@ -45,9 +46,17 @@
     } @else if (selectedRow(); as sel) {
       <section class="mint-section" data-testid="mint-summary-section">
         <h2 class="mint-section-heading">2. Confirm</h2>
+        @if (sel.bucket === 'clean' || sel.bucket === 'unscanned') {
+          <p class="mint-found-funds" data-testid="mint-found-funds">
+            ✓ We found enough funds in your wallet to mint a cat.
+            Click <strong>Mint my cat</strong> below — or open
+            <em>Choose a different funding source</em> further down to
+            pick a specific source yourself.
+          </p>
+        }
         <div class="mint-summary norton-shadow">
           <div class="mint-summary-row">
-            <span class="lbl">UTXO</span>
+            <span class="lbl">Source</span>
             <code class="val">{{ sel.utxo.txid }}:{{ sel.utxo.vout }}</code>
           </div>
           <div class="mint-summary-row">
@@ -77,7 +86,7 @@
       @if (sel.bucket === 'assets' && sel.scan.kind === 'scanned-with-assets') {
         <div class="mint-alert mint-alert-danger" data-testid="asset-found-warning">
           <p>
-            <strong>⚠ Asset detected on this UTXO.</strong>
+            <strong>⚠ Asset detected on this funding source.</strong>
             Spending it as a mint input would send the asset away to
             the miner as fee. Review what's here before continuing.
           </p>
@@ -111,31 +120,42 @@
         </div>
       } @else if (sel.bucket === 'unscanned') {
         <p class="mint-alert mint-alert-info" data-testid="unscanned-info">
-          This UTXO is above {{ autoScanThreshold | number }} sat — probably a
-          plain payment. We haven't scanned it for ordinal-bound assets.
+          This source is above {{ autoScanThreshold | number }} sat — very
+          likely a plain payment. We haven't checked it for ordinal-bound
+          assets.
           <button type="button" class="link-button" (click)="scanRow(sel)">Scan anyway</button>
         </p>
       } @else if (sel.bucket === 'scanning') {
         <p class="mint-alert mint-alert-info" data-testid="scanning-info" aria-live="polite">
-          Scanning UTXO for inscriptions, runes, and cats…
+          Checking for inscriptions, runes, and cats on these funds…
         </p>
       } @else if (sel.bucket === 'failed') {
         <p class="mint-alert mint-alert-warning" data-testid="scan-failed-info">
-          Couldn't scan this UTXO for ordinal-bound assets.
+          Couldn't check these funds for ordinal-bound assets.
           <button type="button" class="link-button" (click)="scanRow(sel)">Retry scan</button>
         </p>
       } @else if (showSmallUtxoWarning()) {
         <p class="mint-alert mint-alert-warning" data-testid="small-utxo-warning">
           ⚠ Your wallet uses a single address for both payments and
-          ordinals. UTXOs at or below 10 000 sats can hold inscriptions,
+          ordinals. Funds at or below 10 000 sats can hold inscriptions,
           runes, rare sats, or CAT-21 cats — spending one of those as a
           mint input would send the asset away to the miner as fee.
-          Verify this UTXO is a plain payment before minting.
+          Verify this is a plain payment before minting.
         </p>
       }
 
-      <details class="mint-expert" [open]="expertMode()" (toggle)="toggleExpertMode()">
-        <summary>Expert mode — pick a different UTXO</summary>
+    }
+
+    @if (viableRows().length > 0) {
+      <details class="mint-expert" [open]="pickerOpenByDefault()">
+        <summary>Choose a different funding source</summary>
+        <p class="mint-expert-intro">
+          We auto-pick the best source we can find. If you want to use a
+          specific one — for example to spend a particular UTXO — pick
+          it from the list below. Sources flagged as
+          <em>asset found</em> hold an inscription, rune, rare sat, or
+          cat; minting with one sends that asset to the miner as fee.
+        </p>
         <ul class="mint-utxo-list">
           @for (row of viableRows(); track row.utxo.txid + ':' + row.utxo.vout) {
             <li class="mint-utxo-row"
@@ -146,10 +166,6 @@
                 <button type="button" class="mint-utxo-pick mint-utxo-pick-override" (click)="selectUtxo(row)">
                   @if (row === selectedRow()) { ✓ Selected } @else { Use anyway }
                 </button>
-              } @else if (row.bucket === 'unscanned') {
-                <button type="button" class="mint-utxo-pick" (click)="selectUtxo(row)">
-                  @if (row === selectedRow()) { ✓ } @else { Pick }
-                </button>
               } @else {
                 <button type="button" class="mint-utxo-pick" (click)="selectUtxo(row)">
                   @if (row === selectedRow()) { ✓ } @else { Pick }
@@ -157,7 +173,7 @@
               }
               <code class="mint-utxo-id">{{ row.utxo.txid }}:{{ row.utxo.vout }}</code>
               <span class="mint-utxo-val">{{ row.utxo.value | number }} sat</span>
-              <span class="mint-utxo-fee">fee {{ toNumber(row.simulation.finalTransactionFee) | number }} sat</span>
+              <span class="mint-utxo-fee">miner fee {{ toNumber(row.simulation.finalTransactionFee) | number }} sat</span>
               <span class="mint-utxo-bucket"
                     [title]="bucketTooltip(row.bucket)"
                     [class.mint-utxo-bucket-clean]="row.bucket === 'clean'"
