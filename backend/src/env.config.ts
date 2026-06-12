@@ -31,9 +31,10 @@ export class EnvironmentVariables {
 }
 
 export function validate(config: Record<string, unknown>) {
-  const validated = plainToClass(EnvironmentVariables, config, {
-    enableImplicitConversion: true,
-  });
+  // Kein enableImplicitConversion: es würde Boolean-Env-Strings ("false") per
+  // Truthiness zu true machen. Explizite @Transform-Decorators (z. B. PORT) machen
+  // die Typkonvertierung korrekt und sichtbar.
+  const validated = plainToClass(EnvironmentVariables, config);
 
   const errors = validateSync(validated, {
     skipMissingProperties: false,
