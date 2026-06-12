@@ -4,6 +4,7 @@
     "outDir": "./dist/out-tsc",
     "types": [
       "jest",
+      "node",
       "@angular/localize"
     ],
     "target": "ES2022",
