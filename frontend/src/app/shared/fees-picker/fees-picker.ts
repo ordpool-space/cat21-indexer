@@ -3,18 +3,19 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Cat21MintOrchestrator, RecommendedFees } from 'ordpool-sdk';
 
-type Tier = 'fastest' | 'halfHour' | 'hour';
+type Tier = 'fastest' | 'halfHour' | 'hour' | 'economy';
 
 interface TierOption {
   key: Tier;
   label: string;
-  payloadKey: keyof Pick<RecommendedFees, 'fastestFee' | 'halfHourFee' | 'hourFee'>;
+  payloadKey: keyof Pick<RecommendedFees, 'fastestFee' | 'halfHourFee' | 'hourFee' | 'economyFee'>;
 }
 
 const TIERS: readonly TierOption[] = [
   { key: 'fastest',  label: 'Fastest (~10 min)', payloadKey: 'fastestFee' },
   { key: 'halfHour', label: 'Half hour',          payloadKey: 'halfHourFee' },
   { key: 'hour',     label: 'Hour',               payloadKey: 'hourFee' },
+  { key: 'economy',  label: 'Economy',            payloadKey: 'economyFee' },
 ] as const;
 
 /**
