@@ -4,7 +4,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
   Cat21MintOrchestrator,
-  KnownOrdinalWalletType,
   SimulateTransactionResult,
   TxnOutput,
   UtxoSimulation,
@@ -19,7 +18,15 @@ interface ViableUtxoRow {
   simulation: SimulateTransactionResult;
 }
 
-const UNISAT_WARNING_THRESHOLD_SATS = 10_000;
+/**
+ * UTXOs at or below this value, on a single-address wallet, are flagged
+ * as potentially holding an ordinal-bound asset (inscription, rune, sat
+ * rarity, CAT-21 cat). The 10k sat figure is the de-facto industry cut-
+ * off: most ordinal-bearing UTXOs are 546 sat (the dust limit) or
+ * slightly above; almost none exceed 10k. This is content-safety
+ * heuristics, not fee math — it stays fee-rate-agnostic.
+ */
+const SMALL_UTXO_WARNING_THRESHOLD_SATS = 10_000;
 
 @Component({
   selector: 'app-mint',
@@ -87,13 +94,31 @@ export class Mint {
     return Math.ceil((546 + 200 * rate) / 100) * 100;
   });
 
-  /** Whether to show the Unisat single-address warning. */
-  readonly showUnisatWarning = computed(() => {
+  /**
+   * Whether the connected wallet exposes one address for both payments
+   * and ordinals. Detected via address equality — no SDK flag for this.
+   * Unisat: same. Xverse / Leather / OKX / Phantom / Magic Eden Wallet:
+   * different. On a single-address wallet, every UTXO at the payment
+   * address is also potentially an ordinals-bearing UTXO; the picker
+   * has to warn the user before they accidentally spend an inscription /
+   * rune / cat sat as transaction change.
+   */
+  readonly isSingleAddressWallet = computed<boolean>(() => {
     const w = this.connectedWallet();
+    if (!w) return false;
+    return w.ordinalsAddress === w.paymentAddress;
+  });
+
+  /**
+   * Whether to show the "small UTXO on single-address wallet" warning.
+   * Independent of fee rate — purely about content-safety on UTXOs at
+   * or below the small-utxo threshold.
+   */
+  readonly showSmallUtxoWarning = computed<boolean>(() => {
     const sel = this.selectedRow();
-    if (!w || !sel) return false;
-    if (w.type !== KnownOrdinalWalletType.unisat) return false;
-    return sel.utxo.value < UNISAT_WARNING_THRESHOLD_SATS;
+    if (!sel) return false;
+    if (!this.isSingleAddressWallet()) return false;
+    return sel.utxo.value <= SMALL_UTXO_WARNING_THRESHOLD_SATS;
   });
 
   /** Was a UTXO-load error from the orchestrator. */

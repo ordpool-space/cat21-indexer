@@ -22,27 +22,27 @@
     <p aria-live="polite" data-testid="mint-loading">Loading UTXOs for your wallet…</p>
   } @else if (utxoError(); as err) {
     <p role="alert" class="mint-alert mint-alert-error">{{ err }}</p>
-  } @else if (viableRows().length === 0 && state() === 'ready') {
-    <div class="mint-no-utxos">
-      <p>
-        No UTXOs in your payment wallet have enough value to cover the
-        miner fee plus the 546 sat output at
-        <strong>{{ feeRate() ?? 1 }} sat/vB</strong>.
-        Fund your payment address with at least
-        <strong>{{ recommendedFundingSats() | number }} sat</strong>
-        and try again, or pick a lower fee rate above.
-      </p>
-      <p>
-        Payment address: <code>{{ connectedWallet()!.paymentAddress }}</code>
-      </p>
-    </div>
   } @else if (state() !== 'success') {
     <section class="mint-section" data-testid="mint-fee-section">
       <h2 class="mint-section-heading">1. Pick a fee rate</h2>
       <app-fees-picker [minFeeRate]="1" />
     </section>
 
-    @if (selectedRow(); as sel) {
+    @if (viableRows().length === 0 && state() === 'ready') {
+      <div class="mint-no-utxos" data-testid="mint-no-utxos">
+        <p>
+          No UTXOs in your payment wallet have enough value to cover the
+          miner fee plus the 546 sat output at
+          <strong>{{ feeRate() ?? 1 }} sat/vB</strong>.
+          Fund your payment address with at least
+          <strong>{{ recommendedFundingSats() | number }} sat</strong>,
+          or lower the fee rate above to unlock smaller UTXOs.
+        </p>
+        <p>
+          Payment address: <code>{{ connectedWallet()!.paymentAddress }}</code>
+        </p>
+      </div>
+    } @else if (selectedRow(); as sel) {
       <section class="mint-section" data-testid="mint-summary-section">
         <h2 class="mint-section-heading">2. Confirm</h2>
         <div class="mint-summary norton-shadow">
@@ -74,12 +74,13 @@
         </div>
       </section>
 
-      @if (showUnisatWarning()) {
-        <p class="mint-alert mint-alert-warning" data-testid="unisat-warning">
-          ⚠ Unisat uses a single address for both payments and
-          ordinals. UTXOs under 10 000 sats might hold inscriptions or
-          other ordinal-bound value. Confirm this UTXO does not before
-          minting.
+      @if (showSmallUtxoWarning()) {
+        <p class="mint-alert mint-alert-warning" data-testid="small-utxo-warning">
+          ⚠ Your wallet uses a single address for both payments and
+          ordinals. UTXOs at or below 10 000 sats can hold inscriptions,
+          runes, rare sats, or CAT-21 cats — spending one of those as a
+          mint input would burn the asset. Verify this UTXO is a plain
+          payment before minting.
         </p>
       }
 
