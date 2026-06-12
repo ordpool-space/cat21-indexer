@@ -751,4 +751,251 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(node!.textContent).toContain('deadbeef'.repeat(8));
     });
   });
+
+  // -------------------------------------------------------------------
+  // MATRIX section — IDs come from `/Work/ordpool/PLAN-mint-test-matrix.md`
+  // and stay stable across both spec files. The "B" suffix means "both
+  // sites carry the same assertion"; grep MATRIX-A5 to find the paired
+  // copy in ordpool's cat21-mint.component.spec.ts.
+  // -------------------------------------------------------------------
+
+  describe('MATRIX-A. wallet lifecycle', () => {
+    it('MATRIX-A5(B): wallet swap resets scanner', () => {
+      const w1 = wallet({ ordinalsAddress: 'addr-1', paymentAddress: 'pay-1' });
+      const w2 = wallet({ ordinalsAddress: 'addr-2', paymentAddress: 'pay-2' });
+      // First connect → no reset (initial null → wallet)
+      orch.connectedWallet.set(w1);
+      fixture.detectChanges();
+      scanner.reset.mockClear();
+      // Swap → reset fires
+      orch.connectedWallet.set(w2);
+      fixture.detectChanges();
+      expect(scanner.reset).toHaveBeenCalledTimes(1);
+    });
+
+    it('MATRIX-A6(B): initial null → wallet emission does NOT reset the scanner', () => {
+      scanner.reset.mockClear();
+      orch.connectedWallet.set(wallet());
+      fixture.detectChanges();
+      expect(scanner.reset).not.toHaveBeenCalled();
+    });
+
+    it('MATRIX-A9(B): disconnect returns to idle state', () => {
+      orch.connectedWallet.set(wallet());
+      orch.state.set('ready');
+      fixture.detectChanges();
+      orch.connectedWallet.set(null);
+      orch.state.set('idle');
+      fixture.detectChanges();
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelector('[data-testid="mint-cta"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="ready"]')).toBeNull();
+    });
+  });
+
+  describe('MATRIX-B. fee-rate-driven viability', () => {
+    it('MATRIX-B14(B): recommendedFundingSats scales correctly at 1/5/50/100 sat/vB', () => {
+      orch.connectedWallet.set(wallet());
+      orch.state.set('ready');
+      const cases: Array<[number, number]> = [
+        [1, 800],
+        [5, 1600],
+        [50, 10600],
+        [100, 20600],
+      ];
+      for (const [rate, expected] of cases) {
+        orch.feeRate.set(rate);
+        fixture.detectChanges();
+        expect(component.recommendedFundingSats()).toBe(expected);
+      }
+    });
+
+    it('MATRIX-B15(B): recommendedFundingSats with feeRate=null falls back to 1 sat/vB → 800', () => {
+      orch.connectedWallet.set(wallet());
+      orch.state.set('ready');
+      orch.feeRate.set(null);
+      fixture.detectChanges();
+      expect(component.recommendedFundingSats()).toBe(800);
+    });
+  });
+
+  describe('MATRIX-D. bucket-driven UI', () => {
+    const big = (v: number) => utxo({ txid: String(v).repeat(64).slice(0, 64), value: v });
+
+    beforeEach(() => {
+      orch.connectedWallet.set(wallet());
+      orch.state.set('ready');
+      orch.feeRate.set(5);
+    });
+
+    it('MATRIX-D15(B): viable row list is capped at 10 entries', () => {
+      const rows = Array.from({ length: 25 }, (_, i) => ({
+        u: big(50_000 + i),
+        scan: { kind: 'scanned-clean' } as UtxoScanState,
+      }));
+      pushRows(rows);
+      expect(component.viableRows().length).toBe(10);
+    });
+
+    it('MATRIX-D16(B): viable rows sorted strictly descending by UTXO value', () => {
+      pushRows([
+        { u: big(10_000), scan: { kind: 'scanned-clean' } },
+        { u: big(50_000), scan: { kind: 'scanned-clean' } },
+        { u: big(30_000), scan: { kind: 'scanned-clean' } },
+      ]);
+      const values = component.viableRows().map((r) => r.utxo.value);
+      expect(values).toEqual([50_000, 30_000, 10_000]);
+    });
+  });
+
+  describe('MATRIX-E. expert-panel visibility (THE 2026-06-12 regression group)', () => {
+    const big = (v: number) => utxo({ txid: String(v).repeat(64).slice(0, 64), value: v });
+
+    beforeEach(() => {
+      orch.connectedWallet.set(wallet());
+      orch.state.set('ready');
+      orch.feeRate.set(5);
+    });
+
+    it('MATRIX-E1(B): expert panel renders when viableRows > 0 AND a row is selected (baseline)', () => {
+      pushRows([{ u: big(50_000), scan: { kind: 'scanned-clean' } }]);
+      const el: HTMLElement = fixture.nativeElement;
+      expect(component.viableRows().length).toBeGreaterThan(0);
+      expect(component.selectedRow()).not.toBeNull();
+      // The slim test template doesn't render the <details>; we verify
+      // via the component state that drives it.
+      expect(component.pickerOpenByDefault()).toBe(false);
+    });
+
+    it('MATRIX-E2(B): **THE REGRESSION** — expert panel must render when viableRows > 0 even if selectedRow is null (assets-only case)', () => {
+      // assets-only scenario: auto-pick refuses, selectedUtxo stays null,
+      // but the user MUST still see the panel to override with "Use anyway".
+      const assetsScan: UtxoScanState = {
+        kind: 'scanned-with-assets',
+        content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [] },
+      };
+      pushRows([{ u: big(50_000), scan: assetsScan }]);
+      expect(component.viableRows().length).toBeGreaterThan(0);
+      expect(component.selectedRow()).toBeNull();
+      // The panel must be open-by-default in this exact case (no other
+      // way for the user to make a decision).
+      expect(component.pickerOpenByDefault()).toBe(true);
+    });
+
+    it('MATRIX-E3(B): expert panel logic skips render when there are no viable rows', () => {
+      // No simulations emitted → viableRows is empty
+      orch.simulationsSubject.next([]);
+      fixture.detectChanges();
+      expect(component.viableRows().length).toBe(0);
+      // pickerOpenByDefault returns false in this case (no rows to show);
+      // the template gates the @if on viableRows().length > 0.
+      expect(component.pickerOpenByDefault()).toBe(false);
+    });
+
+    it('MATRIX-E4(C): pickerOpenByDefault is true when no row is auto-selected', () => {
+      // Only-assets scenario triggers no auto-pick
+      pushRows([{
+        u: big(50_000),
+        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [] } },
+      }]);
+      expect(component.selectedRow()).toBeNull();
+      expect(component.pickerOpenByDefault()).toBe(true);
+    });
+
+    it('MATRIX-E5(C): pickerOpenByDefault is true when selected bucket is "assets"', () => {
+      // Multiple rows, auto-pick refuses, user explicitly picks an
+      // assets row → panel should stay open by default until the
+      // user toggles it closed.
+      const u1 = big(50_000);
+      const assetsScan: UtxoScanState = {
+        kind: 'scanned-with-assets',
+        content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [] },
+      };
+      pushRows([{ u: u1, scan: assetsScan }]);
+      orch.setSelectedUtxo(u1);
+      fixture.detectChanges();
+      expect(component.selectedRow()!.bucket).toBe('assets');
+      expect(component.pickerOpenByDefault()).toBe(true);
+    });
+
+    it('MATRIX-E6(C): pickerOpenByDefault is true when selected bucket is "failed"', () => {
+      pushRows([{ u: big(50_000), scan: { kind: 'scan-failed', message: 'oops' } }]);
+      expect(component.selectedRow()!.bucket).toBe('failed');
+      expect(component.pickerOpenByDefault()).toBe(true);
+    });
+
+    it('MATRIX-E7(C): pickerOpenByDefault is false when selected bucket is "clean" (happy path)', () => {
+      pushRows([{ u: big(50_000), scan: { kind: 'scanned-clean' } }]);
+      expect(component.selectedRow()!.bucket).toBe('clean');
+      expect(component.pickerOpenByDefault()).toBe(false);
+    });
+
+    it('MATRIX-E8(C): pickerOpenByDefault is false when selected bucket is "unscanned" (probably-safe path)', () => {
+      pushRows([{ u: big(80_000), scan: { kind: 'not-scanned' } }]);
+      expect(component.selectedRow()!.bucket).toBe('unscanned');
+      expect(component.pickerOpenByDefault()).toBe(false);
+    });
+
+    it('MATRIX-E9(B): panel state survives a fee-rate change that keeps viable rows > 0', () => {
+      pushRows([{ u: big(50_000), scan: { kind: 'scanned-clean' } }]);
+      const beforeRows = component.viableRows().length;
+      // Bump the rate but keep the UTXO viable
+      orch.feeRate.set(10);
+      pushRows([{ u: big(50_000), scan: { kind: 'scanned-clean' } }]);
+      expect(component.viableRows().length).toBe(beforeRows);
+      expect(component.pickerOpenByDefault()).toBe(false);
+    });
+
+    it('MATRIX-E10(B): summary panel is hidden when no row is selected', () => {
+      pushRows([{
+        u: big(50_000),
+        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [] } },
+      }]);
+      expect(component.selectedRow()).toBeNull();
+      const el: HTMLElement = fixture.nativeElement;
+      // In the slim test template the summary section isn't rendered,
+      // but canMint must be false (the production template gates the
+      // mint button on canMint).
+      expect(component.canMint()).toBe(false);
+    });
+
+    it('MATRIX-E11(B): mint button disabled when there is no row selection', () => {
+      pushRows([{
+        u: big(50_000),
+        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [] } },
+      }]);
+      expect(orch.selectedUtxo()).toBeNull();
+      expect(component.canMint()).toBe(false);
+    });
+
+    it('MATRIX-E12(B): mint button re-enables after the user explicitly picks an assets row ("Use anyway")', () => {
+      const u1 = big(50_000);
+      const assetsScan: UtxoScanState = {
+        kind: 'scanned-with-assets',
+        content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [] },
+      };
+      pushRows([{ u: u1, scan: assetsScan }]);
+      // Pre: auto-pick refuses, mint disabled
+      expect(component.canMint()).toBe(false);
+      // Explicit override
+      component.selectUtxo({ utxo: u1, simulation: simulation(), scan: assetsScan, bucket: 'assets' });
+      expect(component.canMint()).toBe(true);
+    });
+  });
+
+  describe('MATRIX-I. edge cases', () => {
+    it('MATRIX-I20(B): runeNames returns [] for null runes (no crash)', () => {
+      const empty = component.runeNames({ outpoint: 'x:0', inscriptionIds: [], runes: null, catIds: [] });
+      expect(empty).toEqual([]);
+    });
+
+    it('MATRIX-I21(B): bucketTooltip returns a non-empty string for every bucket kind (no undefined flicker)', () => {
+      const buckets = ['clean', 'unscanned', 'assets', 'scanning', 'failed'] as const;
+      for (const b of buckets) {
+        const tip = component.bucketTooltip(b);
+        expect(typeof tip).toBe('string');
+        expect(tip.length).toBeGreaterThan(0);
+      }
+    });
+  });
 });
