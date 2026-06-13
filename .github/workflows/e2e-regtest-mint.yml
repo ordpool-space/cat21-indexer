@@ -52,7 +52,14 @@ jobs:
 
       - name: Install frontend deps (brings ordpool-sdk into node_modules)
         working-directory: frontend
-        run: npm ci
+        # cat21-indexer's lockfile pins @angular/localize@21.2.17 which
+        # strict-peers compiler@21.2.17 against the pinned 21.2.4 —
+        # plain `npm ci` ERESOLVEs. The --legacy-peer-deps flag is safe
+        # here because sats-connect AND @popperjs/core are both
+        # direct deps in cat21-indexer/frontend/package.json (unlike
+        # ordpool where they're transitive peer deps), so no install
+        # surface is lost by skipping peer-dep resolution.
+        run: npm ci --legacy-peer-deps
 
       - name: Make SDK consumer-environment scripts executable
         run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
