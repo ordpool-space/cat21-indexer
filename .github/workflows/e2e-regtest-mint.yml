@@ -171,23 +171,30 @@ jobs:
       #
       # `sed -i` in place so the ng serve picks the patched values up.
 
-      - name: Patch cat21Config for regtest
+      - name: Patch cat21Config + bitcoinNetwork for regtest
         working-directory: frontend
+        # bitcoinNetwork swap is critical: the SDK's globalSetup seeded
+        # Xverse on Bitcoin Regtest; without flipping Mainnet → Regtest
+        # here Xverse refuses to open the connect popup (network
+        # mismatch) and the spec times out at 60s on waitForApprovalPopup.
         run: |
           sed -i \
             -e "s|'https://api\.ordpool\.space'|'http://localhost:8999'|g" \
             -e "s|'https://backend2\.cat21\.space'|'http://localhost:9998'|g" \
             -e "s|'https://ord\.ordpool\.space'|'http://localhost:9999'|g" \
             -e "s|'https://ord\.cat21\.space'|'http://localhost:9999'|g" \
+            -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
             src/app/app.config.ts
-          echo "--- patched cat21Config ---"
-          grep -A8 'cat21Config,' src/app/app.config.ts
+          echo "--- patched cat21Config + network ---"
+          grep -nE 'cat21Config,|bitcoinNetwork' src/app/app.config.ts | head -4
 
       - name: Build static frontend bundle
         working-directory: frontend
+        # cat21-indexer has `"build": "ng build"` but no `"ng"` script,
+        # so `npm run ng` 404s. Drive ng directly via npx.
         run: |
           set -o pipefail
-          npm run ng -- build --output-path ../dist-regtest 2>&1 | tee ../build.log
+          npx ng build --output-path ../dist-regtest 2>&1 | tee ../build.log
 
       - name: Locate the built browser output
         run: |
