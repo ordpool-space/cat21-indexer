@@ -3,8 +3,6 @@ import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
-import { Cat21ParserService, DigitalArtifactType } from 'ordpool-parser';
-
 import {
   getUtxos,
   waitForElectrsSync,
@@ -275,17 +273,15 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const broadcastTxid = txidMatch![1];
   console.log(`[cat21-mint-page] success txid = ${broadcastTxid}`);
 
-  // ─── 8. Mine the confirmation block, parse the cat21 ───────────
+  // ─── 8. Mine the confirmation block, verify on-chain ──────────
+  // The cat21-indexer frontend doesn't bundle ordpool-parser (the
+  // production gallery reads SVGs from the indexer backend instead),
+  // so we stop at locktime=21 + confirmed block. The deeper parser
+  // assertions live in the ordpool sister spec.
   const confirmedTip = mineBlocks(1);
   await waitForElectrsSync(confirmedTip);
   const esploraTx = await getTx(broadcastTxid);
   console.log(`[cat21-mint-page] locktime=${esploraTx.locktime}  block_hash=${esploraTx.status.block_hash}`);
   expect(esploraTx.locktime).toBe(21);
   expect(esploraTx.status.block_hash).toBeTruthy();
-
-  const parsed = Cat21ParserService.parse(esploraTx);
-  expect(parsed).not.toBeNull();
-  expect(parsed!.type).toBe(DigitalArtifactType.Cat21);
-  expect(parsed!.transactionId).toBe(broadcastTxid);
-  expect(parsed!.getImage()).toMatch(/^<svg/);
 });
