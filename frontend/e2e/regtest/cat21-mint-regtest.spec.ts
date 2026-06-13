@@ -62,6 +62,10 @@ const RESULTS_DIR = path.resolve(__dirname, '../../test-results');
 
 let context: BrowserContext;
 let extensionId: string;
+// Hoisted state shared across `test()` blocks. The persistent context
+// remembers the connected wallet in localStorage, so test 2 can spin
+// up a fresh page and auto-reconnect to the same payment address.
+let sharedPaymentAddress: string | undefined;
 
 async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
@@ -198,6 +202,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   console.log(`[cat21-mint-page] payment=${paymentAddress}`);
   expect(paymentAddress).toMatch(/^bcrt1q/);
   const wallet = { paymentAddress };
+  sharedPaymentAddress = paymentAddress;
 
   // ─── 4. Fund the payment address, mine, wait for electrs ──────
   const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', wallet.paymentAddress, String(FUND_AMOUNT_BTC)).trim();
@@ -318,4 +323,119 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   console.log(`[cat21-mint-page] locktime=${esploraTx.locktime}  block_hash=${esploraTx.status.block_hash}`);
   expect(esploraTx.locktime).toBe(21);
   expect(esploraTx.status.block_hash).toBeTruthy();
+});
+
+/**
+ * Regression for the UtxoContentScanner -> UI warning pipeline.
+ *
+ * Mirrors the ordpool spec. The cat21-mint dashboard surfaces an
+ * `asset found` badge on the row of any funding-source UTXO whose
+ * `/output/<outpoint>` response carries inscriptions, runes, or cats.
+ * On regtest there's no real ord upstream that knows about our
+ * outpoints, so we intercept `/output/<outpoint>` at the Playwright
+ * route layer and return cat metadata for one specific outpoint
+ * (a small UTXO we fund just before opening the page).
+ *
+ * What this proves on the cat21.space side:
+ *   1. The orchestrator queries `/output/<outpoint>` on both ord
+ *      URLs for funding-source UTXOs ≤ 50_000 sat.
+ *   2. When the response carries assets, the row's bucket flips to
+ *      `assets` and the row gets the `.mint-utxo-row-assets` class
+ *      + `⚠ asset found` bucket badge.
+ *   3. The action button on that row reads "Use anyway" with the
+ *      `.mint-utxo-pick-override` styling — a deliberate friction
+ *      step so the user can't single-click into a cat-burning mint.
+ */
+test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning', async () => {
+  test.setTimeout(180_000);
+  if (!sharedPaymentAddress) {
+    throw new Error('first test must have set sharedPaymentAddress');
+  }
+  const paymentAddress = sharedPaymentAddress;
+
+  const SMALL_FUND_BTC = 0.00015;
+  const SMALL_FUND_SATS = Math.round(SMALL_FUND_BTC * 1e8);
+  const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', paymentAddress, String(SMALL_FUND_BTC)).trim();
+  console.log(`[asset-scanner] cat-mock target txid=${fundTxid} (small UTXO ${SMALL_FUND_SATS} sat)`);
+  const tip = mineBlocks(1);
+  await waitForElectrsSync(tip);
+  const small = (await getUtxos(paymentAddress)).find((u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid);
+  if (!small) {
+    throw new Error(`could not find the ${SMALL_FUND_SATS}-sat funding UTXO under ${paymentAddress}`);
+  }
+  const catOutpoint = `${small.txid}:${small.vout}`;
+  console.log(`[asset-scanner] cat-bearing outpoint = ${catOutpoint}`);
+
+  const page = await context.newPage();
+  await page.route('**/output/*', async (route) => {
+    const url = route.request().url();
+    const isCatTarget = url.includes(catOutpoint);
+    const body = isCatTarget
+      ? {
+          inscriptions: [],
+          runes: {},
+          cats: [0],
+          sat_ranges: [[1_000_000, 1_000_001]],
+          value: SMALL_FUND_SATS,
+          script_pubkey: '',
+        }
+      : { inscriptions: [], runes: {}, cats: [] };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await shot(page, 'as-01-page-loaded');
+
+  // Auto-reconnect from localStorage. Approve a permission-renewal
+  // popup if Xverse pops one; otherwise move on.
+  const known = new Set(context.pages());
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: known,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
+      .first().click().catch(() => undefined);
+    await reapprove.close().catch(() => undefined);
+  }
+
+  // Expand the funding-source picker.
+  const pickerSummary = page.locator('details.mint-expert > summary').first();
+  await expect(pickerSummary).toBeVisible({ timeout: 60_000 });
+  // If pickerOpenByDefault() returned true the details is already open;
+  // clicking would collapse it. Toggle only if needed.
+  const expanded = await page.locator('details.mint-expert[open]').count();
+  if (expanded === 0) {
+    await pickerSummary.click();
+  }
+  await shot(page, 'as-02-picker-open');
+
+  // Assert the cat-mocked row carries the assets styling.
+  const assetRow = page.locator('li.mint-utxo-row-assets').filter({ hasText: catOutpoint }).first();
+  await expect(assetRow).toBeVisible({ timeout: 45_000 });
+  await shot(page, 'as-03-asset-row-visible');
+
+  // Bucket badge text + class.
+  const bucketBadge = assetRow.locator('.mint-utxo-bucket-assets');
+  await expect(bucketBadge).toBeVisible();
+  await expect(bucketBadge).toHaveText(/asset found/i);
+
+  // Action button is the override variant.
+  const overrideBtn = assetRow.locator('.mint-utxo-pick-override');
+  await expect(overrideBtn).toBeVisible();
+  await expect(overrideBtn).toHaveText(/use anyway/i);
+
+  // Clicking it should select the row and surface the top-level
+  // `data-testid="asset-found-warning"` summary alert.
+  await overrideBtn.click();
+  const warning = page.locator('[data-testid="asset-found-warning"]');
+  await expect(warning).toBeVisible({ timeout: 10_000 });
+  await shot(page, 'as-04-warning-after-select');
 });
