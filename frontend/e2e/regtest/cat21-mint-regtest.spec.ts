@@ -156,7 +156,10 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // which renders a "Connect" button that opens an ngb-modal picker.
   const cta = page.locator('[data-testid="mint-cta"]');
   await expect(cta).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('button', { name: /^connect$/i }).first().click();
+  // The wallet-connect trigger inside the CTA reads "Connect wallet".
+  // It's `.wallet-button-connect` so we pin by class to dodge anything
+  // else that might match "connect" on the page.
+  await page.locator('button.wallet-button-connect').first().click();
 
   // The modal lists supported wallets — click Xverse.
   await page.getByRole('button', { name: /^xverse$/i }).first()
