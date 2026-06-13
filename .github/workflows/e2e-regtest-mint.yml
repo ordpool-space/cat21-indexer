@@ -184,9 +184,19 @@ jobs:
 
       - name: Locate the built browser output
         run: |
-          BROWSER_DIR=$(find dist-regtest -maxdepth 3 -type d -name browser | head -1)
-          if [ -z "$BROWSER_DIR" ] || [ ! -f "$BROWSER_DIR/index.html" ]; then
-            echo "could not find browser/ output under dist-regtest"
+          # Angular CLI 21 may write either dist-regtest/index.html or
+          # dist-regtest/browser/index.html depending on the builder.
+          for candidate in \
+              dist-regtest \
+              dist-regtest/browser \
+              $(find dist-regtest -maxdepth 3 -type d -name browser); do
+            if [ -f "$candidate/index.html" ]; then
+              BROWSER_DIR="$candidate"
+              break
+            fi
+          done
+          if [ -z "${BROWSER_DIR:-}" ]; then
+            echo "could not find any index.html under dist-regtest"
             ls -la dist-regtest || true
             tail -200 build.log || true
             exit 1
