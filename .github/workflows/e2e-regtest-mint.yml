@@ -201,6 +201,14 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Lift SDK e2e helpers out of node_modules (Node 24 strip-types refuses .ts there)
+        working-directory: frontend
+        run: |
+          mkdir -p e2e/regtest/sdk-lib
+          cp node_modules/ordpool-sdk/e2e/regtest/regtest-helpers.ts e2e/regtest/sdk-lib/
+          cp node_modules/ordpool-sdk/e2e/playwright/approval-popup.ts e2e/regtest/sdk-lib/
+          ls -la e2e/regtest/sdk-lib/
+
       - name: Run the page-driven /dashboard/mint regtest spec
         working-directory: frontend
         env:
