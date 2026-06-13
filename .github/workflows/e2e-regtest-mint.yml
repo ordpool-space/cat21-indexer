@@ -1,0 +1,246 @@
+name: E2E (regtest mint)
+
+# Full-stack mint round-trip on Bitcoin regtest for cat21.space's
+# /dashboard/mint page:
+#   bitcoind + electrs + mariadb (from ordpool-sdk's consumer-environment)
+#   + a tiny Node shim that mocks /api/v1/fees/recommended + proxies the
+#     rest of /api/* to electrs (so we don't have to build the full
+#     ordpool-backend image just for one fee endpoint)
+#   + cat21-indexer/frontend served with a patched cat21Config pointing
+#     at localhost
+#   + Xverse extension headed in xvfb
+#   + Playwright drives /dashboard/mint end-to-end to a real mint
+#
+# Mirrors ordpool's e2e-regtest-mint.yml — both workflows share the same
+# SDK regtest infrastructure (consumer-environment + globalSetup-seeded
+# Xverse vault + cached extension).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 3 * * *'   # nightly at 03:37 UTC (20 min offset from ordpool's run)
+  push:
+    paths:
+      - 'e2e/**'
+      - '.github/workflows/e2e-regtest-mint.yml'
+      - 'frontend/e2e/regtest/**'
+      - 'frontend/playwright.regtest.config.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cat21-indexer-e2e-regtest-mint-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regtest-mint:
+    name: Regtest cat21.space mint via Xverse
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout cat21-indexer
+        uses: actions/checkout@v4
+
+      - name: Setup Node (frontend)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend deps (brings ordpool-sdk into node_modules)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Make SDK consumer-environment scripts executable
+        run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
+
+      - name: Bring up consumer-environment (bitcoind + electrs + mariadb)
+        run: |
+          frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh \
+            > stack.json
+          cat stack.json
+
+      - name: Start fees + electrs HTTP shim on :8999
+        run: |
+          ELECTRS_URL=http://localhost:3000 PORT=8999 \
+            nohup node e2e/fees-electrs-stub.mjs > fees-stub.log 2>&1 &
+          echo $! > fees-stub.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8999/healthz >/dev/null 2>&1; then
+              echo "fees-stub up"; break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "fees-stub never came up"; cat fees-stub.log || true; exit 1
+            fi
+            sleep 1
+          done
+          echo "--- /api/v1/fees/recommended"
+          curl -fsS http://localhost:8999/api/v1/fees/recommended
+          echo
+
+      # ── SDK side — Xverse extension + seeded vault ─────────────────
+      #
+      # The SDK's globalSetup is the only piece of CI-friendly Xverse
+      # onboarding we own; reuse it verbatim by checking the SDK out
+      # as a sibling repo, installing its dev deps, and running its own
+      # smallest spec (xverse-loads). That triggers globalSetup which
+      # leaves a seeded user-data-dir in sdk/test-results/.
+
+      - name: Checkout ordpool-sdk (for Xverse extension + seeded vault)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/ordpool-sdk
+          path: sdk
+          ref: main
+
+      - name: Setup Node (sdk)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'sdk/package-lock.json'
+
+      - name: Install SDK deps + build
+        working-directory: sdk
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Playwright system deps + Chromium
+        working-directory: sdk
+        run: npx playwright install --with-deps chromium
+
+      - name: Cache unpacked Xverse extension
+        id: xverse-cache
+        uses: actions/cache@v4
+        with:
+          path: sdk/e2e/extensions/xverse
+          key: xverse-extension-v2.3.2
+
+      - name: Download + unpack Xverse from SDK release mirror
+        if: steps.xverse-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: sdk
+        run: bash e2e/playwright/playwright-bootstrap.sh xverse
+
+      - name: Bootstrap regtest funds (101 blocks, dump WIF)
+        working-directory: sdk
+        run: |
+          chmod +x e2e/regtest-bootstrap.sh
+          ./e2e/regtest-bootstrap.sh > regtest-bootstrap.json
+          cat regtest-bootstrap.json
+
+      - name: Run SDK's Xverse onboarding (produces seeded user-data-dir)
+        working-directory: sdk
+        run: |
+          xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
+            npx playwright test e2e/playwright/specs/xverse-loads.spec.ts \
+            --config=e2e/playwright/playwright.config.ts
+
+      - name: Verify seed user-data-dir landed
+        run: |
+          test -d sdk/test-results/xverse-seed-user-data-dir/Default \
+            || { echo "no seed user-data-dir"; ls sdk/test-results/; exit 1; }
+
+      # ── Patch the frontend's cat21Config to point at the local stack ──
+      #
+      # In production cat21Config has prod URLs hardcoded in app.config.ts.
+      # For regtest we want:
+      #   mempoolApiUrl   → http://localhost:8999   (the fees-electrs-stub)
+      #   cat21ApiUrl     → http://localhost:9998   (no real indexer; the
+      #                                              hero panel's getStatus
+      #                                              + getLatestCatNumbers
+      #                                              catchError to neutral
+      #                                              defaults, so a 404 is
+      #                                              fine)
+      #   ordApiUrl       → http://localhost:9999   (scanner gracefully
+      #   cat21OrdApiUrl  → http://localhost:9999    falls through on
+      #                                              scan-failed; the mint
+      #                                              itself doesn't need ord)
+      #
+      # `sed -i` in place so the ng serve picks the patched values up.
+
+      - name: Patch cat21Config for regtest
+        working-directory: frontend
+        run: |
+          sed -i \
+            -e "s|'https://api\.ordpool\.space'|'http://localhost:8999'|g" \
+            -e "s|'https://backend2\.cat21\.space'|'http://localhost:9998'|g" \
+            -e "s|'https://ord\.ordpool\.space'|'http://localhost:9999'|g" \
+            -e "s|'https://ord\.cat21\.space'|'http://localhost:9999'|g" \
+            src/app/app.config.ts
+          echo "--- patched cat21Config ---"
+          grep -A8 'cat21Config,' src/app/app.config.ts
+
+      - name: Start ng-serve in the background on :4221
+        working-directory: frontend
+        run: |
+          nohup npm start -- --port 4221 > ng.log 2>&1 &
+          echo $! > ng.pid
+
+      - name: Wait for ng-serve ready on :4221
+        run: |
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:4221/ >/dev/null 2>&1; then
+              echo "ng-serve up"; break
+            fi
+            if [ "$i" = "120" ]; then
+              echo "ng-serve never came up"; tail -200 frontend/ng.log || true; exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Install Playwright in the frontend tree
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the page-driven /dashboard/mint regtest spec
+        working-directory: frontend
+        env:
+          XVERSE_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/xverse
+          XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/sdk/test-results/xverse-seed-user-data-dir
+          FRONTEND_URL: http://localhost:4221
+        run: |
+          xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
+            npx playwright test --config=playwright.regtest.config.ts
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regtest-mint-playwright-${{ github.run_id }}
+          path: |
+            frontend/test-results
+            frontend/playwright-report-regtest
+            frontend/ng.log
+            fees-stub.log
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          for c in ordpool-e2e-consumer-bitcoind ordpool-e2e-consumer-electrs ordpool-e2e-consumer-mariadb; do
+            echo "=== $c ==="
+            docker logs "$c" 2>&1 | tail -200 || true
+          done
+          echo "=== fees-stub.log ==="
+          cat fees-stub.log 2>/dev/null || true
+          echo "=== frontend/ng.log (tail) ==="
+          tail -200 frontend/ng.log 2>/dev/null || true
+
+      - name: Tear down stack
+        if: always()
+        run: |
+          docker compose \
+            -f frontend/node_modules/ordpool-sdk/e2e/docker-compose.consumer-environment.yml \
+            down -v || true
+          if [ -f fees-stub.pid ]; then
+            kill "$(cat fees-stub.pid)" 2>/dev/null || true
+          fi
+          if [ -f frontend/ng.pid ]; then
+            kill "$(cat frontend/ng.pid)" 2>/dev/null || true
+          fi
