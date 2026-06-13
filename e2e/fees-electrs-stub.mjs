@@ -48,11 +48,23 @@ function proxyToElectrs(req, res) {
     path: upstreamPath || '/',
     headers: req.headers,
   }, (upRes) => {
-    res.writeHead(upRes.statusCode ?? 502, upRes.headers);
+    // electrs doesn't emit CORS headers; the frontend is on a
+    // different origin (localhost:4221) so without these the browser
+    // blocks the response and the orchestrator's utxos$ stream
+    // appears to hang in loading-utxos forever.
+    const headers = {
+      ...upRes.headers,
+      'access-control-allow-origin': '*',
+      'access-control-expose-headers': '*',
+    };
+    res.writeHead(upRes.statusCode ?? 502, headers);
     upRes.pipe(res);
   });
   upstream.on('error', (err) => {
-    res.writeHead(502, { 'content-type': 'text/plain' });
+    res.writeHead(502, {
+      'content-type': 'text/plain',
+      'access-control-allow-origin': '*',
+    });
     res.end(`upstream electrs error: ${err.message}`);
   });
   req.pipe(upstream);
