@@ -439,3 +439,88 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   await expect(warning).toBeVisible({ timeout: 10_000 });
   await shot(page, 'as-04-warning-after-select');
 });
+
+/**
+ * Regression for the fee-rate picker.
+ *
+ * cat21.space's `<app-fees-picker>` renders four `.tier-btn` buttons
+ * (Fastest / Half hour / Hour / Economy) bound to a polled
+ * recommendedFees$ stream that hits `/api/v1/fees/recommended` on the
+ * stub (`{fastestFee:5, halfHourFee:3, hourFee:1, economyFee:1,
+ * minimumFee:1}`). Clicking a tier calls `pickTier()` which writes
+ * the tier's rate into the mint orchestrator's fee-rate signal and
+ * mirrors it back into the `.manual-input`.
+ *
+ * The test pins:
+ *   1. Buttons populate (lose their disabled state) once the REST poll
+ *      returns. Each button shows its tier label + the integer rate.
+ *   2. Clicking the Fastest tier writes "5" into `.manual-input` and
+ *      gives that button `.tier-btn-active`.
+ *   3. Clicking the Hour tier writes "1" and migrates the active class.
+ *   4. The manual-input itself round-trips: typing "7" updates which
+ *      tier is "active" (none, since 7 isn't a tier rate) — this is
+ *      the user-overrides-tier path.
+ */
+test('fee picker: tier clicks update the manual input + active state', async () => {
+  test.setTimeout(120_000);
+
+  const page = await context.newPage();
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await shot(page, 'fp-01-loaded');
+
+  const known = new Set(context.pages());
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: known,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
+      .first().click().catch(() => undefined);
+    await reapprove.close().catch(() => undefined);
+  }
+
+  // Wait for the picker to come out of its disabled-while-loading state.
+  const buttons = page.locator('.fees-picker .tier-btn');
+  await expect(buttons).toHaveCount(4, { timeout: 30_000 });
+  await expect(buttons.first()).toBeEnabled({ timeout: 30_000 });
+  await shot(page, 'fp-02-picker-ready');
+
+  // Tier order on screen: 0=Fastest(5), 1=Half hour(3), 2=Hour(1), 3=Economy(1)
+  await expect(buttons.nth(0)).toContainText('Fastest');
+  await expect(buttons.nth(0)).toContainText('5');
+  await expect(buttons.nth(1)).toContainText('Half hour');
+  await expect(buttons.nth(1)).toContainText('3');
+  await expect(buttons.nth(2)).toContainText('Hour');
+  await expect(buttons.nth(3)).toContainText('Economy');
+
+  const manualInput = page.locator('.fees-picker .manual-input');
+
+  // Click Fastest → input "5" + active class on the Fastest button.
+  await buttons.nth(0).click();
+  await expect(manualInput).toHaveValue('5', { timeout: 5_000 });
+  await expect(buttons.nth(0)).toHaveClass(/tier-btn-active/);
+  await shot(page, 'fp-03-fastest-clicked');
+
+  // Click Half hour → input "3" + active class moves.
+  await buttons.nth(1).click();
+  await expect(manualInput).toHaveValue('3', { timeout: 5_000 });
+  await expect(buttons.nth(1)).toHaveClass(/tier-btn-active/);
+  await expect(buttons.nth(0)).not.toHaveClass(/tier-btn-active/);
+
+  // Click Hour → input "1" + active class moves.
+  await buttons.nth(2).click();
+  await expect(manualInput).toHaveValue('1', { timeout: 5_000 });
+  await expect(buttons.nth(2)).toHaveClass(/tier-btn-active/);
+
+  // Typing into the manual input overrides — no tier is active for
+  // a rate that doesn't match any tier (7 ≠ 1, 3, 5).
+  await manualInput.fill('7');
+  await manualInput.press('Tab');
+  // None of the four tiers should claim active after a custom rate.
+  for (let i = 0; i < 4; i++) {
+    await expect(buttons.nth(i)).not.toHaveClass(/tier-btn-active/);
+  }
+  await shot(page, 'fp-04-manual-override');
+});
