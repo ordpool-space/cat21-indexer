@@ -212,6 +212,34 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
     throw new Error(`could not find ${FUND_AMOUNT_SATS}-sat UTXO; got ${JSON.stringify(utxos)}`);
   }
 
+  // ─── 4b. Reload page to refresh UTXO state ─────────────────────
+  // The orchestrator fires getUtxos once on connect; funding after
+  // doesn't trigger a re-fetch. A page reload forces a fresh
+  // utxos$ pipeline. The SDK persists the last-connected wallet in
+  // localStorage and auto-reconnects on init; if Xverse pops a
+  // permission-renewal popup we approve it, otherwise move on.
+  const knownPagesBeforeReload = new Set(context.pages());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: knownPagesBeforeReload,
+    timeoutMs: 8_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.waitForFunction(() => {
+        const t = (document.body.innerText || '').toLowerCase();
+        return ['connect', 'approve', 'confirm', 'allow'].some((s) => t.includes(s));
+      }, undefined, { timeout: 8_000, polling: 250 });
+      return true;
+    },
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
+      .first().click();
+    await reapprove.close().catch(() => undefined);
+  }
+  await shot(page, '04b-reloaded');
+
   // ─── 5. Wait for the "found funds" banner + Mint button ────────
   // After the orchestrator picks up the new UTXO from electrs, the
   // empty-state vanishes and the summary panel + happy-path banner
