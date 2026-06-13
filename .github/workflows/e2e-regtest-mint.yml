@@ -181,7 +181,9 @@ jobs:
 
       - name: Build static frontend bundle
         working-directory: frontend
-        run: npm run ng -- build --output-path ../dist-regtest > ../build.log 2>&1
+        run: |
+          set -o pipefail
+          npm run ng -- build --output-path ../dist-regtest 2>&1 | tee ../build.log
 
       - name: Locate the built browser output
         run: |
