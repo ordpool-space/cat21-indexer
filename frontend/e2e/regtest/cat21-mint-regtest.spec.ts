@@ -267,20 +267,39 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const mintBtn = page.locator('[data-testid="mint-btn"]');
   await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
 
-  // ─── 5b. Fee-rate floor validation ────────────────────────────
-  // The picker's `.manual-input` is bound by `[min]="minFeeRate()"`
-  // which resolves to 0.1 sat/vB — below that Bitcoin Core's
-  // default `-minrelaytxfee` rejects the broadcast outright, so the
-  // form refuses sub-floor input client-side. We type 0 and 0.05
-  // and assert the Mint button disables, then reset to a sane
-  // value for the rest of the round-trip.
+  // ─── 5b. Sub-floor input is silently ignored ──────────────────
+  // The picker's `onManualInputChange` short-circuits values below
+  // `minFeeRate()` (0.1 sat/vB) — it doesn't propagate them to the
+  // orchestrator. So typing 0 or 0.05 leaves the orchestrator's
+  // last good rate in place, and the Mint button stays ENABLED
+  // (the user doesn't get punished for a typo). We pin that
+  // behaviour and verify the summary's Miner fee doesn't drop to
+  // ~0 (which is what would happen if a sub-floor value leaked
+  // through and the simulation ran at rate=0).
+  const minerFeeVal2 = page.locator(
+    '[data-testid="mint-summary-section"] .mint-summary-row',
+  ).filter({ hasText: /Miner fee/ }).locator('.val');
+  await expect(minerFeeVal2).toBeVisible({ timeout: 10_000 });
+  const baseFeeStr = (await minerFeeVal2.textContent())!.trim();
+  const baseFee = Number(baseFeeStr.replace(/[^\d]/g, ''));
+  expect(baseFee).toBeGreaterThan(0);
+
   const manualFeeInput = page.locator('.fees-picker .manual-input');
   await manualFeeInput.fill('0');
   await manualFeeInput.press('Tab');
-  await expect(mintBtn).toBeDisabled({ timeout: 5_000 });
+  await expect(mintBtn).toBeEnabled({ timeout: 5_000 });
+  expect(
+    Number((await minerFeeVal2.textContent())!.replace(/[^\d]/g, '')),
+  ).toBe(baseFee);
+
   await manualFeeInput.fill('0.05');
   await manualFeeInput.press('Tab');
-  await expect(mintBtn).toBeDisabled({ timeout: 5_000 });
+  await expect(mintBtn).toBeEnabled({ timeout: 5_000 });
+  expect(
+    Number((await minerFeeVal2.textContent())!.replace(/[^\d]/g, '')),
+  ).toBe(baseFee);
+
+  // Reset to a clean known value for the rest of the round-trip.
   await manualFeeInput.fill('1');
   await manualFeeInput.press('Tab');
   await expect(mintBtn).toBeEnabled({ timeout: 10_000 });
