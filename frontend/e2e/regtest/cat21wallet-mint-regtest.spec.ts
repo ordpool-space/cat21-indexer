@@ -52,6 +52,8 @@ const RESULTS_DIR = path.resolve(__dirname, '../../test-results');
 
 let context: BrowserContext;
 let extensionId: string;
+// Hoisted state shared across `test()` blocks.
+let sharedPaymentAddress: string | undefined;
 
 async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
@@ -189,6 +191,7 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   const paymentAddr = (await paymentCode.textContent())!.trim();
   console.log(`[cat21wallet] regtest payment address = ${paymentAddr}`);
   expect(paymentAddr).toMatch(/^bcrt1q/);
+  sharedPaymentAddress = paymentAddr;
 
   // ─── Full mint round-trip ─────────────────────────────────────
   // Same flow as ordpool's, with cat21-indexer's data-testid
@@ -268,4 +271,323 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   for (const vin of esploraTx.vin) {
     expect(vin.sequence).toBe(0xfffffffd);
   }
+});
+
+const HIGH_FEES_PRESET = {
+  fastestFee: 100,
+  halfHourFee: 60,
+  hourFee: 30,
+  economyFee: 20,
+  minimumFee: 10,
+};
+
+async function cat21walletMintAtRate(opts: {
+  rate: number;
+  scenarioLabel: string;
+  mockFeesAsHigh?: boolean;
+}): Promise<{ broadcastTxid: string; fee: number; vsize: number; rate: number }> {
+  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+
+  if (opts.mockFeesAsHigh) {
+    const res = await fetch('http://localhost:8999/admin/fees', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(HIGH_FEES_PRESET),
+    });
+    if (!res.ok) throw new Error(`stub /admin/fees rejected: ${res.status}`);
+  }
+
+  try {
+    const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.001').trim();
+    console.log(`[${opts.scenarioLabel}] funded tx=${fundTxid}`);
+    await waitForElectrsSync(mineBlocks(1));
+
+    const page = await context.newPage();
+    await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+    const known = new Set(context.pages());
+    const reapprove = await waitForApprovalPopup({
+      context,
+      knownPages: known,
+      timeoutMs: 6_000,
+      isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+    }).catch(() => null);
+    if (reapprove) {
+      await reapprove.getByTestId('get-addresses-approve-button')
+        .click({ timeout: 10_000 }).catch(() => undefined);
+      await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+    }
+
+    if (opts.mockFeesAsHigh) {
+      const buttons = page.locator('.fees-picker .tier-btn');
+      await expect(buttons).toHaveCount(4, { timeout: 30_000 });
+      await expect(buttons.nth(0)).toContainText('100', { timeout: 10_000 });
+    }
+
+    const manualInput = page.locator('.fees-picker .manual-input');
+    await manualInput.fill(String(opts.rate));
+    await manualInput.press('Tab');
+    const foundFunds = page.locator('[data-testid="mint-found-funds"]');
+    await expect(foundFunds).toBeVisible({ timeout: 90_000 });
+    const mintBtn = page.locator('[data-testid="mint-btn"]');
+    await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+
+    const knownSign = new Set(context.pages());
+    await mintBtn.click();
+    const sign = await waitForApprovalPopup({
+      context,
+      knownPages: knownSign,
+      timeoutMs: 120_000,
+      isApproval: async (p) => {
+        if (!p.url().startsWith('chrome-extension://')) return false;
+        await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+          .waitFor({ state: 'visible', timeout: 120_000 });
+        return true;
+      },
+    });
+    await sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+      .click({ timeout: 30_000 });
+    await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+    const successCard = page.locator('[data-testid="mint-success"]');
+    await expect(successCard).toBeVisible({ timeout: 90_000 });
+    const successHref = await successCard.locator('a').first().getAttribute('href');
+    const broadcastTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
+
+    await waitForElectrsSync(mineBlocks(1));
+    const tx = await getTx(broadcastTxid);
+    expect(tx.locktime).toBe(21);
+    expect(tx.vout[0].value).toBe(546);
+    for (const vin of tx.vin) {
+      expect(vin.sequence).toBe(0xfffffffd);
+    }
+    const vsize = Math.ceil(tx.weight / 4);
+    const rate = tx.fee / vsize;
+    console.log(`[${opts.scenarioLabel}] fee=${tx.fee} vsize=${vsize} rate=${rate.toFixed(3)} (target ${opts.rate})`);
+
+    await page.close().catch(() => undefined);
+    return { broadcastTxid, fee: tx.fee, vsize, rate };
+  } finally {
+    if (opts.mockFeesAsHigh) {
+      await fetch('http://localhost:8999/admin/fees/reset', { method: 'POST' })
+        .catch(() => undefined);
+    }
+  }
+}
+
+test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on CAT-21 wallet', async () => {
+  test.setTimeout(420_000);
+  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+
+  const SMALL_FUND_SATS = 15_000;
+  const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.00015').trim();
+  await waitForElectrsSync(mineBlocks(1));
+  let small: { txid: string; vout: number; value: number } | undefined;
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    small = (await getUtxos(sharedPaymentAddress)).find(
+      (u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid,
+    );
+    if (small) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (!small) throw new Error('could not find small UTXO');
+  const catOutpoint = `${small.txid}:${small.vout}`;
+
+  const page = await context.newPage();
+  await page.route('**/output/*', async (route) => {
+    const url = route.request().url();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(
+        url.includes(catOutpoint)
+          ? { inscriptions: [], runes: {}, cats: [0] }
+          : { inscriptions: [], runes: {}, cats: [] },
+      ),
+    });
+  });
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  const known = new Set(context.pages());
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: known,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+
+  // Expand picker if not auto-open.
+  const pickerSummary = page.locator('details.mint-expert > summary').first();
+  await expect(pickerSummary).toBeVisible({ timeout: 60_000 });
+  if ((await page.locator('details.mint-expert[open]').count()) === 0) {
+    await pickerSummary.click();
+  }
+
+  // Asset row + override.
+  const assetRow = page.locator('li.mint-utxo-row-assets').filter({ hasText: catOutpoint }).first();
+  await expect(assetRow).toBeVisible({ timeout: 45_000 });
+  const overrideBtn = assetRow.locator('.mint-utxo-pick-override');
+  await expect(overrideBtn).toBeVisible();
+  await overrideBtn.click();
+
+  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+  const knownSign = new Set(context.pages());
+  await mintBtn.click();
+  const sign = await waitForApprovalPopup({
+    context,
+    knownPages: knownSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+    .click({ timeout: 30_000 });
+  await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+  const successCard = page.locator('[data-testid="mint-success"]');
+  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  const successHref = await successCard.locator('a').first().getAttribute('href');
+  const broadcastTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
+  await waitForElectrsSync(mineBlocks(1));
+  const tx = await getTx(broadcastTxid);
+  expect(tx.locktime).toBe(21);
+  expect(tx.vout[0].value).toBe(546);
+  for (const vin of tx.vin) {
+    expect(vin.sequence).toBe(0xfffffffd);
+  }
+  const spentCat = tx.vin.some(
+    (v: { txid: string; vout: number }) => `${v.txid}:${v.vout}` === catOutpoint,
+  );
+  expect(spentCat).toBe(true);
+});
+
+test('manual override: typing 100 mints a "purple cat" via CAT-21 wallet', async () => {
+  test.setTimeout(420_000);
+  const { rate } = await cat21walletMintAtRate({ rate: 100, scenarioLabel: 'purple' });
+  expect(Math.abs(rate - 100)).toBeLessThan(1);
+});
+
+test('manual override: typing 1 while the picker suggests 100 — low rate wins on CAT-21 wallet', async () => {
+  test.setTimeout(420_000);
+  const { rate } = await cat21walletMintAtRate({ rate: 1, scenarioLabel: 'hot-mempool', mockFeesAsHigh: true });
+  expect(Math.abs(rate - 1)).toBeLessThan(1);
+});
+
+test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
+  test.setTimeout(180_000);
+  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+  rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
+  await waitForElectrsSync(mineBlocks(1));
+
+  const page = await context.newPage();
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  const known = new Set(context.pages());
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: known,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+
+  const manualInput = page.locator('.fees-picker .manual-input');
+  await manualInput.fill('1');
+  await manualInput.press('Tab');
+  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
+
+  const knownSign = new Set(context.pages());
+  await mintBtn.click();
+  const sign = await waitForApprovalPopup({
+    context,
+    knownPages: knownSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await sign.getByRole('button', { name: /^(deny|cancel|reject)$/i }).first()
+    .click({ timeout: 10_000 });
+  await sign.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+
+  await page.waitForTimeout(2_000);
+  await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
+});
+
+test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake success)', async () => {
+  test.setTimeout(240_000);
+  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+  rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
+  await waitForElectrsSync(mineBlocks(1));
+
+  const page = await context.newPage();
+  await page.route('**/api/tx', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 400,
+        contentType: 'text/plain',
+        headers: { 'access-control-allow-origin': '*' },
+        body: 'test-induced broadcast rejection',
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  const known = new Set(context.pages());
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: known,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+
+  const manualInput = page.locator('.fees-picker .manual-input');
+  await manualInput.fill('1');
+  await manualInput.press('Tab');
+  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
+
+  const knownSign = new Set(context.pages());
+  await mintBtn.click();
+  const sign = await waitForApprovalPopup({
+    context,
+    knownPages: knownSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+    .click({ timeout: 30_000 });
+  await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+  const errorAlert = page.locator('[data-testid="mint-error"]');
+  await expect(errorAlert).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
 });
