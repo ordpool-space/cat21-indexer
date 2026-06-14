@@ -257,6 +257,24 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const mintBtn = page.locator('[data-testid="mint-btn"]');
   await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
 
+  // ─── 5b. Fee-rate floor validation ────────────────────────────
+  // The picker's `.manual-input` is bound by `[min]="minFeeRate()"`
+  // which resolves to 0.1 sat/vB — below that Bitcoin Core's
+  // default `-minrelaytxfee` rejects the broadcast outright, so the
+  // form refuses sub-floor input client-side. We type 0 and 0.05
+  // and assert the Mint button disables, then reset to a sane
+  // value for the rest of the round-trip.
+  const manualFeeInput = page.locator('.fees-picker .manual-input');
+  await manualFeeInput.fill('0');
+  await manualFeeInput.press('Tab');
+  await expect(mintBtn).toBeDisabled({ timeout: 5_000 });
+  await manualFeeInput.fill('0.05');
+  await manualFeeInput.press('Tab');
+  await expect(mintBtn).toBeDisabled({ timeout: 5_000 });
+  await manualFeeInput.fill('1');
+  await manualFeeInput.press('Tab');
+  await expect(mintBtn).toBeEnabled({ timeout: 10_000 });
+
   // ─── 6. Click Mint, approve sign popup ─────────────────────────
   const knownPagesBeforeSign = new Set(context.pages());
   await mintBtn.click();
@@ -323,6 +341,21 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   console.log(`[cat21-mint-page] locktime=${esploraTx.locktime}  block_hash=${esploraTx.status.block_hash}`);
   expect(esploraTx.locktime).toBe(21);
   expect(esploraTx.status.block_hash).toBeTruthy();
+  // RBF prevention — CAT-21 inputs MUST have sequence ≥ 0xfffffffe.
+  // RBF-replaceable mints can be "accelerated" by a wallet (the
+  // Xverse 2024 incident) which drops `nLockTime=21` and kills the
+  // cat. See `project_cat21_must_not_signal_rbf.md` for the history.
+  expect(esploraTx.vin.length).toBeGreaterThan(0);
+  for (const vin of esploraTx.vin) {
+    expect(vin.sequence).toBeGreaterThanOrEqual(0xfffffffe);
+  }
+  // Output integrity — output 0 holds the cat sat at exactly 546
+  // sat. Wallets that quietly reshuffle outputs (or drop dust)
+  // would orphan the cat even though locktime + parseability
+  // still hold, because ord assigns the cat number to the first
+  // sat of the first output.
+  expect(esploraTx.vout.length).toBeGreaterThanOrEqual(1);
+  expect(esploraTx.vout[0].value).toBe(546);
 });
 
 /**
@@ -438,6 +471,71 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   const warning = page.locator('[data-testid="asset-found-warning"]');
   await expect(warning).toBeVisible({ timeout: 10_000 });
   await shot(page, 'as-04-warning-after-select');
+
+  // ─── "Use anyway" → full mint round-trip — the cat is burned ──
+  // The override is informational, not a hard-block — the user
+  // owns their funds. Completing the mint here proves:
+  //   1. The override click actually selected the warned UTXO.
+  //   2. The Mint button stays enabled past the warning.
+  //   3. The PSBT broadcast uses the cat-bearing outpoint as input
+  //      (verified by the on-chain `vin` lookup) — i.e. "I know
+  //      what I'm doing, mint anyway" actually reaches the chain
+  //      and the previous cat sat is symbolically burned.
+  const burnMintBtn = page.locator('[data-testid="mint-btn"]');
+  await expect(burnMintBtn).toBeEnabled({ timeout: 30_000 });
+  const knownBeforeBurnSign = new Set(context.pages());
+  await burnMintBtn.click();
+  const burnSign = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeBurnSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByText(/review transaction/i).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await burnSign.waitForFunction(() => {
+    const buttons = Array.from(document.querySelectorAll('button'));
+    return buttons.some((b) => {
+      if (!/^confirm$/i.test(b.textContent?.trim() ?? '')) return false;
+      if (b.hasAttribute('disabled')) return false;
+      const style = getComputedStyle(b);
+      return style.pointerEvents !== 'none' && style.visibility !== 'hidden';
+    });
+  }, undefined, { timeout: 30_000, polling: 250 });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (burnSign.isClosed()) break;
+    await burnSign.getByRole('button', { name: /^confirm$/i }).first()
+      .click({ force: true })
+      .catch(() => undefined);
+    const closed = new Promise<void>((res) => burnSign.once('close', () => res()));
+    await Promise.race([
+      closed,
+      expect(burnSign.getByRole('button', { name: /^confirm$/i }).first())
+        .toBeHidden({ timeout: 30_000 }),
+    ]).catch(() => undefined);
+    if (burnSign.isClosed()) break;
+  }
+  const burnSuccessCard = page.locator('[data-testid="mint-success"]');
+  await expect(burnSuccessCard).toBeVisible({ timeout: 90_000 });
+  const burnHref = await burnSuccessCard.locator('a').first().getAttribute('href');
+  const burnTxidMatch = burnHref!.match(/\/tx\/([0-9a-f]{64})/);
+  expect(burnTxidMatch).not.toBeNull();
+  const burnTxid = burnTxidMatch![1];
+  const burnConfTip = mineBlocks(1);
+  await waitForElectrsSync(burnConfTip);
+  const burnTx = await getTx(burnTxid);
+  expect(burnTx.locktime).toBe(21);
+  expect(burnTx.vout[0].value).toBe(546);
+  for (const vin of burnTx.vin) {
+    expect(vin.sequence).toBeGreaterThanOrEqual(0xfffffffe);
+  }
+  const spentCatOutpoint = burnTx.vin.some(
+    (v: { txid: string; vout: number }) => `${v.txid}:${v.vout}` === catOutpoint,
+  );
+  expect(spentCatOutpoint).toBe(true);
 });
 
 /**
@@ -717,6 +815,14 @@ async function mintAtRateAndVerify(opts: {
   const tx = await getTx(broadcastTxid);
   expect(tx.locktime).toBe(21);
   expect(tx.status.block_hash).toBeTruthy();
+  // RBF + output integrity on every mint round-trip — see test 1
+  // for the safety rationale.
+  expect(tx.vin.length).toBeGreaterThan(0);
+  for (const vin of tx.vin) {
+    expect(vin.sequence).toBeGreaterThanOrEqual(0xfffffffe);
+  }
+  expect(tx.vout.length).toBeGreaterThanOrEqual(1);
+  expect(tx.vout[0].value).toBe(546);
   // electrs's GET /tx/<txid> returns {fee, size, weight, ...}.
   // Vsize is ceil(weight/4) per BIP141; rate = fee / vsize sat/vB.
   const vsize = Math.ceil(tx.weight / 4);
@@ -741,4 +847,129 @@ test('manual override: typing 1 while the picker suggests 100 (mempool hot) — 
   test.setTimeout(420_000);
   const { rate } = await mintAtRateAndVerify({ rate: 1, scenarioLabel: 'hot-mempool', mockFeesAsHigh: true });
   expect(Math.abs(rate - 1)).toBeLessThan(1);
+});
+
+/**
+ * Sign-popup cancel — the user changes their mind partway through.
+ * The orchestrator's mint() must reject cleanly, the success card
+ * must NOT render, and no on-chain tx must be broadcast.
+ */
+test('sign-popup cancel keeps state coherent', async () => {
+  test.setTimeout(180_000);
+  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+
+  const FUND_BTC = 0.0003;
+  rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
+  await waitForElectrsSync(mineBlocks(1));
+
+  const page = await context.newPage();
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+
+  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  const manualInput = page.locator('.fees-picker .manual-input');
+  await manualInput.fill('1');
+  await manualInput.press('Tab');
+  await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
+  await shot(page, 'cancel-01-ready');
+
+  const knownBeforeCancel = new Set(context.pages());
+  await mintBtn.click();
+  const cancelPopup = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeCancel,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByText(/review transaction/i).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await shot(cancelPopup, 'cancel-02-popup');
+  await cancelPopup.getByRole('button', { name: /^cancel$/i }).first()
+    .click({ force: true });
+  await cancelPopup.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+
+  await page.waitForTimeout(2_000);
+  await shot(page, 'cancel-03-after-close');
+  await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
+});
+
+/**
+ * Broadcast-failure error path — Xverse signs the PSBT fine, but
+ * POST `/api/tx` is mocked to return 400 (e.g. mempool rejection
+ * for non-standard tx, fee-too-low post-replacement, or a
+ * stale-UTXO double-spend). The orchestrator's broadcast call must
+ * surface as a `[data-testid="mint-error"]` alert, NOT as a fake
+ * `mint-success`.
+ */
+test('broadcast failure surfaces as an error, not a fake success', async () => {
+  test.setTimeout(240_000);
+  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+
+  const FUND_BTC = 0.0003;
+  rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
+  await waitForElectrsSync(mineBlocks(1));
+
+  const page = await context.newPage();
+  await page.route('**/api/tx', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 400,
+        contentType: 'text/plain',
+        headers: { 'access-control-allow-origin': '*' },
+        body: 'test-induced broadcast rejection: bad-txns-inputs-missingorspent',
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+
+  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  const manualInput = page.locator('.fees-picker .manual-input');
+  await manualInput.fill('1');
+  await manualInput.press('Tab');
+  await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
+
+  const knownBeforeBcast = new Set(context.pages());
+  await mintBtn.click();
+  const bcastSign = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeBcast,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByText(/review transaction/i).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await bcastSign.waitForFunction(() => {
+    const buttons = Array.from(document.querySelectorAll('button'));
+    return buttons.some((b) => {
+      if (!/^confirm$/i.test(b.textContent?.trim() ?? '')) return false;
+      if (b.hasAttribute('disabled')) return false;
+      const style = getComputedStyle(b);
+      return style.pointerEvents !== 'none' && style.visibility !== 'hidden';
+    });
+  }, undefined, { timeout: 30_000, polling: 250 });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (bcastSign.isClosed()) break;
+    await bcastSign.getByRole('button', { name: /^confirm$/i }).first()
+      .click({ force: true })
+      .catch(() => undefined);
+    const closed = new Promise<void>((res) => bcastSign.once('close', () => res()));
+    await Promise.race([
+      closed,
+      expect(bcastSign.getByRole('button', { name: /^confirm$/i }).first())
+        .toBeHidden({ timeout: 30_000 }),
+    ]).catch(() => undefined);
+    if (bcastSign.isClosed()) break;
+  }
+
+  const errorAlert = page.locator('[data-testid="mint-error"]');
+  await expect(errorAlert).toBeVisible({ timeout: 60_000 });
+  await shot(page, 'bcast-fail-01-error-alert');
+  await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
 });
