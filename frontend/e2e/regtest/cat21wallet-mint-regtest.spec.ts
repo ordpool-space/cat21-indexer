@@ -129,8 +129,14 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
 
   await page.locator('button.wallet-button-connect').first().click();
 
-  // Picker modal — pick Cat21 Wallet by exact label.
-  const cat21Picker = page.getByRole('button', { name: /^cat21\s+wallet$/i }).first();
+  // Picker modal — Cat21 Wallet sits in the "installed" section at
+  // the top of the modal. The wallet card isn't a `<button>` element
+  // — it's a clickable container — so `getByRole('button', …)`
+  // doesn't find it. Match the visible label text instead. The
+  // label wraps across two lines in the modal layout ("Cat21" and
+  // "Wallet" on separate lines), so use a regex with `\s+` which
+  // covers the whitespace between them.
+  const cat21Picker = page.getByText(/^Cat21\s+Wallet$/i).first();
   await expect(cat21Picker).toBeVisible({ timeout: 20_000 });
   await cat21Picker.click({ timeout: 20_000 });
   await shot(page, '02-picker-clicked');
