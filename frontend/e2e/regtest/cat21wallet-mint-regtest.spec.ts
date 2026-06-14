@@ -157,7 +157,11 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   });
   await shot(approvalConnect, '03-connect-approval');
   await approvalConnect.getByTestId('get-addresses-approve-button').click();
-  await approvalConnect.close().catch(() => undefined);
+  // DO NOT explicitly `.close()` the popup — cat21-wallet's
+  // `userApprovesGetAddresses` runs a ~400 ms animation BEFORE
+  // sending the addresses back. Manual close cuts the dispatch
+  // (run 27502018547 trace.zip showed click→close = 44 ms gap).
+  await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
 
   // The connect CTA card disappears once the wallet is in
   // `connectedWallet`-bound signal scope. The mint section
