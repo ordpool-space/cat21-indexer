@@ -562,3 +562,183 @@ test('fee picker: tier clicks update the manual input + active state', async () 
     return Number(t.replace(/[^\d]/g, ''));
   }, { timeout: 5_000 }).toBeLessThan(feeAt7);
 });
+
+/**
+ * Manual-override end-to-end: the user's typed rate must be EXACTLY
+ * the rate that lands on-chain, regardless of what the picker is
+ * suggesting at the moment.
+ *
+ * Two real scenarios:
+ *
+ *   A. "Mempool is hot, picker suggests high, user still wants low."
+ *      Page.route mocks `/api/v1/fees/recommended` with fastest=100
+ *      so the picker tiles fill with high numbers. User types `1`.
+ *      Resulting on-chain tx must have fee_rate ≈ 1 sat/vB.
+ *
+ *   B. "Mempool is quiet, picker suggests low, user wants a purple
+ *      cat." (CAT-21 colour buckets are fee-rate driven — high fees
+ *      = rare colours: fire at 69 sat/vB, saturated at 420.) Default
+ *      stub fees stand. User types `100`. Resulting on-chain tx
+ *      must have fee_rate ≈ 100 sat/vB.
+ *
+ * Both scenarios verify the rate downstream of every reactivity step:
+ * `(ngModelChange)` → orchestrator rate signal → simulations() →
+ * PSBT construction → Xverse signing → broadcast → confirmed block.
+ * Tolerance is ±1 sat/vB to absorb the orchestrator's
+ * `ceil(rate × vsize)` rounding plus dust-fold accounting on the
+ * change output.
+ */
+
+async function mintAtRateAndVerify(opts: {
+  rate: number;
+  scenarioLabel: string;
+  /** When set, intercept the fees REST poll and return fastest=100,
+   *  halfHour=60, hour=30, economy=20, min=10 so the picker tiles
+   *  visibly disagree with the user's typed rate. */
+  mockFeesAsHigh?: boolean;
+}): Promise<{ broadcastTxid: string; fee: number; vsize: number; rate: number }> {
+  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+
+  const page = await context.newPage();
+  if (opts.mockFeesAsHigh) {
+    await page.route('**/api/v1/fees/recommended', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' },
+        body: JSON.stringify({
+          fastestFee: 100,
+          halfHourFee: 60,
+          hourFee: 30,
+          economyFee: 20,
+          minimumFee: 10,
+        }),
+      });
+    });
+  }
+
+  // ─── Fund a fresh UTXO ───────────────────────────────────────
+  const FUND_BTC = 0.001;
+  const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC)).trim();
+  console.log(`[${opts.scenarioLabel}] funded ${sharedPaymentAddress} +${FUND_BTC} BTC tx=${fundTxid}`);
+  const tip = mineBlocks(1);
+  await waitForElectrsSync(tip);
+
+  // ─── Open page, auto-reconnect ───────────────────────────────
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  const known = new Set(context.pages());
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: known,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
+      .first().click().catch(() => undefined);
+    await reapprove.close().catch(() => undefined);
+  }
+  await shot(page, `mr-${opts.scenarioLabel}-01-loaded`);
+
+  // ─── Wait for picker, sanity-pin that the tiles reflect the
+  // expected scenario context (verifies the mock landed, where
+  // applicable). ──────────────────────────────────────────────
+  const tiles = page.locator('.fees-picker .tier-btn');
+  await expect(tiles).toHaveCount(4, { timeout: 30_000 });
+  await expect(tiles.first()).toBeEnabled({ timeout: 30_000 });
+  if (opts.mockFeesAsHigh) {
+    await expect(tiles.nth(0)).toContainText('100', { timeout: 10_000 });
+  }
+
+  // ─── Override with the user's typed rate ─────────────────────
+  const manualInput = page.locator('.fees-picker .manual-input');
+  await manualInput.fill(String(opts.rate));
+  await manualInput.press('Tab');
+  await shot(page, `mr-${opts.scenarioLabel}-02-rate-typed`);
+
+  // ─── Wait for found-funds + Mint button ──────────────────────
+  const foundFunds = page.locator('[data-testid="mint-found-funds"]');
+  await expect(foundFunds).toBeVisible({ timeout: 90_000 });
+  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+  await shot(page, `mr-${opts.scenarioLabel}-03-ready`);
+
+  // ─── Click Mint, approve sign popup ──────────────────────────
+  const knownBeforeSign = new Set(context.pages());
+  await mintBtn.click();
+  const approvalSign = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByText(/review transaction/i).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await shot(approvalSign, `mr-${opts.scenarioLabel}-04-sign-popup`);
+
+  await approvalSign.waitForFunction(() => {
+    const buttons = Array.from(document.querySelectorAll('button'));
+    return buttons.some((b) => {
+      if (!/^confirm$/i.test(b.textContent?.trim() ?? '')) return false;
+      if (b.hasAttribute('disabled')) return false;
+      const style = getComputedStyle(b);
+      return style.pointerEvents !== 'none' && style.visibility !== 'hidden';
+    });
+  }, undefined, { timeout: 30_000, polling: 250 });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (approvalSign.isClosed()) break;
+    await approvalSign.getByRole('button', { name: /^confirm$/i }).first()
+      .click({ force: true })
+      .catch(() => undefined);
+    const closed = new Promise<void>((res) => approvalSign.once('close', () => res()));
+    await Promise.race([
+      closed,
+      expect(approvalSign.getByRole('button', { name: /^confirm$/i }).first())
+        .toBeHidden({ timeout: 30_000 }),
+    ]).catch(() => undefined);
+    if (approvalSign.isClosed()) break;
+  }
+
+  // ─── Wait for success card + broadcast txid ──────────────────
+  const successCard = page.locator('[data-testid="mint-success"]');
+  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await shot(page, `mr-${opts.scenarioLabel}-05-success`);
+  const successHref = await successCard.locator('a').first().getAttribute('href');
+  const txidMatch = successHref!.match(/\/tx\/([0-9a-f]{64})/);
+  expect(txidMatch).not.toBeNull();
+  const broadcastTxid = txidMatch![1];
+
+  // ─── Mine confirmation block, read on-chain tx ───────────────
+  const confTip = mineBlocks(1);
+  await waitForElectrsSync(confTip);
+  const tx = await getTx(broadcastTxid);
+  expect(tx.locktime).toBe(21);
+  expect(tx.status.block_hash).toBeTruthy();
+  // electrs's GET /tx/<txid> returns {fee, size, weight, ...}.
+  // Vsize is ceil(weight/4) per BIP141; rate = fee / vsize sat/vB.
+  const vsize = Math.ceil(tx.weight / 4);
+  const rate = tx.fee / vsize;
+  console.log(`[${opts.scenarioLabel}] fee=${tx.fee} sat, vsize=${vsize} vB, rate=${rate.toFixed(3)} sat/vB (target ${opts.rate})`);
+
+  await page.close().catch(() => undefined);
+  return { broadcastTxid, fee: tx.fee, vsize, rate };
+}
+
+test('manual override: typing 100 mints a "purple cat" — high rate ends up on-chain', async () => {
+  test.setTimeout(420_000);
+  const { rate } = await mintAtRateAndVerify({ rate: 100, scenarioLabel: 'purple' });
+  // ±1 sat/vB tolerance — the orchestrator pads the change-fold
+  // boundary by up to 1 vB worth of fee. Anything more would be a
+  // real divergence between the user's typed value and the mined
+  // tx.
+  expect(Math.abs(rate - 100)).toBeLessThan(1);
+});
+
+test('manual override: typing 1 while the picker suggests 100 (mempool hot) — low rate ends up on-chain', async () => {
+  test.setTimeout(420_000);
+  const { rate } = await mintAtRateAndVerify({ rate: 1, scenarioLabel: 'hot-mempool', mockFeesAsHigh: true });
+  expect(Math.abs(rate - 1)).toBeLessThan(1);
+});
