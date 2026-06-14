@@ -160,6 +160,17 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // which renders a "Connect" button that opens an ngb-modal picker.
   const cta = page.locator('[data-testid="mint-cta"]');
   await expect(cta).toBeVisible({ timeout: 30_000 });
+
+  // CRITICAL ordering: snapshot existing pages BEFORE we kick off the
+  // connect flow. Clicking Xverse in the modal triggers sats-connect,
+  // which spawns the Xverse approval tab; if we snapshot AFTER the
+  // click the new tab can already be in `context.pages()` by the time
+  // we read it, and `waitForApprovalPopup` (which filters out pages
+  // in the "known" set) will never see anything new and hit the
+  // 60s timeout. Three runs in a row failed with that pattern
+  // (27482094562, 27490459274, 27493343785) before this fix.
+  const knownPagesBeforeConnect = new Set(context.pages());
+
   // The wallet-connect trigger inside the CTA reads "Connect wallet".
   // It's `.wallet-button-connect` so we pin by class to dodge anything
   // else that might match "connect" on the page.
@@ -170,7 +181,6 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
     .click({ timeout: 20_000 });
   await shot(page, '03-picker-clicked');
 
-  const knownPagesBeforeConnect = new Set(context.pages());
   const approvalConnect = await waitForApprovalPopup({
     context,
     knownPages: knownPagesBeforeConnect,
