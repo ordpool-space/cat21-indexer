@@ -6,25 +6,25 @@ import * as fs from 'node:fs';
 import { waitForApprovalPopup } from './sdk-lib/approval-popup';
 
 /**
- * E2E (regtest mint) — cat21.space /dashboard/mint via Cat21 Wallet.
+ * E2E (regtest mint) — cat21.space /dashboard/mint via CAT-21 wallet.
  *
  * cat21.space sibling of ordpool's cat21wallet-mint-regtest spec.
  * Same RBF + onboarding notes apply (see the ordpool spec's file-
  * level docstring for the full backstory):
  *
- *   - Cat21 Wallet IS allowed to signal RBF (sequence = 0xfffffffd)
+ *   - CAT-21 wallet IS allowed to signal RBF (sequence = 0xfffffffd)
  *     because its mempool-acceleration UI guarantees `nLockTime=21`
  *     is preserved on any replacement. The check belongs in the
  *     mint-roundtrip iteration; this iteration pins the picker +
  *     connect path only.
  *
- *   - Cat21 Wallet onboards from a BIP-39 mnemonic; no cloned seed
+ *   - CAT-21 wallet onboards from a BIP-39 mnemonic; no cloned seed
  *     user-data-dir. The onboarding sequence (sign-in-link → 12
  *     inputs → password → dashboard) mirrors the SDK's
  *     `cat21wallet-onboard.spec.ts` and is embedded inline as
  *     beforeAll's primer.
  *
- *   - Cat21 Wallet's `getAddresses` returns MAINNET addresses
+ *   - CAT-21 wallet's `getAddresses` returns MAINNET addresses
  *     regardless of the dapp's Network.Regtest request, so the
  *     full mint round-trip needs SDK-level regtest-derivation
  *     plumbing that doesn't exist in the consumer flow yet. We
@@ -80,7 +80,7 @@ async function onboardCat21Wallet(page: Page): Promise<void> {
 
 test.beforeAll(async () => {
   if (!fs.existsSync(path.join(EXT_PATH, 'manifest.json'))) {
-    throw new Error(`Cat21 Wallet extension not unpacked at ${EXT_PATH}.`);
+    throw new Error(`CAT-21 wallet extension not unpacked at ${EXT_PATH}.`);
   }
 
   context = await chromium.launchPersistentContext('', {
@@ -123,13 +123,13 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   // CRITICAL ordering — snapshot existing pages BEFORE the connect
   // click. The Xverse spec hit this race three times before the fix
   // (see `e2e(regtest mint): fix the test-1 connect-popup race`
-  // commit on cat21-indexer). Cat21 Wallet's approval popup spawns
+  // commit on cat21-indexer). CAT-21 wallet's approval popup spawns
   // synchronously the same way.
   const knownPagesBeforeConnect = new Set(context.pages());
 
   await page.locator('button.wallet-button-connect').first().click();
 
-  // Picker modal — Cat21 Wallet sits in the "installed" section at
+  // Picker modal — CAT-21 wallet sits in the "installed" section at
   // the top of the modal. The wallet card isn't a `<button>` element
   // — it's a clickable container — so `getByRole('button', …)`
   // doesn't find it. Match the visible label text instead. The
@@ -137,9 +137,9 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   // "Wallet" on separate lines), so use a regex with `\s+` which
   // covers the whitespace between them.
   // The picker renders the wallet name inline with its description
-  // on a single line ("Cat21 Wallet Our own — hot wallet…"), so a
+  // on a single line ("CAT-21 wallet Our own — hot wallet…"), so a
   // `$`-anchored regex misses. Match by substring.
-  const cat21Picker = page.getByText(/Cat21\s+Wallet/i).first();
+  const cat21Picker = page.getByText(/CAT-21\s+wallet/i).first();
   await expect(cat21Picker).toBeVisible({ timeout: 20_000 });
   await cat21Picker.click({ timeout: 20_000 });
   await shot(page, '02-picker-clicked');

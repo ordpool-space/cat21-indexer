@@ -1,6 +1,6 @@
 name: E2E (regtest mint — cat21-wallet)
 
-# Cat21 Wallet variant of the regtest mint suite. Runs as a separate
+# CAT-21 wallet variant of the regtest mint suite. Runs as a separate
 # workflow so the two wallets iterate independently and CI signal
 # stays cleanly attributed.
 
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   regtest-mint-cat21wallet:
-    name: Regtest cat21.space mint via Cat21 Wallet
+    name: Regtest cat21.space mint via CAT-21 wallet
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -88,7 +88,7 @@ jobs:
         working-directory: sdk
         run: npx playwright install --with-deps chromium
 
-      # Cat21 Wallet doesn't ship a published .crx yet — build from
+      # CAT-21 wallet doesn't ship a published .crx yet — build from
       # source in CI. cat21-wallet is a public repo; checkout works
       # without auth.
       - name: Checkout cat21-wallet (extension source)
