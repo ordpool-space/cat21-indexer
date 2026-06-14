@@ -3,6 +3,13 @@ import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
+import {
+  getUtxos,
+  waitForElectrsSync,
+  rpc,
+  mineBlocks,
+  getTx,
+} from './sdk-lib/regtest-helpers';
 import { waitForApprovalPopup } from './sdk-lib/approval-popup';
 
 /**
@@ -182,4 +189,83 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   const paymentAddr = (await paymentCode.textContent())!.trim();
   console.log(`[cat21wallet] regtest payment address = ${paymentAddr}`);
   expect(paymentAddr).toMatch(/^bcrt1q/);
+
+  // ─── Full mint round-trip ─────────────────────────────────────
+  // Same flow as ordpool's, with cat21-indexer's data-testid
+  // selectors. CAT-21 wallet RBF policy assertion (sequence ==
+  // 0xfffffffd) lives at the bottom.
+  const FUND_AMOUNT_BTC = 0.001;
+  const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', paymentAddr, String(FUND_AMOUNT_BTC)).trim();
+  console.log(`[cat21wallet] funded ${paymentAddr} +${FUND_AMOUNT_BTC} BTC tx=${fundTxid}`);
+  const fundedTip = mineBlocks(1);
+  await waitForElectrsSync(fundedTip);
+  const fundUtxos = await getUtxos(paymentAddr);
+  expect(fundUtxos.length).toBeGreaterThan(0);
+
+  // Reload so the orchestrator picks up the new UTXO.
+  const knownBeforeReload = new Set(context.pages());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeReload,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+  await shot(page, '05-after-fund-reload');
+
+  // Wait for found-funds, set fee, click Mint.
+  const foundFunds = page.locator('[data-testid="mint-found-funds"]');
+  await expect(foundFunds).toBeVisible({ timeout: 90_000 });
+  const manualInput = page.locator('.fees-picker .manual-input');
+  await manualInput.fill('1');
+  await manualInput.press('Tab');
+  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+  await shot(page, '06-ready-to-mint');
+
+  const knownBeforeSign = new Set(context.pages());
+  await mintBtn.click();
+  const approvalSign = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await shot(approvalSign, '07-sign-approval');
+  await approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+    .click({ timeout: 30_000 });
+  await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+  const successCard = page.locator('[data-testid="mint-success"]');
+  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await shot(page, '08-success');
+  const successHref = await successCard.locator('a').first().getAttribute('href');
+  const txidMatch = successHref!.match(/\/tx\/([0-9a-f]{64})/);
+  expect(txidMatch).not.toBeNull();
+  const broadcastTxid = txidMatch![1];
+  console.log(`[cat21wallet] mint txid = ${broadcastTxid}`);
+
+  const confirmedTip = mineBlocks(1);
+  await waitForElectrsSync(confirmedTip);
+  const esploraTx = await getTx(broadcastTxid);
+  expect(esploraTx.locktime).toBe(21);
+  expect(esploraTx.status.block_hash).toBeTruthy();
+  expect(esploraTx.vout.length).toBeGreaterThanOrEqual(1);
+  expect(esploraTx.vout[0].value).toBe(546);
+  // CAT-21 wallet RBF policy: input sequence == 0xfffffffd.
+  // The ONE exception to the Xverse spec's ≥0xfffffffe rule.
+  expect(esploraTx.vin.length).toBeGreaterThan(0);
+  for (const vin of esploraTx.vin) {
+    expect(vin.sequence).toBe(0xfffffffd);
+  }
 });
