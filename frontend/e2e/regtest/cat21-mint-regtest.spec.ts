@@ -514,13 +514,51 @@ test('fee picker: tier clicks update the manual input + active state', async () 
   await expect(manualInput).toHaveValue('1', { timeout: 5_000 });
   await expect(buttons.nth(2)).toHaveClass(/tier-btn-active/);
 
-  // Typing into the manual input overrides — no tier is active for
-  // a rate that doesn't match any tier (7 ≠ 1, 3, 5).
+  // ─── Manual-input propagates to the orchestrator simulation ───
+  // Maintainer-reported regression: "typing in the fee box" had no
+  // visible effect on cat21.space. The picker's tier-active state
+  // moving is necessary but not sufficient — the rate signal also
+  // has to feed the downstream simulation that the summary section
+  // displays. We pin that by reading the `Miner fee` value at
+  // rate=1, then typing 7 and asserting it goes up.
+  const minerFeeVal = page.locator(
+    '[data-testid="mint-summary-section"] .mint-summary-row',
+  ).filter({ hasText: /Miner fee/ }).locator('.val');
+  await expect(minerFeeVal).toBeVisible({ timeout: 10_000 });
+  const feeAt1Text = (await minerFeeVal.textContent())!.trim();
+  const feeAt1 = Number(feeAt1Text.replace(/[^\d]/g, ''));
+  expect(Number.isFinite(feeAt1)).toBe(true);
+  expect(feeAt1).toBeGreaterThan(0);
+
+  // Type a custom rate. 7 deliberately doesn't match any tier so it
+  // also pins the tier-active fall-back behaviour.
   await manualInput.fill('7');
   await manualInput.press('Tab');
-  // None of the four tiers should claim active after a custom rate.
   for (let i = 0; i < 4; i++) {
     await expect(buttons.nth(i)).not.toHaveClass(/tier-btn-active/);
   }
+
+  // Wait for `simulations$` to re-emit at the new rate. Higher rate
+  // means proportionally larger miner fee. We don't pin the exact
+  // ratio (the simulation also reserves dust + considers the
+  // change-fold rule) — just that it moves in the right direction
+  // and by a non-trivial margin (≥ 3× covers regression noise).
+  await expect.poll(async () => {
+    const t = (await minerFeeVal.textContent())!.trim();
+    return Number(t.replace(/[^\d]/g, ''));
+  }, { timeout: 5_000, message: 'miner fee never updated after typing rate=7' })
+    .toBeGreaterThan(feeAt1 * 3);
+
+  const feeAt7Text = (await minerFeeVal.textContent())!.trim();
+  const feeAt7 = Number(feeAt7Text.replace(/[^\d]/g, ''));
+  console.log(`[manual-input] miner fee at 1 sat/vB = ${feeAt1}; at 7 sat/vB = ${feeAt7} (×${(feeAt7 / feeAt1).toFixed(2)})`);
   await shot(page, 'fp-04-manual-override');
+
+  // Round-trip back to 1 to prove the propagation isn't one-way.
+  await manualInput.fill('1');
+  await manualInput.press('Tab');
+  await expect.poll(async () => {
+    const t = (await minerFeeVal.textContent())!.trim();
+    return Number(t.replace(/[^\d]/g, ''));
+  }, { timeout: 5_000 }).toBeLessThan(feeAt7);
 });
