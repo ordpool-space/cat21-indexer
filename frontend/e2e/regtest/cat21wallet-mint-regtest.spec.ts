@@ -164,15 +164,22 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
 
   // The connect CTA card disappears once `connectedWallet` populates.
-  // Pin THAT signal — `mint-cta` becomes hidden. We deliberately don't
-  // pin `mint-fee-section` (which would also confirm connection)
-  // because that testid requires `selectedRow !== null` which in turn
-  // requires viable UTXOs. CAT-21 wallet returns MAINNET bc1q
-  // addresses here, and our regtest electrs has zero UTXOs at that
-  // address, so no row gets selected, no fee-section renders — the
-  // mint-cta disappearance is the strongest signal we can pin in
-  // iteration 1 (before the regtest-derivation fix lands in
-  // iteration 2).
   await expect(cta).toBeHidden({ timeout: 30_000 });
   await shot(page, '04-connected');
+
+  // ─── Path-1 proof: payment address is REGTEST bcrt1q ──────────
+  // CAT-21 wallet's `getAddresses` now honors the `network` param
+  // (SDK connector change at commit 8d91a5c maps Network.Regtest →
+  // 'devnet' and forwards it to the wallet). The empty-state hint
+  // (`[data-testid="mint-no-utxos"]`) renders the connected payment
+  // address inside a `<code>` — it must now start with `bcrt1q…`
+  // instead of `bc1q…`. Pinning this surfaces a connector
+  // regression immediately.
+  const noUtxos = page.locator('[data-testid="mint-no-utxos"]');
+  await expect(noUtxos).toBeVisible({ timeout: 60_000 });
+  const paymentCode = noUtxos.locator('code').first();
+  await expect(paymentCode).toBeVisible({ timeout: 30_000 });
+  const paymentAddr = (await paymentCode.textContent())!.trim();
+  console.log(`[cat21wallet] regtest payment address = ${paymentAddr}`);
+  expect(paymentAddr).toMatch(/^bcrt1q/);
 });
