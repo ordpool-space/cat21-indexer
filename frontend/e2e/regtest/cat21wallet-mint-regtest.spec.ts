@@ -523,8 +523,11 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
       return true;
     },
   });
+  // Catch any "page closed" race during the Deny click — the
+  // popup may self-close from the click before Playwright's
+  // click action completes. Ordpool run 27509961259 hit this.
   await sign.getByRole('button', { name: /^(deny|cancel|reject)$/i }).first()
-    .click({ timeout: 10_000 });
+    .click({ timeout: 10_000 }).catch(() => undefined);
   await sign.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
 
   await page.waitForTimeout(2_000);
