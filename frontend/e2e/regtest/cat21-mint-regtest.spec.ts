@@ -421,7 +421,20 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   console.log(`[asset-scanner] cat-mock target txid=${fundTxid} (small UTXO ${SMALL_FUND_SATS} sat)`);
   const tip = mineBlocks(1);
   await waitForElectrsSync(tip);
-  const small = (await getUtxos(paymentAddress)).find((u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid);
+  // electrs's address index can lag behind the chain tip by ~hundreds
+  // of ms after a block is mined — `waitForElectrsSync` only blocks
+  // until `/blocks/tip/height` advances, not until per-address UTXO
+  // queries see the new outputs. Poll-with-deadline so the test
+  // tolerates the lag.
+  let small: { txid: string; vout: number; value: number } | undefined;
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    small = (await getUtxos(paymentAddress)).find(
+      (u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid,
+    );
+    if (small) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
   if (!small) {
     throw new Error(`could not find the ${SMALL_FUND_SATS}-sat funding UTXO under ${paymentAddress}`);
   }
