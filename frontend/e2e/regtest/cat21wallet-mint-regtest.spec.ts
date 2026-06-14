@@ -136,7 +136,10 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   // label wraps across two lines in the modal layout ("Cat21" and
   // "Wallet" on separate lines), so use a regex with `\s+` which
   // covers the whitespace between them.
-  const cat21Picker = page.getByText(/^Cat21\s+Wallet$/i).first();
+  // The picker renders the wallet name inline with its description
+  // on a single line ("Cat21 Wallet Our own — hot wallet…"), so a
+  // `$`-anchored regex misses. Match by substring.
+  const cat21Picker = page.getByText(/Cat21\s+Wallet/i).first();
   await expect(cat21Picker).toBeVisible({ timeout: 20_000 });
   await cat21Picker.click({ timeout: 20_000 });
   await shot(page, '02-picker-clicked');
