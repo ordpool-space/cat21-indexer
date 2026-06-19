@@ -6,6 +6,7 @@ import { Block } from './block/block';
 import { Dashboard } from './dashboard/dashboard';
 import { ComingSoon } from './dashboard/coming-soon/coming-soon';
 import { Mint } from './dashboard/mint/mint';
+import { Transfer } from './dashboard/transfer/transfer';
 import { DebugColors } from './debug-colors/debug-colors';
 import { Details } from './details/details';
 import { MyCats } from './my-cats/my-cats';
@@ -34,8 +35,8 @@ export const routes: Routes = [
   { path: 'dashboard/mint', component: Mint, data: { smallHeader: true }, title: 'CAT-21 - Mint a cat' },
   {
     path: 'dashboard/transfer',
-    component: ComingSoon,
-    data: { smallHeader: true, heading: 'Transfer a cat', subtitle: 'Send one of your cats to another address.' },
+    component: Transfer,
+    data: { smallHeader: true },
     title: 'CAT-21 - Transfer a cat',
   },
   {
