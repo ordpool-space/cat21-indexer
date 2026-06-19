@@ -7,6 +7,9 @@ import { Dashboard } from './dashboard/dashboard';
 import { ComingSoon } from './dashboard/coming-soon/coming-soon';
 import { Mint } from './dashboard/mint/mint';
 import { Transfer } from './dashboard/transfer/transfer';
+import { TradeLanding } from './dashboard/trade/trade-landing/trade-landing';
+import { MakeOffer } from './dashboard/trade/make-offer/make-offer';
+import { AcceptOffer } from './dashboard/trade/accept-offer/accept-offer';
 import { DebugColors } from './debug-colors/debug-colors';
 import { Details } from './details/details';
 import { MyCats } from './my-cats/my-cats';
@@ -41,9 +44,21 @@ export const routes: Routes = [
   },
   {
     path: 'dashboard/trade',
-    component: ComingSoon,
-    data: { smallHeader: true, heading: 'Trade a cat', subtitle: 'The native CAT-21 marketplace. The ultimate goal — list, bid, settle on-chain.' },
+    component: TradeLanding,
+    data: { smallHeader: true },
     title: 'CAT-21 - Trade a cat',
+  },
+  {
+    path: 'dashboard/trade/make',
+    component: MakeOffer,
+    data: { smallHeader: true },
+    title: 'CAT-21 - Make a buy-offer',
+  },
+  {
+    path: 'dashboard/trade/accept',
+    component: AcceptOffer,
+    data: { smallHeader: true },
+    title: 'CAT-21 - Accept a buy-offer',
   },
 
   { path: '**', component: Start, title: 'CAT-21 - Rescue the cats!' },

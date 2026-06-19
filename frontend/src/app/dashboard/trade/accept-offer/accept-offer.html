@@ -1,0 +1,113 @@
+<h1 data-testid="accept-offer-heading">Accept a buy-offer</h1>
+
+<p class="mb-3">
+  <a routerLink="/dashboard/trade">← Back to trade</a>
+</p>
+
+@if (!connectedWallet()) {
+  <div class="connect-card" data-testid="accept-offer-cta">
+    <h2>Connect your wallet to accept an offer</h2>
+    <p class="mb-3">
+      You sign input 0 (your cat) at your ordinals address; the buyer
+      already signed their funding inputs. We finalise and broadcast.
+    </p>
+    <app-wallet-connect />
+  </div>
+} @else {
+  @if (state() === 'success' && successTxId(); as txid) {
+    <section class="accept-offer-section" data-testid="accept-offer-success">
+      <h2>✓ Offer accepted, tx broadcast</h2>
+      <p>Broadcast tx: <a [href]="txLinkBase + txid" target="_blank" rel="noopener noreferrer">{{ txid }}</a></p>
+      <p>
+        The cat will move to the buyer's receive address on the next
+        block. The buyer's payment lands at your address in the same tx.
+      </p>
+      <button type="button" class="btn btn-primary" (click)="onResetClick()" data-testid="accept-offer-another-cta">
+        Accept another offer
+      </button>
+    </section>
+  } @else {
+    <section class="accept-offer-section" data-testid="accept-offer-cat-section">
+      <h2 class="accept-offer-section-heading">1. Which of your cats is the offer for?</h2>
+      <label class="form-label" for="accept-offer-cat-outpoint">Your cat's UTXO (<code>txid:vout</code>)</label>
+      <input
+        id="accept-offer-cat-outpoint"
+        type="text"
+        autocomplete="off"
+        class="form-control"
+        placeholder="abc123…def:0"
+        [value]="catOutpointInput()"
+        (input)="onCatOutpointChange($any($event.target).value)"
+        data-testid="accept-offer-cat-outpoint-input" />
+    </section>
+
+    <section class="accept-offer-section" data-testid="accept-offer-floor-section">
+      <h2 class="accept-offer-section-heading">2. Minimum price you'll accept (sats)</h2>
+      <input
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        class="form-control"
+        placeholder="e.g. 100000"
+        [value]="floorPriceInput()"
+        (input)="onFloorPriceChange($any($event.target).value)"
+        data-testid="accept-offer-floor-input" />
+      <p class="text-muted small mt-1">
+        Any pasted offer below this price will be marked invalid. You
+        can leave it at 0 to skip the check (not recommended).
+      </p>
+    </section>
+
+    <section class="accept-offer-section" data-testid="accept-offer-paste-section">
+      <h2 class="accept-offer-section-heading">3. Paste the offer PSBT (base64 or hex)</h2>
+      <textarea
+        rows="4"
+        class="form-control"
+        autocomplete="off"
+        placeholder="cHNidP8BAH0CAAA…"
+        [value]="pastedOffer() ?? ''"
+        (input)="onPasteChange($any($event.target).value)"
+        data-testid="accept-offer-paste-textarea"></textarea>
+    </section>
+
+    @if (state() === 'parsed' && parsedOffer(); as offer) {
+      <section class="accept-offer-section accept-offer-deal" data-testid="accept-offer-summary-section">
+        <h2 class="accept-offer-section-heading">4. Review the offer</h2>
+        <div class="accept-offer-summary">
+          <div class="accept-offer-summary-row">
+            <span class="lbl">Your cat (input 0)</span>
+            <code class="val">{{ offer.catUtxo.txid }}:{{ offer.catUtxo.vout }}</code>
+          </div>
+          <div class="accept-offer-summary-row">
+            <span class="lbl">You receive</span>
+            <span class="val">{{ offer.pricePaidSats + offer.postageSats | number }} sat (price {{ offer.pricePaidSats | number }} + postage {{ offer.postageSats }})</span>
+          </div>
+        </div>
+        <p class="text-muted small mt-2">
+          By signing, you'll move the cat to the buyer's receive
+          address (encoded in the PSBT). The fee is already baked into
+          the offer — no extra cost to you.
+        </p>
+      </section>
+    } @else if (state() === 'invalid' && humanRejection(); as rej) {
+      <p class="accept-offer-alert" role="alert" data-testid="accept-offer-invalid">{{ rej }}</p>
+    }
+
+    @if (errorMessage(); as err) {
+      <p class="text-danger small mt-3" role="alert" data-testid="accept-offer-error">{{ err }}</p>
+    }
+
+    <button
+      type="button"
+      class="btn btn-primary mt-3"
+      data-testid="accept-offer-sign-cta"
+      [disabled]="!canAccept() || state() === 'accepting'"
+      (click)="onAcceptClick()">
+      @if (state() === 'accepting') {
+        Signing and broadcasting…
+      } @else {
+        Sign and accept offer
+      }
+    </button>
+  }
+}

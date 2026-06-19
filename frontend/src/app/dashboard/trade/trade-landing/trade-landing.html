@@ -1,0 +1,40 @@
+<h1 data-testid="trade-heading">Trade a cat</h1>
+
+<p class="mb-4">
+  CAT-21 buy-offers are <strong>buyer-initiated</strong>, ord-style.
+  The buyer constructs a half-signed PSBT that offers a price for the
+  seller's cat; the seller countersigns input 0 and broadcasts. No
+  intermediary, no marketplace listing, no escrow — share the offer
+  any way you like.
+</p>
+
+<div class="trade-card-grid">
+  <a routerLink="/dashboard/trade/make" class="trade-card" data-testid="trade-make-link">
+    <h2>Make an offer</h2>
+    <p>
+      You want to <strong>buy</strong> someone else's cat. Pick the cat,
+      set a price, sign your funding inputs; share the half-signed PSBT
+      with the seller.
+    </p>
+    <span class="trade-card-cta">Buyer side →</span>
+  </a>
+
+  <a routerLink="/dashboard/trade/accept" class="trade-card" data-testid="trade-accept-link">
+    <h2>Accept an offer</h2>
+    <p>
+      You've been offered Bitcoin for one of your cats. Paste the
+      offer PSBT, review the price and recipient, countersign input 0
+      and broadcast.
+    </p>
+    <span class="trade-card-cta">Seller side →</span>
+  </a>
+</div>
+
+<p class="mt-4 text-muted small">
+  <strong>Offers can be shared in the wild.</strong> A buy-offer PSBT
+  reveals nothing that won't land on Bitcoin anyway once accepted, and
+  it's only useful to a willing buyer (it requires their own funding
+  inputs + signatures). Distribute by URL, QR, paste, Discord, gist,
+  email — whichever's most ergonomic. No transport-layer secrecy
+  needed.
+</p>

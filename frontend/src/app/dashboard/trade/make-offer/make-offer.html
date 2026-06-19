@@ -1,0 +1,198 @@
+<h1 data-testid="make-offer-heading">Make a buy-offer</h1>
+
+<p class="mb-3">
+  <a routerLink="/dashboard/trade">← Back to trade</a>
+</p>
+
+@if (!connectedWallet()) {
+  <div class="connect-card" data-testid="make-offer-cta">
+    <h2>Connect your wallet to make an offer</h2>
+    <p class="mb-3">
+      You sign the buyer-side inputs of the PSBT. The seller's input 0
+      stays unsigned until they accept — that's what makes the offer
+      a "buy-offer" artifact rather than a broadcastable tx.
+    </p>
+    <app-wallet-connect />
+  </div>
+} @else {
+  @if (state() === 'success' && offerArtifact(); as artifact) {
+    <section class="make-offer-section" data-testid="make-offer-success">
+      <h2>✓ Offer ready to share</h2>
+      <p class="text-muted small">
+        Share the artifact below with the seller. They open
+        <em>Accept an offer</em>, paste it, review the deal, and sign
+        input 0 to broadcast. The transport doesn't matter — see the
+        HARD RULE in the workspace CLAUDE.md.
+      </p>
+
+      <label class="form-label mt-3" for="make-offer-artifact">Offer PSBT (base64)</label>
+      <textarea
+        id="make-offer-artifact"
+        class="form-control"
+        rows="4"
+        readonly
+        [value]="artifact.base64"
+        data-testid="make-offer-artifact-textarea"></textarea>
+      <button
+        type="button"
+        class="btn btn-outline-secondary mt-2"
+        (click)="onCopyArtifactClick()"
+        data-testid="make-offer-copy-artifact-cta">
+        Copy PSBT
+      </button>
+
+      @if (shareableUrl(); as url) {
+        <label class="form-label mt-3" for="make-offer-shareable-url">Shareable URL (auto-fills the accept page)</label>
+        <input
+          id="make-offer-shareable-url"
+          type="text"
+          class="form-control"
+          readonly
+          [value]="url"
+          data-testid="make-offer-shareable-url-input" />
+        <button
+          type="button"
+          class="btn btn-outline-secondary mt-2"
+          (click)="onCopyShareableUrlClick()"
+          data-testid="make-offer-copy-url-cta">
+          Copy URL
+        </button>
+      }
+
+      <button
+        type="button"
+        class="btn btn-primary mt-3"
+        (click)="onResetClick()"
+        data-testid="make-offer-another-cta">
+        Make another offer
+      </button>
+    </section>
+  } @else if (state() === 'loading-utxos') {
+    <p aria-live="polite" data-testid="make-offer-loading">Loading your funding UTXOs…</p>
+  } @else {
+    <section class="make-offer-section" data-testid="make-offer-target-section">
+      <h2 class="make-offer-section-heading">1. Which cat do you want to buy?</h2>
+      <p class="text-muted small">
+        Paste the seller's current cat UTXO (<code>txid:vout</code>) and
+        the seller's UTXO scriptPubKey (hex). Both are visible on any
+        block explorer. Future versions will auto-fetch from ord by cat
+        number.
+      </p>
+
+      <label class="form-label" for="make-offer-cat-number">Cat number (optional)</label>
+      <input
+        id="make-offer-cat-number"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        class="form-control mb-2"
+        placeholder="e.g. 42"
+        [value]="draft().catNumberInput"
+        (input)="onCatNumberChange($any($event.target).value)"
+        data-testid="make-offer-cat-number-input" />
+
+      <label class="form-label" for="make-offer-outpoint">Cat UTXO (<code>txid:vout</code>)</label>
+      <input
+        id="make-offer-outpoint"
+        type="text"
+        autocomplete="off"
+        class="form-control mb-2"
+        placeholder="abc123…def:0"
+        [value]="draft().catOutpointInput"
+        (input)="onCatOutpointChange($any($event.target).value)"
+        data-testid="make-offer-outpoint-input" />
+
+      <label class="form-label" for="make-offer-script">Seller scriptPubKey (hex)</label>
+      <input
+        id="make-offer-script"
+        type="text"
+        autocomplete="off"
+        class="form-control"
+        placeholder="51205df12ac2…"
+        [value]="draft().sellerScriptHexInput"
+        (input)="onSellerScriptHexChange($any($event.target).value)"
+        data-testid="make-offer-script-input" />
+    </section>
+
+    <section class="make-offer-section" data-testid="make-offer-deal-section">
+      <h2 class="make-offer-section-heading">2. The deal</h2>
+      <label class="form-label" for="make-offer-seller-payment">Seller's payment address</label>
+      <input
+        id="make-offer-seller-payment"
+        type="text"
+        autocomplete="off"
+        class="form-control mb-2"
+        placeholder="bc1q… or 3… or bc1p…"
+        [value]="draft().sellerPaymentAddressInput"
+        (input)="onSellerPaymentAddressChange($any($event.target).value)"
+        data-testid="make-offer-seller-payment-input" />
+
+      <label class="form-label" for="make-offer-price">Your offer price (sats)</label>
+      <input
+        id="make-offer-price"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        class="form-control"
+        placeholder="e.g. 100000"
+        [value]="draft().priceSatsInput"
+        (input)="onPriceSatsChange($any($event.target).value)"
+        data-testid="make-offer-price-input" />
+      <p class="text-muted small mt-1">
+        The seller's output also carries back the 546-sat cat postage,
+        so they receive <code>priceSats + 546</code> total. Standard
+        ord-style accounting.
+      </p>
+    </section>
+
+    <section class="make-offer-section" data-testid="make-offer-fee-section">
+      <h2 class="make-offer-section-heading">3. Pick a fee rate</h2>
+      <app-fees-picker [minFeeRate]="0.1" />
+    </section>
+
+    @if (simulationOutcome()?.simulation; as sim) {
+      <section class="make-offer-section" data-testid="make-offer-summary-section">
+        <h2 class="make-offer-section-heading">4. Confirm</h2>
+        <div class="make-offer-summary">
+          <div class="make-offer-summary-row">
+            <span class="lbl">You're paying</span>
+            <span class="val">{{ priceSats() | number }} sat to the seller</span>
+          </div>
+          <div class="make-offer-summary-row">
+            <span class="lbl">Miner fee</span>
+            <span class="val">{{ sim.feeSats | number }} sat ({{ sim.vsize }} vB)</span>
+          </div>
+          <div class="make-offer-summary-row">
+            <span class="lbl">Cat lands at</span>
+            <code class="val">{{ buyerReceiveAddress() }}</code>
+          </div>
+          <div class="make-offer-summary-row">
+            <span class="lbl">Change back to you</span>
+            <span class="val">{{ sim.changeSats | number }} sat</span>
+          </div>
+        </div>
+      </section>
+    } @else if (simulationOutcome()?.insufficient) {
+      <p class="text-warning small mt-3" data-testid="make-offer-insufficient">
+        Not enough funds in your payment address to cover the price + fee at this rate.
+      </p>
+    }
+
+    @if (errorMessage(); as err) {
+      <p class="text-danger small mt-3" role="alert" data-testid="make-offer-error">{{ err }}</p>
+    }
+
+    <button
+      type="button"
+      class="btn btn-primary mt-3"
+      data-testid="make-offer-cta"
+      [disabled]="!canCreateOffer() || state() === 'signing'"
+      (click)="onCreateOfferClick()">
+      @if (state() === 'signing') {
+        Signing offer…
+      } @else {
+        Sign and create offer
+      }
+    </button>
+  }
+}
