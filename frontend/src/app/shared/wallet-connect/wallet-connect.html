@@ -48,11 +48,17 @@
     #walletPopover="ngbPopover"
     type="button"
     class="wallet-button wallet-button-connected"
+    [class.wallet-button-network-mismatch]="networkMismatch()"
     [ngbPopover]="popContent"
     [popoverTitle]="popTitle"
     [autoClose]="'outside'"
     popoverClass="wallet-popover"
-    [title]="'Connected via ' + knownOrdinalWallets[wallet.type].label">
+    [title]="networkMismatch()
+      ? 'Wallet is on the wrong network — expected ' + expectedNetworkGroup
+      : 'Connected via ' + knownOrdinalWallets[wallet.type].label">
+    @if (networkMismatch()) {
+      <span class="wallet-mismatch-icon" aria-hidden="true">⚠</span>
+    }
     <span class="wallet-label">{{ knownOrdinalWallets[wallet.type].label }}</span>
     <span class="addr-short">{{ shortAddress(wallet.ordinalsAddress) }}</span>
   </button>
@@ -62,6 +68,13 @@
   </ng-template>
 
   <ng-template #popContent>
+    @if (networkMismatch()) {
+      <div class="network-mismatch-banner" role="alert">
+        <strong>Wrong network.</strong> This site expects <code>{{ expectedNetworkGroup }}</code>, but your wallet
+        returned a {{ wallet.paymentAddress.startsWith('bc1') ? 'mainnet' : (wallet.paymentAddress.startsWith('bcrt1') ? 'regtest' : 'testnet') }} address.
+        Switch the network in your wallet, then reconnect.
+      </div>
+    }
     <div class="addr-row">
       <div class="addr-label">Ordinals (where your cats live)</div>
       <code class="addr-value" [title]="wallet.ordinalsAddress">{{ shortAddress(wallet.ordinalsAddress) }}</code>

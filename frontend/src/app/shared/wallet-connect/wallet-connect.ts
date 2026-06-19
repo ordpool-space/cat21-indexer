@@ -30,6 +30,14 @@ export class WalletConnect {
   private readonly walletsRaw = toSignal(this.walletService.wallets$, { initialValue: { installedWallets: [], notInstalledWallets: [] } });
 
   /**
+   * `true` when the connected wallet's address prefix doesn't match
+   * the configured Bitcoin network (mainnet/regtest/testnet).
+   * Drives the red banner inline with the wallet button.
+   */
+  readonly networkMismatch = toSignal(this.walletService.networkMismatch$, { initialValue: false });
+  readonly expectedNetworkGroup = this.walletService.expectedNetworkGroup;
+
+  /**
    * cat21.space is ordinals-only — Alby's Lightning+Nostr surface can't
    * hold cat sats, so we drop wallets whose `onChainOrdinals` flag is
    * explicitly false. Wallets where the flag is omitted are kept (the
