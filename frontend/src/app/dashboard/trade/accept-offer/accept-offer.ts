@@ -79,6 +79,9 @@ export class AcceptOffer implements OnInit {
 
   // ---------- Lifecycle ----------
 
+  /** Audit M5 — wallet-swap form reset. See transfer.ts for the rationale. */
+  private lastSeenOrdinalsAddress: string | null = null;
+
   constructor() {
     // When the seller picks a cat from the dropdown, push it to the
     // orchestrator so its validation knows which cat the pasted offer
@@ -101,6 +104,22 @@ export class AcceptOffer implements OnInit {
         // builds the seller-payment-output against this address.
         this.orchestrator.setExpectedSellerPaymentAddress(wallet.paymentAddress);
       }
+    });
+
+    // Wallet-swap form reset (audit M5).
+    effect(() => {
+      const w = this.walletSignal();
+      const current = w?.ordinalsAddress ?? null;
+      if (this.lastSeenOrdinalsAddress === null) {
+        this.lastSeenOrdinalsAddress = current;
+        return;
+      }
+      if (this.lastSeenOrdinalsAddress === current) return;
+      this.lastSeenOrdinalsAddress = current;
+      this.selectedInscriptionId.set(null);
+      this.floorPriceInput.set('');
+      // pastedOffer / parsedOffer are owned by the orchestrator's own
+      // wallet-change reset (Cat21AcceptOfferOrchestrator).
     });
   }
 

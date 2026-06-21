@@ -115,6 +115,16 @@ export class Transfer {
     return !!outcome && !outcome.insufficient && !!outcome.simulation;
   });
 
+  /**
+   * Wallet-swap form reset (audit M5). When the connected wallet's
+   * ordinals address changes (different wallet picked AND it's not
+   * just a BehaviorSubject re-emission), clear the local form fields
+   * the orchestrator doesn't own: typed recipient, picked cat. The
+   * orchestrator itself already resets its own state on wallet change;
+   * this effect closes the form-state-leak gap.
+   */
+  private lastSeenOrdinalsAddress: string | null = null;
+
   constructor() {
     // When the user picks a cat from the dropdown, push it to the
     // orchestrator as the Cat21Holding it expects. The orchestrator's
@@ -132,6 +142,23 @@ export class Transfer {
         value: h.value,
       };
       this.orchestrator.setCatUtxo(holding);
+    });
+
+    // Wallet-swap form reset (audit M5).
+    effect(() => {
+      const w = this.connectedWallet();
+      const currentAddress = w?.ordinalsAddress ?? null;
+      // First emission (null → wallet, or wallet → wallet stable) is
+      // recorded but doesn't reset; only actual switches do.
+      if (this.lastSeenOrdinalsAddress === null) {
+        this.lastSeenOrdinalsAddress = currentAddress;
+        return;
+      }
+      if (this.lastSeenOrdinalsAddress === currentAddress) return;
+      this.lastSeenOrdinalsAddress = currentAddress;
+      // Wallet swapped. Clear form fields the orchestrator doesn't own.
+      this.selectedInscriptionId.set(null);
+      this.recipientInput.set('');
     });
   }
 

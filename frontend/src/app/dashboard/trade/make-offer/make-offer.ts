@@ -78,6 +78,32 @@ export class MakeOffer {
     return `${window.location.origin}/dashboard/trade/accept?offer=${encodeURIComponent(art.base64)}`;
   });
 
+  /** Audit M5 — wallet-swap form reset. See transfer.ts for the rationale. */
+  private lastSeenOrdinalsAddress: string | null = null;
+
+  constructor() {
+    effect(() => {
+      const w = this.connectedWallet();
+      const current = w?.ordinalsAddress ?? null;
+      if (this.lastSeenOrdinalsAddress === null) {
+        this.lastSeenOrdinalsAddress = current;
+        return;
+      }
+      if (this.lastSeenOrdinalsAddress === current) return;
+      this.lastSeenOrdinalsAddress = current;
+      // Wallet swapped — clear local form fields the orchestrator doesn't own.
+      this.draft.set({
+        catNumberInput: '',
+        sellerPaymentAddressInput: '',
+        priceSatsInput: '',
+      });
+      this.lookupState.set('idle');
+      this.lookupError.set(null);
+      this.resolvedSellerAddress.set(null);
+      this.lookupRequestId++; // invalidate any in-flight response
+    });
+  }
+
   // ---------- Commands ----------
 
   /**
