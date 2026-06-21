@@ -12,6 +12,11 @@
       stays unsigned until they accept — that's what makes the offer
       a "buy-offer" artifact rather than a broadcastable tx.
     </p>
+    <p class="mb-3">
+      <strong>Safe wallets:</strong> Xverse and Leather. Unisat works
+      but uses one address for both payments and ordinals, so be
+      careful there.
+    </p>
     <app-wallet-connect />
   </div>
 } @else {
@@ -73,45 +78,45 @@
     <section class="make-offer-section" data-testid="make-offer-target-section">
       <h2 class="make-offer-section-heading">1. Which cat do you want to buy?</h2>
       <p class="text-muted small">
-        Paste the seller's current cat UTXO (<code>txid:vout</code>) and
-        the seller's UTXO scriptPubKey (hex). Both are visible on any
-        block explorer. Future versions will auto-fetch from ord by cat
-        number.
+        Type the cat number. We look up the seller's current address
+        and the cat's on-chain location automatically.
       </p>
 
-      <label class="form-label" for="make-offer-cat-number">Cat number (optional)</label>
-      <input
-        id="make-offer-cat-number"
-        type="text"
-        inputmode="numeric"
-        autocomplete="off"
-        class="form-control mb-2"
-        placeholder="e.g. 42"
-        [value]="draft().catNumberInput"
-        (input)="onCatNumberChange($any($event.target).value)"
-        data-testid="make-offer-cat-number-input" />
+      <div class="d-flex gap-2 align-items-end">
+        <div class="flex-grow-1">
+          <label class="form-label" for="make-offer-cat-number">Cat number</label>
+          <input
+            id="make-offer-cat-number"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            class="form-control"
+            placeholder="e.g. 42"
+            [value]="draft().catNumberInput"
+            (input)="onCatNumberChange($any($event.target).value)"
+            data-testid="make-offer-cat-number-input" />
+        </div>
+        <button
+          type="button"
+          class="btn btn-outline-primary"
+          (click)="onLookupCatClick()"
+          [disabled]="lookupState() === 'loading' || !draft().catNumberInput.trim()"
+          data-testid="make-offer-lookup-cta">
+          @if (lookupState() === 'loading') {
+            Looking up…
+          } @else {
+            Look up cat
+          }
+        </button>
+      </div>
 
-      <label class="form-label" for="make-offer-outpoint">Cat UTXO (<code>txid:vout</code>)</label>
-      <input
-        id="make-offer-outpoint"
-        type="text"
-        autocomplete="off"
-        class="form-control mb-2"
-        placeholder="abc123…def:0"
-        [value]="draft().catOutpointInput"
-        (input)="onCatOutpointChange($any($event.target).value)"
-        data-testid="make-offer-outpoint-input" />
-
-      <label class="form-label" for="make-offer-script">Seller scriptPubKey (hex)</label>
-      <input
-        id="make-offer-script"
-        type="text"
-        autocomplete="off"
-        class="form-control"
-        placeholder="51205df12ac2…"
-        [value]="draft().sellerScriptHexInput"
-        (input)="onSellerScriptHexChange($any($event.target).value)"
-        data-testid="make-offer-script-input" />
+      @if (lookupState() === 'ready' && resolvedSellerAddress(); as sellerAddr) {
+        <p class="text-success small mt-2" data-testid="make-offer-resolved">
+          ✓ Found. Currently owned by <code>{{ sellerAddr }}</code>.
+        </p>
+      } @else if (lookupState() === 'error' && lookupError(); as err) {
+        <p class="text-danger small mt-2" data-testid="make-offer-lookup-error">{{ err }}</p>
+      }
     </section>
 
     <section class="make-offer-section" data-testid="make-offer-deal-section">

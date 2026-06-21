@@ -11,6 +11,11 @@
       You sign input 0 (your cat) at your ordinals address; the buyer
       already signed their funding inputs. We finalise and broadcast.
     </p>
+    <p class="mb-3">
+      <strong>Safe wallets:</strong> Xverse and Leather. Unisat works
+      but uses one address for both payments and ordinals, so be
+      careful there.
+    </p>
     <app-wallet-connect />
   </div>
 } @else {
@@ -29,16 +34,32 @@
   } @else {
     <section class="accept-offer-section" data-testid="accept-offer-cat-section">
       <h2 class="accept-offer-section-heading">1. Which of your cats is the offer for?</h2>
-      <label class="form-label" for="accept-offer-cat-outpoint">Your cat's UTXO (<code>txid:vout</code>)</label>
-      <input
-        id="accept-offer-cat-outpoint"
-        type="text"
-        autocomplete="off"
-        class="form-control"
-        placeholder="abc123…def:0"
-        [value]="catOutpointInput()"
-        (input)="onCatOutpointChange($any($event.target).value)"
-        data-testid="accept-offer-cat-outpoint-input" />
+      @if (myHoldings().length === 0 && !holdingsResource.isLoading()) {
+        <p class="text-muted small" data-testid="accept-offer-no-cats">
+          We didn't find any cats at this wallet's ordinals address. To
+          accept an offer you have to actually hold the cat the buyer
+          is bidding on.
+        </p>
+      } @else if (holdingsResource.isLoading()) {
+        <p class="text-muted small">Loading your cats…</p>
+      } @else {
+        <select
+          class="form-select"
+          [value]="selectedInscriptionId() ?? ''"
+          (change)="onCatPick($any($event.target).value)"
+          data-testid="accept-offer-cat-picker">
+          <option value="">— pick the cat —</option>
+          @for (h of myHoldings(); track h.inscriptionId) {
+            <option [value]="h.inscriptionId">Cat #{{ h.catNumber }}</option>
+          }
+        </select>
+        @if (selectedHolding(); as h) {
+          <p class="text-muted small mt-2" data-testid="accept-offer-cat-detail">
+            Cat #{{ h.catNumber }} currently lives at
+            <code>{{ h.txid }}:{{ h.vout }}</code>.
+          </p>
+        }
+      }
     </section>
 
     <section class="accept-offer-section" data-testid="accept-offer-floor-section">

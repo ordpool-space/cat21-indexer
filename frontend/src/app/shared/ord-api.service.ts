@@ -42,6 +42,34 @@ export interface OrdSatResponse {
 }
 
 /**
+ * Subset of ord's /inscription/<id> response we actually consume. The
+ * `satpoint` field is the cat's current location encoded as
+ * `txid:vout:offset` — that's the on-chain UTXO holding the cat right
+ * now (not the mint outpoint).
+ */
+export interface OrdInscriptionResponse {
+  id: string;
+  number: number;
+  address: string | null;
+  /** `txid:vout:offset` — offset is always `0` for CAT-21 (FIFO). */
+  satpoint: string;
+  sat: number;
+}
+
+/**
+ * Subset of ord's /output/<outpoint> response we consume. `script_pubkey`
+ * is hex bytes; `cats` is the inscription IDs at this output.
+ */
+export interface OrdOutputResponse {
+  outpoint: string;
+  address: string | null;
+  /** scriptPubKey of the output, raw hex bytes. */
+  script_pubkey: string;
+  cats: string[];
+  sat_ranges: [number, number][];
+}
+
+/**
  * Direct client for ord.cat21.space — fetches live data
  * that is NOT stored in our backend (e.g., current owner).
  */
@@ -92,6 +120,32 @@ export class OrdApiService {
   getSat(sat: number): Observable<OrdSatResponse> {
     return this.http.get<OrdSatResponse>(
       `${environment.ordExplorer}/sat/${sat}`,
+      { headers: { Accept: 'application/json' } },
+    );
+  }
+
+  /**
+   * Look up a CAT-21 inscription by its inscription ID
+   * (format: `<mintTxid>i0`). Returns the cat's CURRENT location via
+   * `satpoint = txid:vout:offset`, which is what the transfer +
+   * accept-offer flows need (NOT the mint outpoint).
+   */
+  getInscription(inscriptionId: string): Observable<OrdInscriptionResponse> {
+    return this.http.get<OrdInscriptionResponse>(
+      `${environment.ordExplorer}/inscription/${inscriptionId}`,
+      { headers: { Accept: 'application/json' } },
+    );
+  }
+
+  /**
+   * Look up an output by `txid:vout`. Returns scriptPubKey hex + the
+   * inscriptions currently held at that output. The make-offer flow
+   * uses this to auto-derive the seller's scriptPubKey without making
+   * the user paste hex bytes by hand.
+   */
+  getOutput(outpoint: string): Observable<OrdOutputResponse> {
+    return this.http.get<OrdOutputResponse>(
+      `${environment.ordExplorer}/output/${outpoint}`,
       { headers: { Accept: 'application/json' } },
     );
   }

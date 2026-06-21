@@ -1,11 +1,16 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { EMPTY } from 'rxjs';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   Cat21AcceptOfferOrchestrator,
   Cat21OfferRejectionReason,
+  WalletService,
 } from 'ordpool-sdk';
 
+import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';
+import { rxResourceFixed } from '../../../shared/rx-resource-fixed';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 
 @Component({
@@ -17,6 +22,8 @@ import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 })
 export class AcceptOffer implements OnInit {
   private orchestrator = inject(Cat21AcceptOfferOrchestrator);
+  private walletService = inject(WalletService);
+  private lookup = inject(CatUtxoLookupService);
   private route = inject(ActivatedRoute);
 
   readonly txLinkBase = 'https://ordpool.space/tx/';
@@ -34,18 +41,35 @@ export class AcceptOffer implements OnInit {
   readonly floorPriceSats = this.orchestrator.floorPriceSats;
   readonly canAccept = this.orchestrator.canAccept;
 
-  // ---------- Local form state ----------
+  // ---------- Cat picker + local form state ----------
 
-  readonly catOutpointInput = signal<string>('');
-  readonly floorPriceInput = signal<string>('');
+  /**
+   * Connected wallet bridged to a signal for the holdings resource params.
+   */
+  private readonly walletSignal = toSignal(this.walletService.connectedWallet$, { initialValue: null });
 
-  readonly parsedCatOutpoint = computed<{ txid: string; vout: number } | null>(() => {
-    const raw = this.catOutpointInput().trim();
-    if (!raw) return null;
-    const m = raw.match(/^([0-9a-fA-F]{64})\s*:\s*(\d+)$/);
-    if (!m) return null;
-    return { txid: m[1].toLowerCase(), vout: Number.parseInt(m[2], 10) };
+  /**
+   * Resource that fetches the seller's current cat holdings the moment a
+   * wallet connects. Drives the "which of your cats is this offer for"
+   * picker so the seller doesn't paste txid:vout by hand.
+   */
+  readonly holdingsResource = rxResourceFixed({
+    params: () => ({ ordinalsAddress: this.walletSignal()?.ordinalsAddress ?? null }),
+    stream: ({ params }) =>
+      params.ordinalsAddress ? this.lookup.getMyHoldings(params.ordinalsAddress) : EMPTY,
   });
+
+  readonly myHoldings = computed<readonly MyCatHolding[]>(() => this.holdingsResource.value() ?? []);
+
+  readonly selectedInscriptionId = signal<string | null>(null);
+
+  readonly selectedHolding = computed<MyCatHolding | null>(() => {
+    const id = this.selectedInscriptionId();
+    if (!id) return null;
+    return this.myHoldings().find((h) => h.inscriptionId === id) ?? null;
+  });
+
+  readonly floorPriceInput = signal<string>('');
 
   readonly humanRejection = computed<string | null>(() => {
     const v = this.validationResult();
@@ -54,6 +78,31 @@ export class AcceptOffer implements OnInit {
   });
 
   // ---------- Lifecycle ----------
+
+  constructor() {
+    // When the seller picks a cat from the dropdown, push it to the
+    // orchestrator so its validation knows which cat the pasted offer
+    // must reference. The seller's payment address auto-fills too —
+    // the wallet's ordinals address is the seller's ordinals address,
+    // which is where the cat lives and where the funds come back to
+    // (per the ord-style offer protocol).
+    effect(() => {
+      const h = this.selectedHolding();
+      const wallet = this.walletSignal();
+      if (!h) {
+        this.orchestrator.setExpectedCatUtxo(null);
+        return;
+      }
+      this.orchestrator.setExpectedCatUtxo({ txid: h.txid, vout: h.vout });
+      if (wallet) {
+        // Seller's "payment" output goes to whichever address the
+        // seller wants their BTC. Default to their connected wallet's
+        // payment address (the typical case); the buyer's offer
+        // builds the seller-payment-output against this address.
+        this.orchestrator.setExpectedSellerPaymentAddress(wallet.paymentAddress);
+      }
+    });
+  }
 
   ngOnInit(): void {
     // Auto-fill from ?offer=… so a buyer can hand the seller a one-click link.
@@ -69,10 +118,8 @@ export class AcceptOffer implements OnInit {
     this.orchestrator.setPastedOffer(value);
   }
 
-  onCatOutpointChange(value: string): void {
-    this.catOutpointInput.set(value);
-    const parsed = this.parsedCatOutpoint();
-    this.orchestrator.setExpectedCatUtxo(parsed);
+  onCatPick(inscriptionId: string): void {
+    this.selectedInscriptionId.set(inscriptionId || null);
   }
 
   onFloorPriceChange(value: string): void {
@@ -91,8 +138,9 @@ export class AcceptOffer implements OnInit {
 
   onResetClick(): void {
     this.orchestrator.reset();
-    this.catOutpointInput.set('');
+    this.selectedInscriptionId.set(null);
     this.floorPriceInput.set('');
+    this.holdingsResource.reload();
   }
 }
 

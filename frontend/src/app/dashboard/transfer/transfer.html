@@ -6,17 +6,20 @@
     <p class="mb-3">
       A cat is transferred by sending its 546-sat UTXO as the first
       input of a new transaction with <code>nLockTime = 21</code>. The
-      cat travels to the first sat of the first output of the tx — the
-      recipient's address. A funding UTXO from your payment address
-      covers the miner fee.
+      cat travels to the first sat of the first output — the recipient's
+      address. A funding UTXO from your payment address covers the
+      miner fee.
+    </p>
+    <p class="mb-3">
+      <strong>Safe wallets:</strong> Xverse and Leather won't accidentally
+      spend cat sats. Unisat is also supported but uses a single address
+      for payments and ordinals — be cautious there.
     </p>
     <app-wallet-connect />
   </div>
 } @else {
-  @if (state() === 'loading-utxos') {
-    <p aria-live="polite" data-testid="transfer-loading">Loading funding UTXOs…</p>
-  } @else if (utxoError(); as err) {
-    <p role="alert" class="transfer-alert">{{ err }}</p>
+  @if (state() === 'loading-utxos' || holdingsResource.isLoading()) {
+    <p aria-live="polite" data-testid="transfer-loading">Loading your cats and funding UTXOs…</p>
   } @else if (state() === 'success' && successTxId(); as txid) {
     <section class="transfer-section" data-testid="transfer-success">
       <h2>✓ Cat transferred</h2>
@@ -31,40 +34,29 @@
     </section>
   } @else {
     <section class="transfer-section" data-testid="transfer-cat-section">
-      <h2 class="transfer-section-heading">1. Which cat are you sending?</h2>
-      <p class="text-muted small">
-        Paste the cat's current UTXO outpoint
-        (<code>txid:vout</code>). The cat lives at output 0 of the most
-        recent tx that touched it. Power-user input; future versions
-        will let you pick from your gallery.
-      </p>
-
-      <label class="form-label" for="transfer-cat-number">Cat number (optional)</label>
-      <input
-        id="transfer-cat-number"
-        class="form-control mb-3"
-        type="text"
-        inputmode="numeric"
-        autocomplete="off"
-        placeholder="e.g. 42"
-        [value]="draft().catNumberInput"
-        (input)="onCatNumberChange($any($event.target).value)"
-        data-testid="transfer-cat-number-input" />
-
-      <label class="form-label" for="transfer-outpoint">Cat UTXO outpoint (<code>txid:vout</code>)</label>
-      <input
-        id="transfer-outpoint"
-        class="form-control"
-        type="text"
-        autocomplete="off"
-        placeholder="abc123…def:0"
-        [value]="draft().outpointInput"
-        (input)="onOutpointChange($any($event.target).value)"
-        data-testid="transfer-outpoint-input" />
-      @if (!parsedOutpoint() && draft().outpointInput.length > 0) {
-        <p class="text-danger small mt-1" data-testid="transfer-outpoint-invalid">
-          Expected <code>txid:vout</code> (64 hex chars, colon, integer).
+      <h2 class="transfer-section-heading">1. Pick the cat you want to send</h2>
+      @if (myHoldings().length === 0) {
+        <p class="text-muted small" data-testid="transfer-no-cats">
+          We didn't find any cats at this wallet's ordinals address.
+          Mint one first, or connect a different wallet.
         </p>
+      } @else {
+        <select
+          class="form-select"
+          [value]="selectedInscriptionId() ?? ''"
+          (change)="onCatPick($any($event.target).value)"
+          data-testid="transfer-cat-picker">
+          <option value="">— pick a cat —</option>
+          @for (h of myHoldings(); track h.inscriptionId) {
+            <option [value]="h.inscriptionId">Cat #{{ h.catNumber }}</option>
+          }
+        </select>
+        @if (selectedHolding(); as h) {
+          <p class="text-muted small mt-2" data-testid="transfer-cat-detail">
+            Cat #{{ h.catNumber }} currently lives at
+            <code>{{ h.txid }}:{{ h.vout }}</code>.
+          </p>
+        }
       }
     </section>
 
@@ -77,7 +69,7 @@
         type="text"
         autocomplete="off"
         placeholder="bc1p… or bc1q… or 1… or 3…"
-        [value]="draft().recipientInput"
+        [value]="recipientInput()"
         (input)="onRecipientChange($any($event.target).value)"
         data-testid="transfer-recipient-input" />
     </section>
@@ -91,10 +83,12 @@
       <section class="transfer-section" data-testid="transfer-summary-section">
         <h2 class="transfer-section-heading">4. Confirm</h2>
         <div class="transfer-summary">
-          <div class="transfer-summary-row">
-            <span class="lbl">Cat UTXO</span>
-            <code class="val">{{ catUtxo()?.txid }}:{{ catUtxo()?.vout }}</code>
-          </div>
+          @if (selectedHolding(); as h) {
+            <div class="transfer-summary-row">
+              <span class="lbl">Cat</span>
+              <span class="val">Cat #{{ h.catNumber }}</span>
+            </div>
+          }
           <div class="transfer-summary-row">
             <span class="lbl">Recipient</span>
             <code class="val">{{ recipientAddress() }}</code>

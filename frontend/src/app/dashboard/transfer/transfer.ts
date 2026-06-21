@@ -1,24 +1,18 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { EMPTY } from 'rxjs';
 import { RouterLink } from '@angular/router';
-import { hex } from '@scure/base';
-import * as btc from '@scure/btc-signer';
 import {
   Cat21Holding,
   Cat21TransferOrchestrator,
   TransferSimulationOutcome,
-  WalletService,
 } from 'ordpool-sdk';
 
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
-
-interface DraftCatHolding {
-  catNumberInput: string;
-  outpointInput: string;
-  recipientInput: string;
-}
+import { CatUtxoLookupService, MyCatHolding } from '../../shared/cat-utxo-lookup.service';
+import { rxResourceFixed } from '../../shared/rx-resource-fixed';
 
 @Component({
   selector: 'app-transfer',
@@ -29,7 +23,7 @@ interface DraftCatHolding {
 })
 export class Transfer {
   private orchestrator = inject(Cat21TransferOrchestrator);
-  private walletService = inject(WalletService);
+  private lookup = inject(CatUtxoLookupService);
 
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
@@ -48,26 +42,36 @@ export class Transfer {
     { initialValue: null },
   );
 
-  // ---------- Local form state (typed by the user) ----------
+  // ---------- My cats — async load ----------
 
-  readonly draft = signal<DraftCatHolding>({
-    catNumberInput: '',
-    outpointInput: '',
-    recipientInput: '',
+  /**
+   * Resource that fetches the user's current cat holdings (cat number +
+   * current UTXO outpoint per cat) the moment a wallet connects. Drives
+   * the cat-picker dropdown without requiring the user to know any txids.
+   */
+  readonly holdingsResource = rxResourceFixed({
+    params: () => ({ ordinalsAddress: this.connectedWallet()?.ordinalsAddress ?? null }),
+    stream: ({ params }) =>
+      params.ordinalsAddress
+        ? this.lookup.getMyHoldings(params.ordinalsAddress)
+        : EMPTY,
   });
 
-  readonly parsedOutpoint = computed<{ txid: string; vout: number } | null>(() => {
-    const raw = this.draft().outpointInput.trim();
-    if (!raw) return null;
-    const m = raw.match(/^([0-9a-fA-F]{64})\s*:\s*(\d+)$/);
-    if (!m) return null;
-    return { txid: m[1].toLowerCase(), vout: Number.parseInt(m[2], 10) };
+  readonly myHoldings = computed<readonly MyCatHolding[]>(
+    () => this.holdingsResource.value() ?? [],
+  );
+
+  /** Currently selected cat (by inscription ID — stable across re-fetches). */
+  readonly selectedInscriptionId = signal<string | null>(null);
+
+  readonly selectedHolding = computed<MyCatHolding | null>(() => {
+    const id = this.selectedInscriptionId();
+    if (!id) return null;
+    return this.myHoldings().find((h) => h.inscriptionId === id) ?? null;
   });
 
-  readonly utxoError = computed<string | null>(() => {
-    const err = this.errorMessage();
-    return err ?? null;
-  });
+  /** Recipient address as typed by the user (sync with orchestrator). */
+  readonly recipientInput = signal<string>('');
 
   readonly canTransfer = computed(() => {
     if (this.state() !== 'ready') return false;
@@ -78,34 +82,34 @@ export class Transfer {
     return !!outcome && !outcome.insufficient && !!outcome.simulation;
   });
 
-  // ---------- Commands ----------
-
-  onOutpointChange(value: string): void {
-    this.draft.update((d) => ({ ...d, outpointInput: value }));
-    const parsed = this.parsedOutpoint();
-    if (parsed) {
-      const catNum = Number.parseInt(this.draft().catNumberInput, 10);
+  constructor() {
+    // When the user picks a cat from the dropdown, push it to the
+    // orchestrator as the Cat21Holding it expects. The orchestrator's
+    // existing wallet-change-reset clears this when the wallet swaps.
+    effect(() => {
+      const h = this.selectedHolding();
+      if (!h) {
+        this.orchestrator.setCatUtxo(null);
+        return;
+      }
       const holding: Cat21Holding = {
-        catNumber: Number.isFinite(catNum) ? catNum : -1,
-        txid: parsed.txid,
-        vout: parsed.vout,
-        // CAT-21 cat UTXOs are always 546 sats — trusted from protocol.
-        value: 546,
+        catNumber: h.catNumber,
+        txid: h.txid,
+        vout: h.vout,
+        value: h.value,
       };
       this.orchestrator.setCatUtxo(holding);
-    } else {
-      this.orchestrator.setCatUtxo(null);
-    }
+    });
   }
 
-  onCatNumberChange(value: string): void {
-    this.draft.update((d) => ({ ...d, catNumberInput: value }));
-    // Re-emit the holding to pick up the new catNumber on the existing outpoint.
-    this.onOutpointChange(this.draft().outpointInput);
+  // ---------- Commands ----------
+
+  onCatPick(inscriptionId: string): void {
+    this.selectedInscriptionId.set(inscriptionId || null);
   }
 
   onRecipientChange(value: string): void {
-    this.draft.update((d) => ({ ...d, recipientInput: value }));
+    this.recipientInput.set(value);
     this.orchestrator.setRecipientAddress(value);
   }
 
@@ -119,6 +123,8 @@ export class Transfer {
 
   onResetClick(): void {
     this.orchestrator.reset();
-    this.draft.set({ catNumberInput: '', outpointInput: '', recipientInput: '' });
+    this.selectedInscriptionId.set(null);
+    this.recipientInput.set('');
+    this.holdingsResource.reload();
   }
 }

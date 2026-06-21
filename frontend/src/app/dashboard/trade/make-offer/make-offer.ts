@@ -1,24 +1,24 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { hex } from '@scure/base';
 import {
   BuyOfferTargetCat,
   Cat21CreateOfferOrchestrator,
   CreateOfferSimulationOutcome,
 } from 'ordpool-sdk';
 
+import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { FeesPicker } from '../../../shared/fees-picker/fees-picker';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 
 interface MakeOfferDraft {
   catNumberInput: string;
-  catOutpointInput: string;
-  sellerScriptHexInput: string;
   sellerPaymentAddressInput: string;
   priceSatsInput: string;
 }
+
+type LookupState = 'idle' | 'loading' | 'ready' | 'error';
 
 @Component({
   selector: 'app-make-offer',
@@ -29,6 +29,7 @@ interface MakeOfferDraft {
 })
 export class MakeOffer {
   private orchestrator = inject(Cat21CreateOfferOrchestrator);
+  private lookup = inject(CatUtxoLookupService);
 
   // ---------- Live state from the orchestrator ----------
 
@@ -51,19 +52,14 @@ export class MakeOffer {
 
   readonly draft = signal<MakeOfferDraft>({
     catNumberInput: '',
-    catOutpointInput: '',
-    sellerScriptHexInput: '',
     sellerPaymentAddressInput: '',
     priceSatsInput: '',
   });
 
-  readonly parsedOutpoint = computed<{ txid: string; vout: number } | null>(() => {
-    const raw = this.draft().catOutpointInput.trim();
-    if (!raw) return null;
-    const m = raw.match(/^([0-9a-fA-F]{64})\s*:\s*(\d+)$/);
-    if (!m) return null;
-    return { txid: m[1].toLowerCase(), vout: Number.parseInt(m[2], 10) };
-  });
+  /** State of the cat-number → on-chain location lookup. */
+  readonly lookupState = signal<LookupState>('idle');
+  readonly lookupError = signal<string | null>(null);
+  readonly resolvedSellerAddress = signal<string | null>(null);
 
   readonly canCreateOffer = computed(() => {
     if (this.state() !== 'ready') return false;
@@ -84,19 +80,60 @@ export class MakeOffer {
 
   // ---------- Commands ----------
 
+  /**
+   * Look up the cat by number against cat21-indexer + ord. Auto-fills:
+   *   - the orchestrator's `targetCat` (txid, vout, value, scriptPubKey)
+   *   - the seller-payment-address input (the cat's current owner)
+   *
+   * Idempotent — re-running with the same number rebuilds against the
+   * latest on-chain state (a cat that moved hands since the page
+   * loaded is correctly re-resolved).
+   */
+  onLookupCatClick(): void {
+    const raw = this.draft().catNumberInput.trim();
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) {
+      this.lookupError.set('Cat number must be a non-negative integer.');
+      this.lookupState.set('error');
+      return;
+    }
+    this.lookupState.set('loading');
+    this.lookupError.set(null);
+    this.orchestrator.setTargetCat(null);
+    this.resolvedSellerAddress.set(null);
+    this.lookup.getTargetByNumber(n).subscribe({
+      next: (result) => {
+        if (!result) {
+          this.lookupError.set('Cat not found on ord (current owner unresolved).');
+          this.lookupState.set('error');
+          return;
+        }
+        this.orchestrator.setTargetCat(result.target);
+        this.resolvedSellerAddress.set(result.sellerAddress);
+        // Auto-fill seller payment address to the resolved owning address.
+        // The seller can override in the field below if they want payout
+        // to a different address (uncommon but supported).
+        this.draft.update((d) => ({ ...d, sellerPaymentAddressInput: result.sellerAddress }));
+        this.orchestrator.setSellerPaymentAddress(result.sellerAddress);
+        this.lookupState.set('ready');
+      },
+      error: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.lookupError.set(`Lookup failed: ${msg}`);
+        this.lookupState.set('error');
+      },
+    });
+  }
+
   onCatNumberChange(value: string): void {
     this.draft.update((d) => ({ ...d, catNumberInput: value }));
-    this.pushTargetCat();
-  }
-
-  onCatOutpointChange(value: string): void {
-    this.draft.update((d) => ({ ...d, catOutpointInput: value }));
-    this.pushTargetCat();
-  }
-
-  onSellerScriptHexChange(value: string): void {
-    this.draft.update((d) => ({ ...d, sellerScriptHexInput: value }));
-    this.pushTargetCat();
+    // Clearing the number invalidates the lookup; reset auto-resolved state.
+    if (!value.trim()) {
+      this.lookupState.set('idle');
+      this.lookupError.set(null);
+      this.resolvedSellerAddress.set(null);
+      this.orchestrator.setTargetCat(null);
+    }
   }
 
   onSellerPaymentAddressChange(value: string): void {
@@ -134,42 +171,11 @@ export class MakeOffer {
     this.orchestrator.reset();
     this.draft.set({
       catNumberInput: '',
-      catOutpointInput: '',
-      sellerScriptHexInput: '',
       sellerPaymentAddressInput: '',
       priceSatsInput: '',
     });
-  }
-
-  // ---------- Internals ----------
-
-  /**
-   * Push the current outpoint + script + cat-number to the orchestrator
-   * as a BuyOfferTargetCat. Requires all three to be valid; otherwise
-   * clears the orchestrator's target.
-   */
-  private pushTargetCat(): void {
-    const parsed = this.parsedOutpoint();
-    const scriptHex = this.draft().sellerScriptHexInput.trim();
-    if (!parsed || !scriptHex) {
-      this.orchestrator.setTargetCat(null);
-      return;
-    }
-    let scriptBytes: Uint8Array;
-    try {
-      scriptBytes = hex.decode(scriptHex.toLowerCase());
-    } catch {
-      this.orchestrator.setTargetCat(null);
-      return;
-    }
-    const catNum = Number.parseInt(this.draft().catNumberInput, 10);
-    const target: BuyOfferTargetCat = {
-      catNumber: Number.isFinite(catNum) ? catNum : -1,
-      txid: parsed.txid,
-      vout: parsed.vout,
-      value: 546,
-      scriptPubKey: scriptBytes,
-    };
-    this.orchestrator.setTargetCat(target);
+    this.lookupState.set('idle');
+    this.lookupError.set(null);
+    this.resolvedSellerAddress.set(null);
   }
 }
