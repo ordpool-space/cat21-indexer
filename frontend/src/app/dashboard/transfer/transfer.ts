@@ -3,9 +3,12 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } 
 import { toSignal } from '@angular/core/rxjs-interop';
 import { EMPTY } from 'rxjs';
 import { RouterLink } from '@angular/router';
+import * as btc from '@scure/btc-signer';
 import {
   Cat21Holding,
   Cat21TransferOrchestrator,
+  Network,
+  toScureNetwork,
   TransferSimulationOutcome,
 } from 'ordpool-sdk';
 
@@ -13,6 +16,8 @@ import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 import { CatUtxoLookupService, MyCatHolding } from '../../shared/cat-utxo-lookup.service';
 import { rxResourceFixed } from '../../shared/rx-resource-fixed';
+
+const TXID_RE = /^[0-9a-f]{64}$/i;
 
 @Component({
   selector: 'app-transfer',
@@ -73,10 +78,38 @@ export class Transfer {
   /** Recipient address as typed by the user (sync with orchestrator). */
   readonly recipientInput = signal<string>('');
 
+  /**
+   * Recipient address validation status. `null` while empty;
+   * `'valid'` once it decodes against the configured Bitcoin network;
+   * `'invalid'` on any decode failure (bad checksum, wrong HRP for
+   * mainnet, garbled paste). The orchestrator's setRecipientAddress is
+   * only called when the address is valid — prevents the wallet popup
+   * from ever being asked to sign against a typo'd recipient.
+   * Audit finding H4.
+   */
+  readonly recipientStatus = computed<'empty' | 'valid' | 'invalid'>(() => {
+    const raw = this.recipientInput().trim();
+    if (!raw) return 'empty';
+    try {
+      btc.Address(toScureNetwork(Network.Mainnet)).decode(raw);
+      return 'valid';
+    } catch {
+      return 'invalid';
+    }
+  });
+
+  /** Sanity-check the broadcast txid before binding it into an [href]. Audit L2. */
+  readonly safeSuccessTxId = computed<string | null>(() => {
+    const txid = this.successTxId();
+    if (!txid || !TXID_RE.test(txid)) return null;
+    return txid.toLowerCase();
+  });
+
   readonly canTransfer = computed(() => {
     if (this.state() !== 'ready') return false;
     if (!this.catUtxo()) return false;
     if (!this.recipientAddress()) return false;
+    if (this.recipientStatus() !== 'valid') return false;
     if (!this.feeRate()) return false;
     const outcome = this.simulationOutcome();
     return !!outcome && !outcome.insufficient && !!outcome.simulation;
@@ -110,7 +143,19 @@ export class Transfer {
 
   onRecipientChange(value: string): void {
     this.recipientInput.set(value);
-    this.orchestrator.setRecipientAddress(value);
+    // Only push into the orchestrator if the address actually decodes.
+    // Audit H4: the wallet popup is no longer the last line of defense.
+    const trimmed = value.trim();
+    if (!trimmed) {
+      this.orchestrator.setRecipientAddress(null);
+      return;
+    }
+    try {
+      btc.Address(toScureNetwork(Network.Mainnet)).decode(trimmed);
+      this.orchestrator.setRecipientAddress(trimmed);
+    } catch {
+      this.orchestrator.setRecipientAddress(null);
+    }
   }
 
   onTransferClick(): void {

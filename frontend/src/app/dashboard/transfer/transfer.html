@@ -20,7 +20,7 @@
 } @else {
   @if (state() === 'loading-utxos' || holdingsResource.isLoading()) {
     <p aria-live="polite" data-testid="transfer-loading">Loading your cats and funding UTXOs…</p>
-  } @else if (state() === 'success' && successTxId(); as txid) {
+  } @else if (state() === 'success' && safeSuccessTxId(); as txid) {
     <section class="transfer-section" data-testid="transfer-success">
       <h2>✓ Cat transferred</h2>
       <p>Broadcast tx: <a [href]="txLinkBase + txid" target="_blank" rel="noopener noreferrer">{{ txid }}</a></p>
@@ -66,12 +66,18 @@
       <input
         id="transfer-recipient"
         class="form-control"
+        [class.is-invalid]="recipientStatus() === 'invalid'"
         type="text"
         autocomplete="off"
         placeholder="bc1p… or bc1q… or 1… or 3…"
         [value]="recipientInput()"
         (input)="onRecipientChange($any($event.target).value)"
         data-testid="transfer-recipient-input" />
+      @if (recipientStatus() === 'invalid') {
+        <p class="text-danger small mt-1" data-testid="transfer-recipient-invalid">
+          Not a valid Bitcoin address — check for typos and that you're not pasting a testnet address.
+        </p>
+      }
     </section>
 
     <section class="transfer-section" data-testid="transfer-fee-section">

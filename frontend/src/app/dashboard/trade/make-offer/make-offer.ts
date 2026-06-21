@@ -81,13 +81,20 @@ export class MakeOffer {
   // ---------- Commands ----------
 
   /**
+   * Request-id token for the in-flight lookup. When the user edits the
+   * input mid-flight, we bump this counter — late-arriving responses
+   * for the OLD request find their token doesn't match and silently
+   * drop. Audit finding H3.
+   */
+  private lookupRequestId = 0;
+
+  /**
    * Look up the cat by number against cat21-indexer + ord. Auto-fills:
    *   - the orchestrator's `targetCat` (txid, vout, value, scriptPubKey)
    *   - the seller-payment-address input (the cat's current owner)
    *
    * Idempotent — re-running with the same number rebuilds against the
-   * latest on-chain state (a cat that moved hands since the page
-   * loaded is correctly re-resolved).
+   * latest on-chain state.
    */
   onLookupCatClick(): void {
     const raw = this.draft().catNumberInput.trim();
@@ -97,27 +104,30 @@ export class MakeOffer {
       this.lookupState.set('error');
       return;
     }
+    // Bump the request token; any in-flight response with a stale token
+    // will land in next() below and be dropped without touching state.
+    const myToken = ++this.lookupRequestId;
     this.lookupState.set('loading');
     this.lookupError.set(null);
     this.orchestrator.setTargetCat(null);
     this.resolvedSellerAddress.set(null);
     this.lookup.getTargetByNumber(n).subscribe({
       next: (result) => {
+        if (myToken !== this.lookupRequestId) return; // stale response
         if (!result) {
-          this.lookupError.set('Cat not found on ord (current owner unresolved).');
+          this.lookupError.set('Cat not found on ord, OR ord vs electrs disagree on the seller address (potential oracle inconsistency).');
           this.lookupState.set('error');
           return;
         }
         this.orchestrator.setTargetCat(result.target);
         this.resolvedSellerAddress.set(result.sellerAddress);
         // Auto-fill seller payment address to the resolved owning address.
-        // The seller can override in the field below if they want payout
-        // to a different address (uncommon but supported).
         this.draft.update((d) => ({ ...d, sellerPaymentAddressInput: result.sellerAddress }));
         this.orchestrator.setSellerPaymentAddress(result.sellerAddress);
         this.lookupState.set('ready');
       },
       error: (err: unknown) => {
+        if (myToken !== this.lookupRequestId) return; // stale error
         const msg = err instanceof Error ? err.message : String(err);
         this.lookupError.set(`Lookup failed: ${msg}`);
         this.lookupState.set('error');
@@ -127,13 +137,14 @@ export class MakeOffer {
 
   onCatNumberChange(value: string): void {
     this.draft.update((d) => ({ ...d, catNumberInput: value }));
-    // Clearing the number invalidates the lookup; reset auto-resolved state.
-    if (!value.trim()) {
-      this.lookupState.set('idle');
-      this.lookupError.set(null);
-      this.resolvedSellerAddress.set(null);
-      this.orchestrator.setTargetCat(null);
-    }
+    // Any edit invalidates the previous lookup result — bump the token
+    // so a late-arriving in-flight response can't poison the state.
+    // Audit H3.
+    this.lookupRequestId++;
+    this.lookupState.set('idle');
+    this.lookupError.set(null);
+    this.resolvedSellerAddress.set(null);
+    this.orchestrator.setTargetCat(null);
   }
 
   onSellerPaymentAddressChange(value: string): void {

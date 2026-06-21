@@ -86,9 +86,14 @@
         class="form-control"
         autocomplete="off"
         placeholder="cHNidP8BAH0CAAA…"
+        maxlength="262144"
         [value]="pastedOffer() ?? ''"
         (input)="onPasteChange($any($event.target).value)"
         data-testid="accept-offer-paste-textarea"></textarea>
+      <p class="text-muted small mt-1">
+        Max 256 KiB. A real CAT-21 buy-offer is under 1 KB; the cap
+        blocks malicious links with giant payloads (DoS protection).
+      </p>
     </section>
 
     @if (state() === 'parsed' && parsedOffer(); as offer) {

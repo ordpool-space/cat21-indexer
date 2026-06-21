@@ -1,4 +1,5 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { HttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of, throwError } from 'rxjs';
 import { hex } from '@scure/base';
@@ -16,6 +17,7 @@ describe('CatUtxoLookupService', () => {
   let service: CatUtxoLookupService;
   let ordApi: { getAddress: jest.Mock; getInscription: jest.Mock; getOutput: jest.Mock };
   let cat21Api: { catsControllerGetCatByNumber: jest.Mock };
+  let http: { get: jest.Mock };
 
   beforeEach(() => {
     ordApi = {
@@ -26,11 +28,13 @@ describe('CatUtxoLookupService', () => {
     cat21Api = {
       catsControllerGetCatByNumber: jest.fn(),
     };
+    http = { get: jest.fn() };
     TestBed.configureTestingModule({
       providers: [
         CatUtxoLookupService,
         { provide: OrdApiService, useValue: ordApi },
         { provide: ApiService, useValue: cat21Api },
+        { provide: HttpClient, useValue: http },
       ],
     });
     service = TestBed.inject(CatUtxoLookupService);
@@ -141,17 +145,15 @@ describe('CatUtxoLookupService', () => {
   });
 
   describe('getTargetByNumber', () => {
-    it('resolves indexer → ord/inscription → ord/output into a BuyOfferTargetCat + sellerAddress', async () => {
+    function setupHappyPath(catNumber: number) {
       const mintTxHash = 'e'.repeat(64);
       const currentTxid = 'f'.repeat(64);
       const inscriptionId = `${mintTxHash}i0`;
-      // P2TR scriptPubKey: OP_1 + 32 bytes
       const scriptHex = '5120' + 'a'.repeat(64);
-
       cat21Api.catsControllerGetCatByNumber.mockReturnValue(of({ txHash: mintTxHash }));
       ordApi.getInscription.mockReturnValue(of<OrdInscriptionResponse>({
         id: inscriptionId,
-        number: 42,
+        number: catNumber,
         address: 'bc1pSellerCurrent',
         satpoint: `${currentTxid}:0:0`,
         sat: 100,
@@ -163,7 +165,17 @@ describe('CatUtxoLookupService', () => {
         cats: [inscriptionId],
         sat_ranges: [[100, 646]],
       }));
+      http.get.mockReturnValue(of({
+        txid: currentTxid,
+        vout: [
+          { scriptpubkey: scriptHex, scriptpubkey_address: 'bc1pSellerCurrent', value: 546 },
+        ],
+      }));
+      return { mintTxHash, currentTxid, inscriptionId, scriptHex };
+    }
 
+    it('resolves all four sources into a BuyOfferTargetCat when ord + esplora agree', async () => {
+      const { currentTxid, scriptHex } = setupHappyPath(42);
       const result = await firstValueFrom(service.getTargetByNumber(42));
       expect(result).not.toBeNull();
       expect(result!.target.catNumber).toBe(42);
@@ -172,6 +184,43 @@ describe('CatUtxoLookupService', () => {
       expect(result!.target.value).toBe(546);
       expect(result!.target.scriptPubKey).toEqual(hex.decode(scriptHex));
       expect(result!.sellerAddress).toBe('bc1pSellerCurrent');
+    });
+
+    it('fails closed when esplora reports a different scriptPubKey than ord (oracle disagreement — audit C1)', async () => {
+      const { currentTxid } = setupHappyPath(42);
+      http.get.mockReturnValue(of({
+        txid: currentTxid,
+        vout: [
+          // ord said `5120` + 64 a's; we lie via esplora to simulate ord-side poisoning.
+          { scriptpubkey: '0014' + 'b'.repeat(40), scriptpubkey_address: 'bc1pSellerCurrent', value: 546 },
+        ],
+      }));
+      const result = await firstValueFrom(service.getTargetByNumber(42));
+      expect(result).toBeNull();
+    });
+
+    it('fails closed when esplora reports a different owning address than ord (oracle disagreement — audit C1)', async () => {
+      const { currentTxid, scriptHex } = setupHappyPath(42);
+      http.get.mockReturnValue(of({
+        txid: currentTxid,
+        vout: [
+          { scriptpubkey: scriptHex, scriptpubkey_address: 'bc1pAttacker', value: 546 },
+        ],
+      }));
+      const result = await firstValueFrom(service.getTargetByNumber(42));
+      expect(result).toBeNull();
+    });
+
+    it('accepts when esplora omits scriptpubkey_address (non-standard script) but scriptPubKey matches', async () => {
+      const { currentTxid, scriptHex } = setupHappyPath(42);
+      http.get.mockReturnValue(of({
+        txid: currentTxid,
+        vout: [
+          { scriptpubkey: scriptHex, value: 546 }, // no scriptpubkey_address
+        ],
+      }));
+      const result = await firstValueFrom(service.getTargetByNumber(42));
+      expect(result).not.toBeNull();
     });
 
     it('returns null when ord reports no current address (cat is at OP_RETURN / lost)', async () => {
@@ -188,17 +237,10 @@ describe('CatUtxoLookupService', () => {
     });
 
     it('returns null when the output endpoint omits script_pubkey', async () => {
-      cat21Api.catsControllerGetCatByNumber.mockReturnValue(of({ txHash: 'a'.repeat(64) }));
-      ordApi.getInscription.mockReturnValue(of<OrdInscriptionResponse>({
-        id: `${'a'.repeat(64)}i0`,
-        number: 5,
-        address: 'bc1pSomewhere',
-        satpoint: `${'b'.repeat(64)}:0:0`,
-        sat: 1,
-      }));
+      const { currentTxid } = setupHappyPath(5);
       ordApi.getOutput.mockReturnValue(of<OrdOutputResponse>({
-        outpoint: `${'b'.repeat(64)}:0`,
-        address: 'bc1pSomewhere',
+        outpoint: `${currentTxid}:0`,
+        address: 'bc1pSellerCurrent',
         script_pubkey: '',
         cats: [],
         sat_ranges: [],
@@ -207,23 +249,9 @@ describe('CatUtxoLookupService', () => {
       expect(result).toBeNull();
     });
 
-    it('returns null when scriptPubKey hex decode fails', async () => {
-      cat21Api.catsControllerGetCatByNumber.mockReturnValue(of({ txHash: 'a'.repeat(64) }));
-      ordApi.getInscription.mockReturnValue(of<OrdInscriptionResponse>({
-        id: `${'a'.repeat(64)}i0`,
-        number: 5,
-        address: 'bc1pSomewhere',
-        satpoint: `${'b'.repeat(64)}:0:0`,
-        sat: 1,
-      }));
-      ordApi.getOutput.mockReturnValue(of<OrdOutputResponse>({
-        outpoint: `${'b'.repeat(64)}:0`,
-        address: 'bc1pSomewhere',
-        // Odd-length hex string — decode throws.
-        script_pubkey: '5120abc',
-        cats: [],
-        sat_ranges: [],
-      }));
+    it('returns null when esplora has no vout at the index ord pointed at', async () => {
+      setupHappyPath(5);
+      http.get.mockReturnValue(of({ txid: 'f'.repeat(64), vout: [] }));
       const result = await firstValueFrom(service.getTargetByNumber(5));
       expect(result).toBeNull();
     });

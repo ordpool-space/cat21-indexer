@@ -156,12 +156,36 @@
     </section>
 
     @if (simulationOutcome()?.simulation; as sim) {
-      <section class="make-offer-section" data-testid="make-offer-summary-section">
+      <section class="make-offer-section make-offer-confirm" data-testid="make-offer-summary-section">
         <h2 class="make-offer-section-heading">4. Confirm</h2>
+        <p class="text-warning small mb-2">
+          <strong>Read carefully.</strong> Your wallet is about to sign
+          a PSBT paying these sats to this address. Once signed, the
+          seller can broadcast it any time.
+        </p>
         <div class="make-offer-summary">
+          @if (targetCat(); as target) {
+            <div class="make-offer-summary-row">
+              <span class="lbl">You're buying</span>
+              <span class="val">Cat #{{ target.catNumber }}</span>
+            </div>
+          }
+          <div class="make-offer-summary-row make-offer-summary-row-emph">
+            <span class="lbl">Payment goes to</span>
+            <code class="val">{{ sellerPaymentAddress() }}</code>
+          </div>
+          @if (resolvedSellerAddress(); as resolved) {
+            @if (resolved !== sellerPaymentAddress()) {
+              <p class="text-danger small mt-1" data-testid="make-offer-address-override-warning">
+                ⚠ This differs from the cat's current owner address
+                (<code>{{ resolved }}</code>). Only continue if you're
+                sure you want to pay a different address.
+              </p>
+            }
+          }
           <div class="make-offer-summary-row">
             <span class="lbl">You're paying</span>
-            <span class="val">{{ priceSats() | number }} sat to the seller</span>
+            <span class="val">{{ priceSats() | number }} sat</span>
           </div>
           <div class="make-offer-summary-row">
             <span class="lbl">Miner fee</span>
