@@ -1172,6 +1172,21 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   await manualInput.fill('1');
   await manualInput.press('Tab');
 
+  // ─── Debug: dump the UTXOs electrs sees at paymentAddr ───
+  // If the orchestrator's simulation reports insufficient, the CI log
+  // now shows the exact fundable set (via a direct fetch against the
+  // same reverse-proxy the orchestrator hits).
+  try {
+    const utxosResp = await fetch(`http://localhost:8999/api/address/${sharedPaymentAddress}/utxo`);
+    const utxosJson = await utxosResp.json();
+    const total = Array.isArray(utxosJson) ? utxosJson.reduce((s: number, u: { value: number }) => s + (u.value ?? 0), 0) : 0;
+    // eslint-disable-next-line no-console
+    console.log(`[transfer-flow] paymentAddr ${sharedPaymentAddress} utxos (${Array.isArray(utxosJson) ? utxosJson.length : 0} total ${total} sats) =`, JSON.stringify(utxosJson));
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.log('[transfer-flow] paymentAddr utxo fetch failed:', err);
+  }
+
   // ─── Wait for the Transfer button to enable + click ───
   const transferBtn = page.getByTestId('transfer-cta');
   await expect(transferBtn).toBeVisible({ timeout: 30_000 });
