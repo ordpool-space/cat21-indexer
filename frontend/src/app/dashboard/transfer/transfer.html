@@ -1,5 +1,18 @@
 <h1 data-testid="transfer-heading">Transfer a cat</h1>
 
+<!-- Test-only debug marker exposing the orchestrator's writable-signal
+     state so e2e specs can attribute a stuck "button disabled" state
+     precisely. Zero display cost; the attributes are all data-*. -->
+<span
+  data-testid="transfer-debug-state"
+  [attr.data-state]="state()"
+  [attr.data-has-cat]="!!catUtxo()"
+  [attr.data-has-recipient]="!!recipientAddress()"
+  [attr.data-fee]="feeRate() ?? ''"
+  [attr.data-sim-ready]="!!simulationOutcome()?.simulation"
+  [attr.data-sim-insufficient]="!!simulationOutcome()?.insufficient"
+  style="display: none;"></span>
+
 @if (!connectedWallet()) {
   <div class="connect-card" data-testid="transfer-cta">
     <h2>Connect your wallet to transfer a cat</h2>
@@ -35,7 +48,14 @@
   } @else {
     <section class="transfer-section" data-testid="transfer-cat-section">
       <h2 class="transfer-section-heading">1. Pick the cat you want to send</h2>
-      @if (myHoldings().length === 0) {
+      @if (urlCatUtxo(); as fromUrl) {
+        <!-- Deep-link supplied the cat outpoint; no picker needed. Show
+             it as read-only info so the seller sees what's queued. -->
+        <p class="text-muted small" data-testid="transfer-cat-from-url">
+          Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>
+          pre-selected from the deep-link.
+        </p>
+      } @else if (myHoldings().length === 0) {
         <p class="text-muted small" data-testid="transfer-no-cats">
           We didn't find any cats at this wallet's ordinals address.
           Mint one first, or connect a different wallet.

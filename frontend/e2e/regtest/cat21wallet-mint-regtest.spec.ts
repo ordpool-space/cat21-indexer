@@ -1146,7 +1146,23 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   // ─── Wait for the Transfer button to enable + click ───
   const transferBtn = page.getByTestId('transfer-cta');
   await expect(transferBtn).toBeVisible({ timeout: 30_000 });
-  await expect(transferBtn).toBeEnabled({ timeout: 60_000 });
+
+  // If the button doesn't enable in 60s, dump the debug-state marker
+  // so we can attribute WHICH signal is failing (state / catUtxo /
+  // recipient / fee / simulation). See transfer.html data-testid=
+  // "transfer-debug-state".
+  try {
+    await expect(transferBtn).toBeEnabled({ timeout: 60_000 });
+  } catch (err) {
+    const debugState = page.getByTestId('transfer-debug-state');
+    const attrs: Record<string, string | null> = {};
+    for (const name of ['data-state', 'data-has-cat', 'data-has-recipient', 'data-fee', 'data-sim-ready', 'data-sim-insufficient']) {
+      attrs[name] = await debugState.getAttribute(name).catch(() => null);
+    }
+    // eslint-disable-next-line no-console
+    console.log('[transfer-flow] button-disabled debug state =', JSON.stringify(attrs));
+    throw err;
+  }
   await shot(page, 'transfer-02-ready');
 
   const knownBeforeSign = new Set(context.pages());
