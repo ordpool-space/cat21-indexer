@@ -53,18 +53,70 @@ const RESULTS_DIR = path.resolve(__dirname, '../../test-results');
 
 let context: BrowserContext;
 let extensionId: string;
-// Hoisted state shared across `test()` blocks.
-let sharedPaymentAddress: string | undefined;
+
+// Shared state across `test()` blocks. Also persisted to a tempfile so
+// that if Playwright restarts the worker (e.g. after a browser-close
+// error mid-test), subsequent tests re-hydrate from disk instead of
+// finding these `let` vars reset to `undefined`. Cascade avoidance —
+// one flake in test N should not fail every dependent test after it.
+const SHARED_STATE_FILE = path.resolve(RESULTS_DIR, '.shared-state.json');
+
+interface SharedState {
+  paymentAddress?: string;
+  mintTxid?: string;
+}
+
+function loadShared(): SharedState {
+  try {
+    return JSON.parse(fs.readFileSync(SHARED_STATE_FILE, 'utf8')) as SharedState;
+  } catch {
+    return {};
+  }
+}
+
+function saveShared(patch: SharedState): void {
+  const cur = loadShared();
+  fs.mkdirSync(path.dirname(SHARED_STATE_FILE), { recursive: true });
+  fs.writeFileSync(SHARED_STATE_FILE, JSON.stringify({ ...cur, ...patch }));
+}
+
+let sharedPaymentAddress: string | undefined = loadShared().paymentAddress;
 // Set at the end of the first (mint) test — the confirmed on-chain
 // txid whose vout[0] carries the fresh cat. The full-offer-round-trip
 // test picks this up as its sellerInput.
-let sharedMintTxid: string | undefined;
+let sharedMintTxid: string | undefined = loadShared().mintTxid;
 
 async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
     path: path.resolve(RESULTS_DIR, `cat21wallet-mint-regtest-${name}.png`),
     fullPage: true,
   }).catch(() => undefined);
+}
+
+/**
+ * Approval-popup Sign/Confirm/Approve click that survives the wallet
+ * closing the popup mid-delivery. Chromium occasionally destroys the
+ * popup between "locator resolved to element" and "performing click"
+ * — Playwright then throws "Target page, context or browser has been
+ * closed". When the popup is closing on its own after we've clicked,
+ * that IS the expected success path. Callers assert the downstream
+ * outcome (mint-success card, on-chain broadcast) so a false-success
+ * here still surfaces at the next assertion.
+ */
+async function clickApprovalButton(popup: Page): Promise<void> {
+  const btn = popup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first();
+  try {
+    await btn.click({ timeout: 30_000 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Target page, context or browser has been closed')) {
+      // Popup closed during click delivery — wallet handled the click
+      // before Playwright could confirm. Treat as success; downstream
+      // assertions verify the real outcome.
+      return;
+    }
+    throw err;
+  }
 }
 
 async function onboardCat21Wallet(page: Page): Promise<void> {
@@ -197,6 +249,7 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   console.log(`[cat21wallet] regtest payment address = ${paymentAddr}`);
   expect(paymentAddr).toMatch(/^bcrt1q/);
   sharedPaymentAddress = paymentAddr;
+  saveShared({ paymentAddress: paymentAddr });
 
   // ─── Full mint round-trip ─────────────────────────────────────
   // Same flow as ordpool's, with cat21-indexer's data-testid
@@ -256,8 +309,7 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
     },
   });
   await shot(approvalSign, '07-sign-approval');
-  await approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-    .click({ timeout: 30_000 });
+  await clickApprovalButton(approvalSign);
   await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   const successCard = page.locator('[data-testid="mint-success"]');
@@ -270,6 +322,7 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   console.log(`[cat21wallet] mint txid = ${broadcastTxid}`);
   // Hoist for the later full-offer-round-trip test.
   sharedMintTxid = broadcastTxid;
+  saveShared({ mintTxid: broadcastTxid });
 
   const confirmedTip = mineBlocks(1);
   await waitForElectrsSync(confirmedTip);
@@ -357,8 +410,7 @@ async function cat21walletMintAtRate(opts: {
         return true;
       },
     });
-    await sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-      .click({ timeout: 30_000 });
+    await clickApprovalButton(sign);
     await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
     const successCard = page.locator('[data-testid="mint-success"]');
@@ -463,8 +515,7 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
       return true;
     },
   });
-  await sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-    .click({ timeout: 30_000 });
+  await clickApprovalButton(sign);
   await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   const successCard = page.locator('[data-testid="mint-success"]');
@@ -599,8 +650,7 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
       return true;
     },
   });
-  await sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-    .click({ timeout: 30_000 });
+  await clickApprovalButton(sign);
   await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   const errorAlert = page.locator('[data-testid="mint-error"]');
@@ -1031,8 +1081,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
     },
   });
   await shot(approvalSign, 'offer-03-sign-approval');
-  await approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-    .click({ timeout: 30_000 });
+  await clickApprovalButton(approvalSign);
   await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── Success surfaces + broadcast txid available ───
@@ -1304,8 +1353,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
     },
   });
   await shot(approvalSign, 'transfer-03-sign-approval');
-  await approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-    .click({ timeout: 30_000 });
+  await clickApprovalButton(approvalSign);
   await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── Success card + broadcast txid ───
