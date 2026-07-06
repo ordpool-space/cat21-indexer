@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import {
   getUtxos,
   waitForElectrsSync,
+  waitForUtxoAt,
   rpc,
   mineBlocks,
   getTx,
@@ -202,12 +203,18 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   // selectors. CAT-21 wallet RBF policy assertion (sequence ==
   // 0xfffffffd) lives at the bottom.
   const FUND_AMOUNT_BTC = 0.001;
+  const FUND_AMOUNT_SATS = Math.round(FUND_AMOUNT_BTC * 1e8);
   const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', paymentAddr, String(FUND_AMOUNT_BTC)).trim();
   console.log(`[cat21wallet] funded ${paymentAddr} +${FUND_AMOUNT_BTC} BTC tx=${fundTxid}`);
   const fundedTip = mineBlocks(1);
   await waitForElectrsSync(fundedTip);
-  const fundUtxos = await getUtxos(paymentAddr);
-  expect(fundUtxos.length).toBeGreaterThan(0);
+  // Poll the address for the specific 100 000-sat UTXO instead of a
+  // single getUtxos + expect(length > 0). waitForElectrsSync only
+  // guarantees electrs has ingested the block header; the per-address
+  // UTXO index lags a beat, and the length check flakes on cold
+  // runners. See SDK's 77c7cab for the same pattern in the SDK's own
+  // regtest specs, plus the feedback_one_green_run_not_green memory.
+  await waitForUtxoAt(paymentAddr, FUND_AMOUNT_SATS);
 
   // Reload so the orchestrator picks up the new UTXO.
   const knownBeforeReload = new Set(context.pages());
