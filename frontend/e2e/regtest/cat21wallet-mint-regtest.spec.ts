@@ -1235,21 +1235,6 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   await manualInput.fill('1');
   await manualInput.press('Tab');
 
-  // ─── Debug: dump the UTXOs electrs sees at paymentAddr ───
-  // If the orchestrator's simulation reports insufficient, the CI log
-  // now shows the exact fundable set (via a direct fetch against the
-  // same reverse-proxy the orchestrator hits).
-  try {
-    const utxosResp = await fetch(`http://localhost:8999/api/address/${sharedPaymentAddress}/utxo`);
-    const utxosJson = await utxosResp.json();
-    const total = Array.isArray(utxosJson) ? utxosJson.reduce((s: number, u: { value: number }) => s + (u.value ?? 0), 0) : 0;
-    // eslint-disable-next-line no-console
-    console.log(`[transfer-flow] paymentAddr ${sharedPaymentAddress} utxos (${Array.isArray(utxosJson) ? utxosJson.length : 0} total ${total} sats) =`, JSON.stringify(utxosJson));
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.log('[transfer-flow] paymentAddr utxo fetch failed:', err);
-  }
-
   // ─── Wait for the Transfer button to enable + click ───
   const transferBtn = page.getByTestId('transfer-cta');
   await expect(transferBtn).toBeVisible({ timeout: 30_000 });
@@ -1266,91 +1251,28 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
     for (const name of [
       'data-state', 'data-has-cat', 'data-has-recipient', 'data-fee',
       'data-sim-ready', 'data-sim-insufficient',
-      'data-wallet-ord-address', 'data-wallet-ord-pubkey',
-      'data-wallet-pay-address', 'data-wallet-pay-pubkey',
-      'data-wallet-type',
+      'data-wallet-ord-address', 'data-wallet-pay-address', 'data-wallet-type',
     ]) {
       attrs[name] = await debugState.getAttribute(name).catch(() => null);
     }
-    // eslint-disable-next-line no-console
-    console.log('[transfer-flow] button-disabled debug state =', JSON.stringify(attrs));
-
-    // Run the SDK's transfer simulation directly with the same inputs
-    // the orchestrator would use. The orchestrator's catch-all
-    // swallows any error as `insufficient: true`; running the same
-    // code path here surfaces the actual throw.
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { buildCat21TransferPsbt: bldTx, Network: NetX } = require('ordpool-sdk/core') as {
-        buildCat21TransferPsbt: (args: unknown) => unknown;
-        Network: { Regtest: 'regtest' };
-      };
-      // Read the mint's actual output script from bitcoin-cli so we
-      // reproduce the SIM function's cat-input build.
-      const mintRaw = JSON.parse(
-        rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', freshTxid, '2')
-      ) as { vout: Array<{ scriptPubKey: { hex: string } }> };
-      const catScriptHex = mintRaw.vout[0].scriptPubKey.hex;
-      // The first funding UTXO we could find (any is fine for the sim).
-      const utxosResp = await fetch(`http://localhost:8999/api/address/${sharedPaymentAddress}/utxo`);
-      const utxos = await utxosResp.json() as Array<{ txid: string; vout: number; value: number }>;
-      if (!utxos.length) throw new Error('no funding UTXOs at paymentAddr');
-      const funding = utxos[0];
-      const fundingRaw = JSON.parse(
-        rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', funding.txid, '2')
-      ) as { vout: Array<{ scriptPubKey: { hex: string } }> };
-      const fundingScriptHex = fundingRaw.vout[funding.vout].scriptPubKey.hex;
-
-      const hexToBytes = (h: string): Uint8Array => {
-        const s = h.startsWith('0x') ? h.slice(2) : h;
-        const out = new Uint8Array(s.length / 2);
-        for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
-        return out;
-      };
-
-      const built = bldTx({
-        walletType: attrs['data-wallet-type'],
-        network: NetX.Regtest,
-        catUtxo: {
-          txid: freshTxid,
-          vout: 0,
-          value: 546,
-          scriptPubKey: hexToBytes(catScriptHex),
-        },
-        fundingInputs: [{
-          txid: funding.txid,
-          vout: funding.vout,
-          value: funding.value,
-          scriptPubKey: hexToBytes(fundingScriptHex),
-        }],
-        destinations: {
-          recipientAddress,
-          senderChangeAddress: sharedPaymentAddress,
-        },
-        feeSats: 200,
-      });
-      // eslint-disable-next-line no-console
-      console.log('[transfer-flow] direct SDK simulation succeeded:', built);
-    } catch (simErr) {
-      // eslint-disable-next-line no-console
-      console.log('[transfer-flow] direct SDK simulation THREW:', simErr instanceof Error ? simErr.message : simErr);
-    }
-    throw err;
-  }
   await shot(page, 'transfer-02-ready');
 
-  // Transfer requires TWO signatures: input 0 (cat, ordinals address)
-  // and input 1 (funding, payment address). cat21-wallet chains a
-  // separate approval popup per index — click both. If the wallet
-  // ever merges into one popup, the second waitForApprovalPopup will
-  // simply time out (6s) and we treat that as "already done".
+  // cat21-wallet signs the transfer's cat + funding inputs inside a
+  // SINGLE approval popup (signAtIndex-array RPC shape, ordpool-sdk
+  // commit 65b1b00). The loop remains defensive so a future wallet
+  // change to per-index popups still works — the second iteration
+  // times out cleanly if no additional popup arrives.
   let knownBeforeSign = new Set(context.pages());
   await transferBtn.click();
   for (let i = 0; i < 2; i++) {
     const approvalSign = await waitForApprovalPopup({
       context,
       knownPages: knownBeforeSign,
-      timeoutMs: i === 0 ? 120_000 : 60_000,
+      // First popup: 120s cushion for wallet unlock + PSBT parse. Any
+      // second popup would fire immediately after the first closes;
+      // a short 5s window catches it without adding dead time when
+      // (as with today's cat21-wallet) the flow is single-popup.
+      timeoutMs: i === 0 ? 120_000 : 5_000,
       isApproval: async (p) => {
         if (!p.url().startsWith('chrome-extension://')) return false;
         await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
