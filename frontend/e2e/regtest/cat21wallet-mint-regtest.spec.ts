@@ -1125,7 +1125,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   // the underlying throw before returning insufficient=true.
   page.on('console', (msg) => {
     const text = msg.text();
-    if (text.includes('cat21-transfer-sim-error') || msg.type() === 'error') {
+    if (text.includes('cat21-transfer-sim') || msg.type() === 'error') {
       // eslint-disable-next-line no-console
       console.log(`[browser-${msg.type()}] ${text}`);
     }
