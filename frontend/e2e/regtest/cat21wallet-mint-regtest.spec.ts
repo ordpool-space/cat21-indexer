@@ -1339,22 +1339,31 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   }
   await shot(page, 'transfer-02-ready');
 
-  const knownBeforeSign = new Set(context.pages());
+  // Transfer requires TWO signatures: input 0 (cat, ordinals address)
+  // and input 1 (funding, payment address). cat21-wallet chains a
+  // separate approval popup per index — click both. If the wallet
+  // ever merges into one popup, the second waitForApprovalPopup will
+  // simply time out (6s) and we treat that as "already done".
+  let knownBeforeSign = new Set(context.pages());
   await transferBtn.click();
-  const approvalSign = await waitForApprovalPopup({
-    context,
-    knownPages: knownBeforeSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
-  });
-  await shot(approvalSign, 'transfer-03-sign-approval');
-  await clickApprovalButton(approvalSign);
-  await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+  for (let i = 0; i < 2; i++) {
+    const approvalSign = await waitForApprovalPopup({
+      context,
+      knownPages: knownBeforeSign,
+      timeoutMs: i === 0 ? 120_000 : 60_000,
+      isApproval: async (p) => {
+        if (!p.url().startsWith('chrome-extension://')) return false;
+        await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+          .waitFor({ state: 'visible', timeout: 60_000 });
+        return true;
+      },
+    }).catch(() => null);
+    if (!approvalSign) break; // no more popups — the sign flow chained into broadcast
+    await shot(approvalSign, `transfer-03-sign-approval-${i + 1}`);
+    await clickApprovalButton(approvalSign);
+    await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+    knownBeforeSign = new Set(context.pages()); // arm the next iteration to see any NEW popup
+  }
 
   // ─── Success card + broadcast txid ───
   const successCard = page.getByTestId('transfer-success');
