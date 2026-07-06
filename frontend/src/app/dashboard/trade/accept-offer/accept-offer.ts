@@ -137,6 +137,24 @@ export class AcceptOffer implements OnInit {
       // pastedOffer / parsedOffer are owned by the orchestrator's own
       // wallet-change reset (Cat21AcceptOfferOrchestrator).
     });
+
+    // Auto-fill the floor from the parsed offer when the URL brings a
+    // one-click accept (offer=... + catTxid= + catVout=). Rationale:
+    // the seller clicking a "you agreed to X sats" URL has already
+    // consented to that price by clicking through — requiring them to
+    // re-type the same number is friction. Manual-paste flows still
+    // require the seller to type a floor (input stays empty on paste).
+    // The SDK's floor safety-net still fires if someone tampers the
+    // URL to reference a low-price offer — `pricePaidSats < floor`
+    // would reject validation before signing.
+    effect(() => {
+      const parsed = this.parsedOffer();
+      const fromUrl = this.urlCatOutpoint();
+      if (!parsed || !fromUrl) return;
+      if (this.floorPriceInput() !== '') return; // seller typed one manually — respect it
+      this.floorPriceInput.set(String(parsed.pricePaidSats));
+      this.orchestrator.setFloorPriceSats(parsed.pricePaidSats);
+    });
   }
 
   ngOnInit(): void {
