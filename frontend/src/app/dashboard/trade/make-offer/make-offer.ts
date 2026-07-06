@@ -273,4 +273,9 @@ export class MakeOffer {
     this.lookupError.set(null);
     this.resolvedSellerAddress.set(null);
   }
+
+  /** FeesPicker's feeRateChange forwarded into the create-offer orchestrator. */
+  onFeeRateChange(rate: number): void {
+    this.orchestrator.setFeeRate(rate);
+  }
 }

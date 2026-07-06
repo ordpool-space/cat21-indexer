@@ -25,7 +25,7 @@
   } @else if (state() !== 'success') {
     <section class="mint-section" data-testid="mint-fee-section">
       <h2 class="mint-section-heading">1. Pick a fee rate</h2>
-      <app-fees-picker [minFeeRate]="0.1" />
+      <app-fees-picker [minFeeRate]="0.1" [feeRate]="feeRate()" (feeRateChange)="onFeeRateChange($event)" />
     </section>
 
     @if (viableRows().length === 0 && state() === 'ready') {

@@ -49,11 +49,22 @@ export class FeesPicker {
    */
   readonly minFeeRate = input<number>(0.1);
 
-  /** Fires every time the active fee rate changes (tier click or manual edit). */
-  readonly feeRateChange = output<number>();
+  /**
+   * Current fee rate from the parent's orchestrator. The picker
+   * highlights the matching tier + shows this in the manual input
+   * field. Parent forwards `(feeRateChange)` back into its own
+   * orchestrator's `setFeeRate` — that keeps the picker
+   * orchestrator-agnostic (it's used from mint, transfer, make-offer,
+   * accept-offer, all with different orchestrators).
+   *
+   * `recommendedFees$` (the polled tier values) stays sourced from
+   * `Cat21MintOrchestrator` because those values are network-global,
+   * not per-cat-operation — one orchestrator polls, everyone reads.
+   */
+  readonly feeRate = input<number | null>(null);
 
-  /** Current fee rate the user has picked, bridged from the orchestrator's signal. */
-  readonly feeRate = this.orchestrator.feeRate;
+  /** Fires every time the active fee rate changes (tier click, manual edit, or auto-seed on first-fees). */
+  readonly feeRateChange = output<number>();
 
   /** Polled tier values from the SDK. `undefined` until the first emission. */
   readonly fees = toSignal(this.orchestrator.recommendedFees$);
@@ -71,11 +82,11 @@ export class FeesPicker {
     return null;
   });
 
-  /** Local mirror of the manual-input field, syncs from feeRate signal. */
+  /** Local mirror of the manual-input field, syncs from feeRate input. */
   readonly manualInput = signal<number | null>(null);
 
   constructor() {
-    // Keep the input's displayed value aligned with the orchestrator's
+    // Keep the input's displayed value aligned with the parent's
     // canonical fee rate whenever it changes (e.g. tier click).
     effect(() => {
       const current = this.feeRate();
@@ -84,15 +95,16 @@ export class FeesPicker {
       }
     });
 
-    // Auto-pick the "fastest" tier as soon as recommendedFees$ first
-    // emits, but only if the orchestrator's fee rate is still null. The
-    // orchestrator gates simulations on feeRate, so without this seed a
-    // freshly-connected wallet would render "no viable UTXOs" until the
-    // user manually clicked a tier — even when their UTXOs are fine.
+    // Auto-seed the "fastest" tier as soon as recommendedFees$ first
+    // emits, but only if the parent's fee rate is still null. Every
+    // orchestrator downstream gates its simulation on feeRate, so
+    // without this seed a freshly-connected wallet would render "no
+    // viable UTXOs" until the user manually clicked a tier — even when
+    // their UTXOs are fine.
     effect(() => {
       const fees = this.fees();
       if (fees && this.feeRate() === null && fees.fastestFee > 0) {
-        this.orchestrator.setFeeRate(fees.fastestFee);
+        this.feeRateChange.emit(fees.fastestFee);
       }
     });
   }
@@ -101,17 +113,12 @@ export class FeesPicker {
     const fees = this.fees();
     if (!fees) return;
     const rate = fees[t.payloadKey];
-    if (rate > 0) this.set(rate);
+    if (rate > 0) this.feeRateChange.emit(rate);
   }
 
   onManualInputChange(value: number | null): void {
     if (value === null) return;
     if (!Number.isFinite(value) || value < this.minFeeRate()) return;
-    this.set(value);
-  }
-
-  private set(rate: number): void {
-    this.orchestrator.setFeeRate(rate);
-    this.feeRateChange.emit(rate);
+    this.feeRateChange.emit(value);
   }
 }

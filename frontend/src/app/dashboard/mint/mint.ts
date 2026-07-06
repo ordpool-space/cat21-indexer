@@ -239,4 +239,9 @@ export class Mint {
         return 'One of the asset-detection endpoints (ord.ordpool.space or ord.cat21.space) didn\'t respond. Click "Retry scan" to try again.';
     }
   }
+
+  /** FeesPicker's feeRateChange forwarded into this page's orchestrator. */
+  onFeeRateChange(rate: number): void {
+    this.orchestrator.setFeeRate(rate);
+  }
 }

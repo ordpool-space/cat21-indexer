@@ -163,7 +163,7 @@
 
     <section class="make-offer-section" data-testid="make-offer-fee-section">
       <h2 class="make-offer-section-heading">3. Pick a fee rate</h2>
-      <app-fees-picker [minFeeRate]="0.1" />
+      <app-fees-picker [minFeeRate]="0.1" [feeRate]="feeRate()" (feeRateChange)="onFeeRateChange($event)" />
     </section>
 
     @if (simulationOutcome()?.simulation; as sim) {

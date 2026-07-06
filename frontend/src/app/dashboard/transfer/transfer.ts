@@ -269,4 +269,9 @@ export class Transfer {
     this.recipientInput.set('');
     this.holdingsResource.reload();
   }
+
+  /** FeesPicker's feeRateChange forwarded into the transfer orchestrator. */
+  onFeeRateChange(rate: number): void {
+    this.orchestrator.setFeeRate(rate);
+  }
 }
