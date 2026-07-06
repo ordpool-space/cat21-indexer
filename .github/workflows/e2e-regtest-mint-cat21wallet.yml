@@ -11,6 +11,9 @@ on:
   push:
     paths:
       - 'frontend/e2e/regtest/cat21wallet-mint-regtest.spec.ts'
+      - 'frontend/playwright.regtest.config.ts'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
       - '.github/workflows/e2e-regtest-mint-cat21wallet.yml'
 
 permissions:
