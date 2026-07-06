@@ -594,3 +594,228 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
   await expect(errorAlert).toBeVisible({ timeout: 60_000 });
   await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
 });
+
+
+// ============================================================
+// Cat-detail flow: Sell / Buy / Send buttons + Sell modal +
+// ask banner + make-offer / transfer deep-link prefills.
+//
+// The tests below reuse the wallet connected in the first test
+// above (`context` persists across tests; the SDK's WalletService
+// restores connectedWallet from localStorage on every page load).
+//
+// The cat-detail flow depends on the cat21-indexer backend AND
+// cat21-ord — neither runs in the regtest e2e stack. We `page.route`
+// their responses with a synthesised cat #42 that the connected
+// wallet "owns". This tests the UI plumbing (button states, modal,
+// permalink, banners, prefills) without needing full infrastructure;
+// the underlying orchestrator + PSBT logic is covered by the SDK's
+// own regtest suite.
+// ============================================================
+
+const CAT_NUMBER_FOR_UI_TEST = 42;
+
+let sellerOrdinalsAddress: string | undefined;
+
+/**
+ * Reads the connected wallet's ordinals address by opening the
+ * wallet-connect popover and pulling the `title` attribute off the
+ * ordinals-row <code> element. Cached so subsequent tests skip the
+ * DOM round-trip.
+ */
+async function ensureSellerOrdinalsAddress(): Promise<string> {
+  if (sellerOrdinalsAddress) return sellerOrdinalsAddress;
+  const page = await context.newPage();
+  await page.goto(FRONTEND_URL, { waitUntil: 'domcontentloaded' });
+  const walletBtn = page.locator('button.wallet-button-connected');
+  await expect(walletBtn).toBeVisible({ timeout: 30_000 });
+  await walletBtn.click();
+  // The popover renders two `code.addr-value` elements — ordinals first,
+  // then payment. The full address lives on the `title` attribute
+  // (the visible text is truncated).
+  const ordinalsCode = page.locator('code.addr-value').first();
+  await expect(ordinalsCode).toBeVisible({ timeout: 10_000 });
+  const addr = (await ordinalsCode.getAttribute('title'))?.trim();
+  if (!addr) throw new Error('could not extract connected wallet ordinals address from popover');
+  sellerOrdinalsAddress = addr;
+  console.log(`[cat21wallet] connected wallet ordinals address = ${addr}`);
+  await page.close();
+  return addr;
+}
+
+/** Fake CatDto that satisfies the frontend's rendering requirements. */
+function mockCatDto(catNumber: number): unknown {
+  return {
+    id: '00000000-0000-0000-0000-000000000042',
+    catNumber,
+    txHash: '0'.repeat(64),
+    blockHash: '0'.repeat(64),
+    blockHeight: 800000,
+    mintedAt: '2024-01-01T00:00:00.000Z',
+    mintedBy: null,
+    fee: 1000,
+    weight: 400,
+    size: 200,
+    feeRate: 10,
+    sat: 1000000000,
+    value: 546,
+    category: 'sub1k',
+    genesis: false,
+    catColors: ['#FF9900'],
+    gender: 'female',
+    designIndex: 0,
+    designPose: 'standing',
+    designExpression: 'grumpy',
+    designPattern: 'plain',
+    designFacing: 'left',
+    laserEyes: 'none',
+    background: 'plain',
+    backgroundColors: ['#000000'],
+    crown: 'none',
+    glasses: 'none',
+    glassesColors: [],
+    rarityBits: 5.0,
+    rarityRank: 1,
+    rarityCategoryTotal: 100,
+  };
+}
+
+/**
+ * Route interceptors for the cat detail flow. Mocks:
+ *   - GET backend2.cat21.space/api/cat/:N   → synthesised cat #N owned by `owner`
+ *   - GET backend2.cat21.space/api/status   → totalCats large enough that /cat/N is "synced"
+ *   - GET ord.cat21.space/cat/:N            → { address: owner }
+ * Everything else is left to hit its normal target (which in e2e is
+ * either the fees-stub on :8999 or an unbound localhost port that
+ * naturally fails — the tests don't depend on those calls).
+ */
+async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress: string): Promise<void> {
+  await page.route(new RegExp(`^https://backend2\\.cat21\\.space/api/cat/${catNumber}(\\?|$)`), (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(mockCatDto(catNumber)),
+    });
+  });
+  await page.route(/^https:\/\/backend2\.cat21\.space\/api\/status(\?|$)/, (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        totalCats: 1000,
+        lastSyncedCatNumber: 1000,
+        lastSyncTime: '2024-01-01T00:00:00.000Z',
+      }),
+    });
+  });
+  await page.route(new RegExp(`^https://ord\\.cat21\\.space/cat/${catNumber}(\\?|$)`), (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ address: ownerAddress }),
+    });
+  });
+}
+
+test('/cat/N: three action buttons + Sell modal generates the shareable permalink', async () => {
+  test.setTimeout(120_000);
+  const owner = await ensureSellerOrdinalsAddress();
+  const N = CAT_NUMBER_FOR_UI_TEST;
+  const page = await context.newPage();
+  await installCatDetailMocks(page, N, owner);
+
+  await page.goto(`${FRONTEND_URL}/cat/${N}`, { waitUntil: 'domcontentloaded' });
+  await shot(page, 'detail-01-loaded');
+
+  // The three buttons are always rendered; owner-side states are
+  // Sell:enabled, Buy:disabled ('owns-it'), Send:enabled.
+  const sellBtn = page.getByTestId('cat-action-sell');
+  const buyBtn = page.getByTestId('cat-action-buy');
+  const sendBtn = page.getByTestId('cat-action-send');
+  await expect(sellBtn).toBeVisible({ timeout: 30_000 });
+  await expect(buyBtn).toBeVisible();
+  await expect(sendBtn).toBeVisible();
+
+  await expect(sellBtn).toBeEnabled({ timeout: 15_000 });
+  await expect(buyBtn).toBeDisabled();
+  await expect(sendBtn).toBeEnabled();
+  await expect(buyBtn).toHaveAttribute('title', /already own this cat/i);
+
+  // Sell modal round-trip.
+  await sellBtn.click();
+  const askInput = page.getByTestId('sell-modal-ask-input');
+  await expect(askInput).toBeVisible({ timeout: 10_000 });
+  await askInput.fill('21000');
+
+  const permalink = page.getByTestId('sell-modal-permalink');
+  await expect(permalink).toBeVisible({ timeout: 5_000 });
+  const url = await permalink.inputValue();
+  expect(url).toContain(`/cat/${N}?ask=21000`);
+  console.log(`[detail-flow] generated permalink = ${url}`);
+
+  // Copy button flips to "Copied!" after clicking.
+  const copyBtn = page.getByTestId('sell-modal-copy-permalink');
+  await copyBtn.click();
+  await expect(copyBtn).toContainText(/copied/i, { timeout: 3_000 });
+
+  await shot(page, 'detail-02-modal-permalink');
+  await page.close();
+});
+
+test('/cat/N?ask=X: owner-variant ask banner is visible on the seller\'s own link', async () => {
+  test.setTimeout(60_000);
+  const owner = await ensureSellerOrdinalsAddress();
+  const N = CAT_NUMBER_FOR_UI_TEST;
+  const page = await context.newPage();
+  await installCatDetailMocks(page, N, owner);
+
+  await page.goto(`${FRONTEND_URL}/cat/${N}?ask=21000`, { waitUntil: 'domcontentloaded' });
+  const banner = page.getByTestId('ask-banner');
+  await expect(banner).toBeVisible({ timeout: 30_000 });
+  await expect(banner).toContainText(/your ask for this cat is 21000 sats/i);
+  await shot(page, 'detail-03-ask-banner-owner');
+  await page.close();
+});
+
+test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask" banner surfaces prefill intent', async () => {
+  test.setTimeout(60_000);
+  const N = CAT_NUMBER_FOR_UI_TEST;
+  const page = await context.newPage();
+
+  await page.goto(
+    `${FRONTEND_URL}/dashboard/trade/make?catNumber=${N}&askPrice=21000&fromAsk=1`,
+    { waitUntil: 'domcontentloaded' },
+  );
+
+  // The prefill effect kicks off a cat-number lookup that will fail
+  // against the unbound ord+esplora stubs in this e2e — that's fine.
+  // The banner itself is driven purely off the URL query param and
+  // is what we're pinning here.
+  const banner = page.getByTestId('responding-to-ask-banner');
+  await expect(banner).toBeVisible({ timeout: 30_000 });
+  await expect(banner).toContainText(/responding to a seller's ask/i);
+  await shot(page, 'detail-04-make-offer-prefill-banner');
+  await page.close();
+});
+
+test('/dashboard/transfer?catNumber=X: page loads and the connected-wallet heading is visible', async () => {
+  test.setTimeout(60_000);
+  const N = CAT_NUMBER_FOR_UI_TEST;
+  const page = await context.newPage();
+
+  await page.goto(`${FRONTEND_URL}/dashboard/transfer?catNumber=${N}`, {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // The transfer page's heading is stable across wallet states.
+  // The prefill's actual cat-selection effect needs `myHoldings` to
+  // resolve from ord (unreachable here); the presence assertion
+  // proves the page didn't crash on the new `input()` binding.
+  const heading = page.getByRole('heading', { name: /transfer/i }).first();
+  await expect(heading).toBeVisible({ timeout: 30_000 });
+  await shot(page, 'detail-05-transfer-prefill-loaded');
+  await page.close();
+});
