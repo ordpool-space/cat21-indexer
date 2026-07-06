@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
@@ -30,6 +30,18 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
 export class MakeOffer {
   private orchestrator = inject(Cat21CreateOfferOrchestrator);
   private lookup = inject(CatUtxoLookupService);
+
+  // ---------- Deep-link prefill (via router withComponentInputBinding) ----------
+  //
+  // Query params from a "Buy this cat" click on `/cat/:catNumber`.
+  // `catNumber` triggers the on-chain lookup automatically; `askPrice`
+  // pre-fills the price field; `fromAsk=1` surfaces a banner reminding
+  // the buyer they're responding to a seller's advertised price.
+  readonly catNumberParam = input<string | undefined>(undefined, { alias: 'catNumber' });
+  readonly askPriceParam = input<string | undefined>(undefined, { alias: 'askPrice' });
+  readonly fromAskParam = input<string | undefined>(undefined, { alias: 'fromAsk' });
+
+  readonly showRespondingToAskBanner = computed(() => this.fromAskParam() === '1');
 
   // ---------- Live state from the orchestrator ----------
 
@@ -81,6 +93,13 @@ export class MakeOffer {
   /** Audit M5 — wallet-swap form reset. See transfer.ts for the rationale. */
   private lastSeenOrdinalsAddress: string | null = null;
 
+  /**
+   * Prevents the prefill effect from firing multiple times when the
+   * wallet reconnects on the same catNumber query param. First hit
+   * arms the lookup; subsequent wallet-swap effects handle reset.
+   */
+  private prefilledFor: string | null = null;
+
   constructor() {
     effect(() => {
       const w = this.connectedWallet();
@@ -101,6 +120,33 @@ export class MakeOffer {
       this.lookupError.set(null);
       this.resolvedSellerAddress.set(null);
       this.lookupRequestId++; // invalidate any in-flight response
+      this.prefilledFor = null; // allow the query-param prefill to run again for the new wallet
+    });
+
+    // Prefill from query params. Runs once per wallet connection per
+    // catNumber param; on re-visit with the same params the state is
+    // already what we'd set, so no-op.
+    effect(() => {
+      const catNumber = this.catNumberParam();
+      const askPrice = this.askPriceParam();
+      const wallet = this.connectedWallet();
+      if (!catNumber || !wallet) return;
+      if (this.prefilledFor === catNumber) return;
+      this.prefilledFor = catNumber;
+
+      // Push the raw string into the draft first, so the input reflects it.
+      this.draft.update((d) => ({ ...d, catNumberInput: catNumber }));
+      // Then kick the on-chain lookup — the same code path as clicking
+      // the Lookup button manually.
+      this.onLookupCatClick();
+
+      if (askPrice) {
+        const n = Number.parseInt(askPrice, 10);
+        if (Number.isFinite(n) && n > 0) {
+          this.draft.update((d) => ({ ...d, priceSatsInput: String(n) }));
+          this.orchestrator.setPriceSats(n);
+        }
+      }
     });
   }
 

@@ -7,3 +7,46 @@
 .table {
   table-layout: fixed;
 }
+
+.ask-banner {
+  max-width: 600px;
+  margin: 1rem auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--bs-primary);
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-emphasis-color);
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.cat-actions {
+  max-width: 600px;
+  margin: 1.5rem auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+
+  .btn,
+  .btn:disabled,
+  a.btn {
+    flex: 1 1 auto;
+    min-width: 10rem;
+  }
+}
+
+.ask-input,
+.permalink-readout {
+  font-family: var(--bs-font-monospace);
+}
+
+.permalink-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+
+  .btn {
+    flex: 1 1 auto;
+    min-width: 8rem;
+  }
+}

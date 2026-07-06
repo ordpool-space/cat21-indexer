@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { EMPTY } from 'rxjs';
 import { RouterLink } from '@angular/router';
@@ -31,6 +31,14 @@ export class Transfer {
   private lookup = inject(CatUtxoLookupService);
 
   readonly txLinkBase = 'https://ordpool.space/tx/';
+
+  /**
+   * Query param `?catNumber=<n>` from a "Send" click on
+   * `/cat/:catNumber`. Pre-selects the cat in the picker once the
+   * connected wallet's holdings resolve. If the wallet doesn't hold
+   * this cat, we ignore the param — form works as today.
+   */
+  readonly catNumberParam = input<string | undefined>(undefined, { alias: 'catNumber' });
 
   // ---------- Live state from the orchestrator ----------
 
@@ -159,8 +167,28 @@ export class Transfer {
       // Wallet swapped. Clear form fields the orchestrator doesn't own.
       this.selectedInscriptionId.set(null);
       this.recipientInput.set('');
+      this.prefilledFor = null; // re-arm prefill for the new wallet
+    });
+
+    // Prefill catNumber from the "?catNumber=" query param. Waits for
+    // holdings to resolve. If the connected wallet doesn't hold that
+    // cat, the param is silently ignored — form works normally.
+    effect(() => {
+      const catNumberRaw = this.catNumberParam();
+      const holdings = this.myHoldings();
+      if (!catNumberRaw || holdings.length === 0) return;
+      if (this.prefilledFor === catNumberRaw) return;
+      const n = Number.parseInt(catNumberRaw, 10);
+      if (!Number.isFinite(n) || n < 0) return;
+      const match = holdings.find((h) => h.catNumber === n);
+      if (!match) return; // wallet doesn't hold this cat
+      this.prefilledFor = catNumberRaw;
+      this.selectedInscriptionId.set(match.inscriptionId);
     });
   }
+
+  /** See catNumberParam JSDoc: guards the prefill effect from re-running. */
+  private prefilledFor: string | null = null;
 
   // ---------- Commands ----------
 

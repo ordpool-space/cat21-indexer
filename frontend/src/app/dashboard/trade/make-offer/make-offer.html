@@ -4,6 +4,17 @@
   <a routerLink="/dashboard/trade">← Back to trade</a>
 </p>
 
+@if (showRespondingToAskBanner()) {
+  <div class="responding-to-ask-banner" role="status" data-testid="responding-to-ask-banner">
+    <strong>You're responding to a seller's ask.</strong>
+    <span>
+      The cat number + price below came from the seller's shared link.
+      Adjust freely — this is your offer, and the seller can accept or
+      ignore it.
+    </span>
+  </div>
+}
+
 @if (!connectedWallet()) {
   <div class="connect-card" data-testid="make-offer-cta">
     <h2>Connect your wallet to make an offer</h2>

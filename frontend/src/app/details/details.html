@@ -27,6 +27,19 @@
         [attr.aria-label]="'Older: CAT #' + (cat.catNumber - 1)">Older »</a>
     }
   </nav>
+
+  @if (askSats(); as ask) {
+    <div class="ask-banner" role="status" data-testid="ask-banner">
+      @if (isOwner()) {
+        <strong>Your ask for this cat is {{ ask }} sats.</strong>
+        <span> Anyone with this link can respond with a buy-offer.</span>
+      } @else {
+        <strong>This cat is listed for {{ ask }} sats.</strong>
+        <span> Click <em>Buy this cat</em> below to respond with a signed offer.</span>
+      }
+    </div>
+  }
+
   <article class="cat-box">
     <app-cat21-viewer
       [cat]="cat"
@@ -34,5 +47,174 @@
       [currentOwner]="currentOwnerResource.value()"
       [currentOwnerState]="currentOwnerState()" />
   </article>
-  <a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">« Back</a>
+
+  <!-- Action row: Sell / Buy / Send. Buttons always visible so users
+       discover the features exist; disabled state carries the reason. -->
+  <div class="cat-actions" role="group" aria-label="Cat actions">
+
+    @switch (sellButtonState()) {
+      @case ('enabled') {
+        <button
+          type="button"
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-sell"
+          (click)="openSellModal()">
+          Sell this cat
+        </button>
+      }
+      @case ('connect') {
+        <button
+          type="button"
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-sell"
+          disabled
+          title="Connect a wallet to sell your cats.">
+          Sell this cat
+        </button>
+      }
+      @case ('not-owner') {
+        <button
+          type="button"
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-sell"
+          disabled
+          title="You don't own this cat.">
+          Sell this cat
+        </button>
+      }
+    }
+
+    @switch (buyButtonState()) {
+      @case ('enabled') {
+        <a
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-buy"
+          [routerLink]="['/dashboard/trade/make']"
+          [queryParams]="buyQueryParams()">
+          Buy this cat
+        </a>
+      }
+      @case ('connect') {
+        <button
+          type="button"
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-buy"
+          disabled
+          title="Connect a wallet to buy this cat.">
+          Buy this cat
+        </button>
+      }
+      @case ('owns-it') {
+        <button
+          type="button"
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-buy"
+          disabled
+          title="You already own this cat.">
+          Buy this cat
+        </button>
+      }
+    }
+
+    @switch (sendButtonState()) {
+      @case ('enabled') {
+        <a
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-send"
+          [routerLink]="['/dashboard/transfer']"
+          [queryParams]="sendQueryParams()">
+          Send
+        </a>
+      }
+      @case ('connect') {
+        <button
+          type="button"
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-send"
+          disabled
+          title="Connect a wallet to send your cats.">
+          Send
+        </button>
+      }
+      @case ('not-owner') {
+        <button
+          type="button"
+          class="btn btn-primary fw-bold"
+          data-testid="cat-action-send"
+          disabled
+          title="You don't own this cat.">
+          Send
+        </button>
+      }
+    }
+  </div>
+
+  <a routerLink="/" class="btn btn-secondary fw-bold mt-4 mb-4">« Back</a>
 }
+
+<!-- Sell-listing modal. Not a PSBT builder — a seller cannot construct
+     a buy-offer PSBT (needs the buyer's inputs). This modal just turns
+     an ask price into a shareable permalink; the buyer's wallet builds
+     and signs the PSBT when they click through. -->
+<ng-template #sellModal let-modal>
+  <div class="modal-header">
+    <h4 class="modal-title" id="sell-listing-title">Advertise cat #{{ catNumber() }} for sale</h4>
+    <button type="button" class="btn-close" aria-label="Close" (click)="modal.dismiss()"></button>
+  </div>
+  <div class="modal-body">
+    <p>
+      You're not building an offer here — you're advertising a price. When
+      you share the link below, an interested buyer clicks it and their
+      wallet builds and signs a buy-offer PSBT for the price you're asking.
+      They send the signed PSBT back to you, and you countersign to seal
+      the deal.
+    </p>
+
+    <label class="form-label fw-bold" for="ask-input">Asking price (sats)</label>
+    <input
+      id="ask-input"
+      type="number"
+      class="form-control ask-input"
+      inputmode="numeric"
+      min="1"
+      step="1"
+      placeholder="e.g. 21000"
+      data-testid="sell-modal-ask-input"
+      [value]="askInput()"
+      (input)="onAskInputChange($any($event.target).value)" />
+
+    @if (generatedPermalink(); as url) {
+      <label class="form-label fw-bold mt-3" for="permalink">Sharing link</label>
+      <input
+        id="permalink"
+        type="text"
+        class="form-control permalink-readout"
+        readonly
+        data-testid="sell-modal-permalink"
+        [value]="url" />
+
+      <div class="permalink-actions mt-3">
+        <button
+          type="button"
+          class="btn btn-primary fw-bold"
+          data-testid="sell-modal-copy-permalink"
+          (click)="onCopyPermalinkClick()">
+          @if (copyStatus() === 'copied') { Copied! } @else { Copy link }
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary fw-bold"
+          data-testid="sell-modal-share-x"
+          (click)="onShareOnXClick()">
+          Share on X
+        </button>
+      </div>
+    }
+
+    <p class="mt-4 small">
+      This link doesn't lock anything on-chain. Update the price by
+      generating a new link. You're only committed when you countersign
+      a specific buyer's PSBT on the accept-offer page.
+    </p>
+  </div>
+</ng-template>
