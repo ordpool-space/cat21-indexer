@@ -1135,6 +1135,28 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
       .click({ timeout: 10_000 }).catch(() => undefined);
     await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
   }
+
+  // The Cat21TransferOrchestrator is providedIn: 'root' and its
+  // fundingUtxos$ pipeline uses shareReplay({ refCount: true }). It
+  // ref-count-resubscribes on component creation, which fires a fresh
+  // getUtxos, BUT electrs's per-address UTXO index lags the block-tip
+  // ingest — the just-minted change output may not be indexed at the
+  // exact moment the orchestrator fetches. Reload so the fetch runs
+  // once more, this time with a real chance electrs has caught up.
+  // Same pattern as the mint round-trip test uses at line 213.
+  const knownBeforeReload = new Set(context.pages());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const reapproveAfterReload = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeReload,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapproveAfterReload) {
+    await reapproveAfterReload.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapproveAfterReload.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
   await shot(page, 'transfer-01-loaded');
 
   // ─── Type the recipient + set a fee rate ───
