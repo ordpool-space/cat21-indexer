@@ -1063,3 +1063,138 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 
   await page.close();
 });
+
+
+// ============================================================
+// Full CAT-21 transfer round-trip: mint a fresh cat → transfer
+// to a new address via /dashboard/transfer → verify on-chain.
+//
+// The transfer test mints its OWN cat (via the existing
+// cat21walletMintAtRate helper) so it doesn't depend on
+// sharedMintTxid — which the offer round-trip already spent.
+//
+// Uses the ?catTxid + catVout URL override on the transfer page
+// to bypass the ord-driven holdings picker (ord isn't reachable
+// in this e2e stack). The picker fallback lives in transfer.ts's
+// `urlCatUtxo` computed; production users still get the picker
+// working through ord.
+// ============================================================
+
+test('full transfer round-trip: fresh mint → transfer via URL → cat moves on-chain', async () => {
+  test.setTimeout(240_000);
+  if (!sharedPaymentAddress) throw new Error('mint test must have set sharedPaymentAddress');
+
+  // ─── Mint a fresh cat via the existing helper ───
+  const fresh = await cat21walletMintAtRate({
+    rate: 5,
+    scenarioLabel: 'transfer-mint',
+  });
+  const freshTxid = fresh.broadcastTxid;
+  console.log(`[transfer-flow] minted fresh cat, txid = ${freshTxid}`);
+
+  // Confirm the mint's vout[0] shape is what we expect.
+  const freshRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', freshTxid, '2')
+  ) as {
+    vout: Array<{ value: number; scriptPubKey: { hex: string; address?: string } }>;
+  };
+  expect(Math.round(freshRaw.vout[0].value * 1e8)).toBe(546);
+  const catAddressBefore = freshRaw.vout[0].scriptPubKey.address!;
+  console.log(`[transfer-flow] cat currently at ${catAddressBefore}`);
+
+  // ─── Fresh recipient (regtest taproot) for the transfer ───
+  const recipientAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
+  expect(recipientAddress).toMatch(/^bcrt1p/);
+  console.log(`[transfer-flow] transfer target = ${recipientAddress}`);
+
+  // ─── Navigate to /dashboard/transfer with the outpoint override ───
+  const transferUrl = new URL(`${FRONTEND_URL}/dashboard/transfer`);
+  transferUrl.searchParams.set('catTxid', freshTxid);
+  transferUrl.searchParams.set('catVout', '0');
+
+  const page = await context.newPage();
+  const knownBeforeNavigate = new Set(context.pages());
+  await page.goto(transferUrl.toString(), { waitUntil: 'domcontentloaded' });
+
+  // The wallet may pop up a get-addresses reapproval on a fresh page.
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeNavigate,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+  await shot(page, 'transfer-01-loaded');
+
+  // ─── Type the recipient + set a fee rate ───
+  const recipientInput = page.getByTestId('transfer-recipient-input');
+  await expect(recipientInput).toBeVisible({ timeout: 30_000 });
+  await recipientInput.fill(recipientAddress);
+  // The recipient invalid-hint must NOT be visible for regtest bech32m —
+  // proves the injected bitcoinNetwork wired through to the address
+  // validator (transfer.ts previously hard-coded Network.Mainnet).
+  await expect(page.getByTestId('transfer-recipient-invalid')).toHaveCount(0);
+
+  const manualInput = page.locator('.fees-picker .manual-input');
+  await manualInput.fill('1');
+  await manualInput.press('Tab');
+
+  // ─── Wait for the Transfer button to enable + click ───
+  const transferBtn = page.getByTestId('transfer-cta');
+  await expect(transferBtn).toBeVisible({ timeout: 30_000 });
+  await expect(transferBtn).toBeEnabled({ timeout: 60_000 });
+  await shot(page, 'transfer-02-ready');
+
+  const knownBeforeSign = new Set(context.pages());
+  await transferBtn.click();
+  const approvalSign = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await shot(approvalSign, 'transfer-03-sign-approval');
+  await approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+    .click({ timeout: 30_000 });
+  await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+  // ─── Success card + broadcast txid ───
+  const successCard = page.getByTestId('transfer-success');
+  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await shot(page, 'transfer-04-success');
+  const successHref = await successCard.locator('a').first().getAttribute('href');
+  const transferTxidMatch = successHref!.match(/\/tx\/([0-9a-f]{64})/);
+  expect(transferTxidMatch).not.toBeNull();
+  const transferTxid = transferTxidMatch![1];
+  console.log(`[transfer-flow] transfer tx = ${transferTxid}`);
+
+  // ─── On-chain verification ───
+  await waitForElectrsSync(mineBlocks(1));
+  const transferTx = await getTx(transferTxid);
+  expect(transferTx.status.block_hash).toBeTruthy();
+  // Every cat-touching tx we build carries nLockTime=21 (workspace HQ HARD RULE #1).
+  expect(transferTx.locktime).toBe(21);
+  expect(transferTx.vout.length).toBeGreaterThanOrEqual(1);
+
+  // vout[0] must be the cat at the new recipient (ord-theory FIFO: cat
+  // rides input 0's first sat into output 0's first sat).
+  const transferRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', transferTxid, '2')
+  ) as {
+    vout: Array<{ value: number; scriptPubKey: { address?: string } }>;
+  };
+  expect(Math.round(transferRaw.vout[0].value * 1e8)).toBe(546);
+  expect(transferRaw.vout[0].scriptPubKey.address).toBe(recipientAddress);
+  console.log(`[transfer-flow] cat moved from ${catAddressBefore} → ${recipientAddress}, 546 sats intact`);
+
+  await page.close();
+});

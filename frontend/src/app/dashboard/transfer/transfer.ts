@@ -5,9 +5,9 @@ import { EMPTY } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import * as btc from '@scure/btc-signer';
 import {
+  bitcoinNetwork,
   Cat21Holding,
   Cat21TransferOrchestrator,
-  Network,
   toScureNetwork,
   TransferSimulationOutcome,
 } from 'ordpool-sdk';
@@ -39,6 +39,25 @@ export class Transfer {
    * this cat, we ignore the param — form works as today.
    */
   readonly catNumberParam = input<string | undefined>(undefined, { alias: 'catNumber' });
+
+  /**
+   * Query params `?catTxid=<txid>&catVout=<n>` — direct override for
+   * the picker. When both are present, skip the ord-driven holdings
+   * lookup and use them as the cat UTXO. Value is always 546 sats
+   * (SDK HARD RULE: cat UTXO is always 546 sats). Used by deep-links
+   * that already know the cat's outpoint; also unblocks e2e flows
+   * where ord is unreachable and the picker would otherwise be empty.
+   */
+  readonly catTxidParam = input<string | undefined>(undefined, { alias: 'catTxid' });
+  readonly catVoutParam = input<string | undefined>(undefined, { alias: 'catVout' });
+
+  /**
+   * Network the frontend is configured against (injected via
+   * `bitcoinNetwork` token in app.config.ts). Used for recipient-
+   * address validation so the check honours regtest / testnet
+   * builds instead of hard-failing anything but mainnet.
+   */
+  private readonly bitcoinNetwork = inject(bitcoinNetwork);
 
   // ---------- Live state from the orchestrator ----------
 
@@ -99,7 +118,7 @@ export class Transfer {
     const raw = this.recipientInput().trim();
     if (!raw) return 'empty';
     try {
-      btc.Address(toScureNetwork(Network.Mainnet)).decode(raw);
+      btc.Address(toScureNetwork(this.bitcoinNetwork)).decode(raw);
       return 'valid';
     } catch {
       return 'invalid';
@@ -135,21 +154,24 @@ export class Transfer {
 
   constructor() {
     // When the user picks a cat from the dropdown, push it to the
-    // orchestrator as the Cat21Holding it expects. The orchestrator's
-    // existing wallet-change-reset clears this when the wallet swaps.
+    // orchestrator as the Cat21Holding it expects. Picker takes
+    // precedence; URL override is the fallback (deep-links that
+    // already know the outpoint, or e2e where ord is unreachable).
     effect(() => {
-      const h = this.selectedHolding();
-      if (!h) {
+      const fromPicker = this.selectedHolding();
+      const fromUrl = this.urlCatUtxo();
+      if (fromPicker) {
+        this.orchestrator.setCatUtxo({
+          catNumber: fromPicker.catNumber,
+          txid: fromPicker.txid,
+          vout: fromPicker.vout,
+          value: fromPicker.value,
+        });
+      } else if (fromUrl) {
+        this.orchestrator.setCatUtxo(fromUrl);
+      } else {
         this.orchestrator.setCatUtxo(null);
-        return;
       }
-      const holding: Cat21Holding = {
-        catNumber: h.catNumber,
-        txid: h.txid,
-        vout: h.vout,
-        value: h.value,
-      };
-      this.orchestrator.setCatUtxo(holding);
     });
 
     // Wallet-swap form reset (audit M5).
@@ -190,6 +212,26 @@ export class Transfer {
   /** See catNumberParam JSDoc: guards the prefill effect from re-running. */
   private prefilledFor: string | null = null;
 
+  /**
+   * Cat outpoint parsed from `?catTxid=&catVout=` query params. The
+   * picker's effect uses this as a fallback when no picker selection
+   * is active. Returns null when either param is missing or malformed.
+   */
+  readonly urlCatUtxo = computed<Cat21Holding | null>(() => {
+    const txid = this.catTxidParam();
+    const voutRaw = this.catVoutParam();
+    if (!txid || !voutRaw) return null;
+    if (!TXID_RE.test(txid)) return null;
+    const vout = Number.parseInt(voutRaw, 10);
+    if (!Number.isFinite(vout) || vout < 0) return null;
+    const catNumberRaw = this.catNumberParam();
+    const catNumberParsed = catNumberRaw ? Number.parseInt(catNumberRaw, 10) : NaN;
+    const catNumber = Number.isFinite(catNumberParsed) && catNumberParsed >= 0
+      ? catNumberParsed
+      : 0; // unknown cat number is fine — Cat21Holding.catNumber is display-only for transfer
+    return { catNumber, txid: txid.toLowerCase(), vout, value: 546 };
+  });
+
   // ---------- Commands ----------
 
   onCatPick(inscriptionId: string): void {
@@ -206,7 +248,7 @@ export class Transfer {
       return;
     }
     try {
-      btc.Address(toScureNetwork(Network.Mainnet)).decode(trimmed);
+      btc.Address(toScureNetwork(this.bitcoinNetwork)).decode(trimmed);
       this.orchestrator.setRecipientAddress(trimmed);
     } catch {
       this.orchestrator.setRecipientAddress(null);
