@@ -19,7 +19,14 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   fullyParallel: false,
   workers: 1,
-  retries: process.env.CI ? 1 : 0,
+  // Zero retries: the specs share state via module-scope variables
+  // (sharedPaymentAddress, sharedMintTxid) set by the first test.
+  // Playwright's retry destroys the worker and re-spawns it, losing
+  // that module scope — subsequent tests then all fail with
+  // "first test must have set sharedPaymentAddress". One clean pass
+  // is the right primitive; transient browser flakes get investigated
+  // and fixed rather than papered over with a retry.
+  retries: 0,
   timeout: 480_000,
   expect: {
     timeout: 30_000,
