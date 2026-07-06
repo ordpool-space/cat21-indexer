@@ -138,42 +138,43 @@ export class AcceptOffer implements OnInit {
       // wallet-change reset (Cat21AcceptOfferOrchestrator).
     });
 
-    // Auto-fill the floor from the parsed offer when the URL brings a
-    // one-click accept (offer=... + catTxid= + catVout=). Rationale:
-    // the seller clicking a "you agreed to X sats" URL has already
-    // consented to that price by clicking through — requiring them to
-    // re-type the same number is friction. Manual-paste flows still
-    // require the seller to type a floor (input stays empty on paste).
-    // The SDK's floor safety-net still fires if someone tampers the
-    // URL to reference a low-price offer — `pricePaidSats < floor`
-    // would reject validation before signing.
-    effect(() => {
-      const parsed = this.parsedOffer();
-      const fromUrl = this.urlCatOutpoint();
-      if (!parsed || !fromUrl) return;
-      if (this.floorPriceInput() !== '') return; // seller typed one manually — respect it
-      this.floorPriceInput.set(String(parsed.pricePaidSats));
-      this.orchestrator.setFloorPriceSats(parsed.pricePaidSats);
-    });
+    // NOTE: parsedOffer only fires once validation succeeds, and
+    // validation requires floor to be set first — chicken-and-egg for
+    // the URL flow. Instead, ngOnInit sets floor=0 explicitly when the
+    // URL brings all three (offer, catTxid, catVout) — the seller has
+    // already consented to the price by clicking through the buyer's
+    // link, so the audit-H2 forgot-my-floor safety-net is irrelevant.
+    // Manual-paste flows still require the seller to type a floor.
   }
 
   ngOnInit(): void {
     // Auto-fill from ?offer=… so a buyer can hand the seller a one-click link.
     const params = this.route.snapshot.queryParamMap;
     const offerParam = params.get('offer');
-    if (offerParam) {
-      this.orchestrator.setPastedOffer(offerParam);
-    }
     // Optional catTxid + catVout — the buyer's reply link commits the
     // cat outpoint the offer targets, so the seller doesn't need to
     // pick manually. Both required to take effect.
     const catTxid = params.get('catTxid');
     const catVoutRaw = params.get('catVout');
+    let urlBroughtFullOfferBundle = false;
     if (catTxid && catVoutRaw) {
       const vout = Number.parseInt(catVoutRaw, 10);
       if (/^[0-9a-f]{64}$/i.test(catTxid) && Number.isFinite(vout) && vout >= 0) {
         this.urlCatOutpoint.set({ txid: catTxid.toLowerCase(), vout });
+        urlBroughtFullOfferBundle = !!offerParam;
       }
+    }
+    // Order matters: floor must be set BEFORE setPastedOffer triggers
+    // validation (validation reads floor sync). The URL one-click flow
+    // sets floor=0 — the seller consented by clicking a link with the
+    // buyer's already-committed price; the summary panel still shows
+    // pricePaidSats before signing, so the human is the final gate.
+    if (urlBroughtFullOfferBundle) {
+      this.floorPriceInput.set('0');
+      this.orchestrator.setFloorPriceSats(0);
+    }
+    if (offerParam) {
+      this.orchestrator.setPastedOffer(offerParam);
     }
   }
 
