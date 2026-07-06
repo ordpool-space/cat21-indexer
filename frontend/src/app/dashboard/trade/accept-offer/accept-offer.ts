@@ -69,6 +69,16 @@ export class AcceptOffer implements OnInit {
     return this.myHoldings().find((h) => h.inscriptionId === id) ?? null;
   });
 
+  /**
+   * Cat outpoint the URL-shareable accept link supplied. When the
+   * buyer's reply link is `/dashboard/trade/accept?offer=…&catTxid=…&catVout=…`,
+   * the seller doesn't have to pick — the outpoint is already known
+   * from the offer PSBT's input 0 and can be committed in the URL.
+   * Falls back to the picker when either param is missing or when the
+   * seller wants to double-check by picking manually.
+   */
+  readonly urlCatOutpoint = signal<{ txid: string; vout: number } | null>(null);
+
   readonly floorPriceInput = signal<string>('');
 
   readonly humanRejection = computed<string | null>(() => {
@@ -90,13 +100,19 @@ export class AcceptOffer implements OnInit {
     // which is where the cat lives and where the funds come back to
     // (per the ord-style offer protocol).
     effect(() => {
-      const h = this.selectedHolding();
+      const fromPicker = this.selectedHolding();
+      const fromUrl = this.urlCatOutpoint();
       const wallet = this.walletSignal();
-      if (!h) {
+      // Picker takes precedence when the seller has actively picked
+      // a cat. URL-supplied outpoint is the fallback so a one-click
+      // accept-link from the buyer doesn't require picking anything.
+      if (fromPicker) {
+        this.orchestrator.setExpectedCatUtxo({ txid: fromPicker.txid, vout: fromPicker.vout });
+      } else if (fromUrl) {
+        this.orchestrator.setExpectedCatUtxo(fromUrl);
+      } else {
         this.orchestrator.setExpectedCatUtxo(null);
-        return;
       }
-      this.orchestrator.setExpectedCatUtxo({ txid: h.txid, vout: h.vout });
       if (wallet) {
         // Seller's "payment" output goes to whichever address the
         // seller wants their BTC. Default to their connected wallet's
@@ -125,9 +141,21 @@ export class AcceptOffer implements OnInit {
 
   ngOnInit(): void {
     // Auto-fill from ?offer=… so a buyer can hand the seller a one-click link.
-    const offerParam = this.route.snapshot.queryParamMap.get('offer');
+    const params = this.route.snapshot.queryParamMap;
+    const offerParam = params.get('offer');
     if (offerParam) {
       this.orchestrator.setPastedOffer(offerParam);
+    }
+    // Optional catTxid + catVout — the buyer's reply link commits the
+    // cat outpoint the offer targets, so the seller doesn't need to
+    // pick manually. Both required to take effect.
+    const catTxid = params.get('catTxid');
+    const catVoutRaw = params.get('catVout');
+    if (catTxid && catVoutRaw) {
+      const vout = Number.parseInt(catVoutRaw, 10);
+      if (/^[0-9a-f]{64}$/i.test(catTxid) && Number.isFinite(vout) && vout >= 0) {
+        this.urlCatOutpoint.set({ txid: catTxid.toLowerCase(), vout });
+      }
     }
   }
 

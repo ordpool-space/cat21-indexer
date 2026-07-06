@@ -54,6 +54,10 @@ let context: BrowserContext;
 let extensionId: string;
 // Hoisted state shared across `test()` blocks.
 let sharedPaymentAddress: string | undefined;
+// Set at the end of the first (mint) test — the confirmed on-chain
+// txid whose vout[0] carries the fresh cat. The full-offer-round-trip
+// test picks this up as its sellerInput.
+let sharedMintTxid: string | undefined;
 
 async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
@@ -257,6 +261,8 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   expect(txidMatch).not.toBeNull();
   const broadcastTxid = txidMatch![1];
   console.log(`[cat21wallet] mint txid = ${broadcastTxid}`);
+  // Hoist for the later full-offer-round-trip test.
+  sharedMintTxid = broadcastTxid;
 
   const confirmedTip = mineBlocks(1);
   await waitForElectrsSync(confirmedTip);
@@ -817,5 +823,243 @@ test('/dashboard/transfer?catNumber=X: page loads and the connected-wallet headi
   const heading = page.getByRole('heading', { name: /transfer/i }).first();
   await expect(heading).toBeVisible({ timeout: 30_000 });
   await shot(page, 'detail-05-transfer-prefill-loaded');
+  await page.close();
+});
+
+
+// ============================================================
+// Full CAT-21 offer round-trip: mint → sell → buyer builds+signs
+// → seller countersigns → on-chain settlement.
+//
+// The seller side is the connected cat21-wallet already onboarded
+// in beforeAll. The buyer side is bitcoin-cli's `ordpool-e2e`
+// descriptor wallet — a canonical stand-in for any wallet that
+// doesn't inject a browser provider (Sparrow, Electrum, hardware).
+// This mirrors the SDK's own psbt-export-signer round-trip: any
+// BIP-174 signer works because SIGHASH_ALL commits the whole tx
+// regardless of who's signing.
+//
+// The test uses Node-side SDK helpers to build the buy-offer PSBT
+// (`buildCat21BuyOfferPsbt` from ordpool-sdk/core), signs the
+// buyer inputs via `walletprocesspsbt`, then hands the seller the
+// finished shareable link. The cat21-wallet approves and signs
+// input 0 (the cat's UTXO) at its ordinals address; the SDK's
+// broadcast dispatcher submits the finalized tx to electrs via
+// the fees-electrs-stub reverse-proxy on :8999.
+// ============================================================
+
+// Import SDK helpers from the Angular-free /core entry so the
+// spec's TypeScript compile doesn't drag @angular/core in. The
+// SDK ships pre-built dist-core/ so this resolves without a build.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sdkCore: {
+  buildCat21BuyOfferPsbt: (args: unknown) => { psbt: Uint8Array; hex: string; buyerInputTotalSats: number; changeSats: number };
+  Network: { Regtest: 'regtest'; Testnet: 'testnet'; Mainnet: 'mainnet' };
+} = require('ordpool-sdk/core');
+
+/** Base64-encode a Uint8Array. */
+function b64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('base64');
+}
+
+/** Hex-decode into a Uint8Array. */
+function hexDecode(hexStr: string): Uint8Array {
+  const clean = hexStr.startsWith('0x') ? hexStr.slice(2) : hexStr;
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  }
+  return out;
+}
+
+test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves on-chain', async () => {
+  test.setTimeout(240_000);
+  if (!sharedMintTxid) throw new Error('mint test must have set sharedMintTxid');
+  if (!sharedPaymentAddress) throw new Error('mint test must have set sharedPaymentAddress');
+
+  // ─── Read the mint tx to get the exact seller cat outpoint ───
+  const mintTxJson = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', sharedMintTxid, '2')
+  ) as {
+    vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }>;
+  };
+  const catOut = mintTxJson.vout[0];
+  const sellerCatScriptHex = catOut.scriptPubKey.hex;
+  const sellerCatAddress = catOut.scriptPubKey.address!;
+  const sellerCatValue = Math.round(catOut.value * 1e8); // BTC → sats
+  console.log(`[offer-flow] seller cat UTXO ${sharedMintTxid}:0 → ${sellerCatValue} sats at ${sellerCatAddress}`);
+  expect(sellerCatValue).toBe(546);
+
+  // ─── Fund the "buyer" (bitcoin-cli's ordpool-e2e wallet) ───
+  //
+  // We use ordpool-e2e as both the mining source and the buyer;
+  // they're separate roles from Bitcoin's perspective. Send a
+  // generous UTXO to a fresh P2WPKH so we don't accidentally
+  // spend a coinbase.
+  const BUY_PRICE_SATS = 21000;
+  const OFFER_FEE_SATS = 2000;
+  const buyerPaymentAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  const buyerReceiveAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
+  const buyerChangeAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  expect(buyerReceiveAddress).toMatch(/^bcrt1p/);
+  console.log(`[offer-flow] buyer receive (taproot) = ${buyerReceiveAddress}`);
+
+  // Fund the buyer's payment address with 0.001 BTC (100 000 sats)
+  // — plenty for the price + fee + change dust.
+  const buyerFundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
+  await waitForElectrsSync(mineBlocks(1));
+
+  // Look up the buyer's UTXO via bitcoin-cli (raw JSON to get the
+  // scriptPubKey hex, which we need for the offer PSBT builder).
+  const buyerFundRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', buyerFundTxid, '2')
+  ) as {
+    vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }>;
+  };
+  const buyerVoutIdx = buyerFundRaw.vout.findIndex((v) => v.scriptPubKey.address === buyerPaymentAddress);
+  expect(buyerVoutIdx).toBeGreaterThanOrEqual(0);
+  const buyerVout = buyerFundRaw.vout[buyerVoutIdx];
+  const buyerInputValueSats = Math.round(buyerVout.value * 1e8);
+  console.log(`[offer-flow] buyer funding UTXO ${buyerFundTxid}:${buyerVoutIdx} → ${buyerInputValueSats} sats`);
+
+  // ─── Build the buy-offer PSBT via the SDK ───
+  const built = sdkCore.buildCat21BuyOfferPsbt({
+    network: sdkCore.Network.Regtest,
+    sellerInput: {
+      txid: sharedMintTxid,
+      vout: 0,
+      value: sellerCatValue,
+      scriptPubKey: hexDecode(sellerCatScriptHex),
+    },
+    buyerInputs: [
+      {
+        txid: buyerFundTxid,
+        vout: buyerVoutIdx,
+        value: buyerInputValueSats,
+        scriptPubKey: hexDecode(buyerVout.scriptPubKey.hex),
+      },
+    ],
+    destinations: {
+      buyerReceiveAddress,
+      sellerPaymentAddress: sharedPaymentAddress,
+      buyerChangeAddress,
+    },
+    priceSats: BUY_PRICE_SATS,
+    feeSats: OFFER_FEE_SATS,
+  });
+  console.log(`[offer-flow] built offer PSBT: ${built.psbt.length} bytes, change=${built.changeSats}`);
+
+  const unsignedOfferBase64 = b64(built.psbt);
+
+  // ─── Buyer signs their inputs via bitcoin-cli ───
+  //
+  // finalize=false so input 0 (the seller's cat UTXO, not owned by
+  // ordpool-e2e wallet) stays untouched and the buyer's inputs get
+  // partial-sig entries. The SDK's accept-side signer then adds the
+  // seller signature and finalizes the whole PSBT.
+  const walletprocessed = JSON.parse(
+    rpc(
+      '-rpcwallet=ordpool-e2e',
+      '-named',
+      'walletprocesspsbt',
+      `psbt=${unsignedOfferBase64}`,
+      'sign=true',
+      'finalize=false',
+    )
+  ) as { psbt: string; complete: boolean };
+  const buyerSignedBase64 = walletprocessed.psbt;
+  console.log(`[offer-flow] buyer-signed PSBT length = ${buyerSignedBase64.length}, complete=${walletprocessed.complete}`);
+
+  // ─── Seller opens the shareable-accept URL ───
+  const acceptUrl = new URL(`${FRONTEND_URL}/dashboard/trade/accept`);
+  acceptUrl.searchParams.set('offer', buyerSignedBase64);
+  acceptUrl.searchParams.set('catTxid', sharedMintTxid);
+  acceptUrl.searchParams.set('catVout', '0');
+
+  const page = await context.newPage();
+  const knownBeforeNavigate = new Set(context.pages());
+  await page.goto(acceptUrl.toString(), { waitUntil: 'domcontentloaded' });
+
+  // Handle any get-addresses reapproval popup the wallet may pop up
+  // when the page loads (mirrors the pattern from the mint test).
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeNavigate,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+  await shot(page, 'offer-01-accept-loaded');
+
+  // The URL committed the cat outpoint; the accept-offer page shows
+  // the "pre-selected from the buyer's link" hint.
+  const catFromUrlHint = page.getByTestId('accept-offer-cat-from-url');
+  await expect(catFromUrlHint).toBeVisible({ timeout: 30_000 });
+  await expect(catFromUrlHint).toContainText(sharedMintTxid);
+
+  // Accept button becomes enabled once the orchestrator's validator
+  // resolves against the parsed offer + wallet.paymentAddress +
+  // urlCatOutpoint. Wait for that ready state.
+  const acceptBtn = page.getByTestId('accept-offer-sign-cta');
+  await expect(acceptBtn).toBeVisible({ timeout: 30_000 });
+  await expect(acceptBtn).toBeEnabled({ timeout: 30_000 });
+  await shot(page, 'offer-02-accept-ready');
+
+  // ─── Click Accept → cat21-wallet approval popup → sign ───
+  const knownBeforeSign = new Set(context.pages());
+  await acceptBtn.click();
+  const approvalSign = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await shot(approvalSign, 'offer-03-sign-approval');
+  await approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+    .click({ timeout: 30_000 });
+  await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+  // ─── Success surfaces + broadcast txid available ───
+  const successCard = page.getByTestId('accept-offer-success');
+  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await shot(page, 'offer-04-success');
+  const successLink = successCard.locator('a').first();
+  const successHref = await successLink.getAttribute('href');
+  const successTxidMatch = successHref!.match(/\/tx\/([0-9a-f]{64})/);
+  expect(successTxidMatch).not.toBeNull();
+  const settleTxid = successTxidMatch![1];
+  console.log(`[offer-flow] settlement txid = ${settleTxid}`);
+
+  // ─── On-chain verification ───
+  await waitForElectrsSync(mineBlocks(1));
+  const settleTx = await getTx(settleTxid);
+  expect(settleTx.status.block_hash).toBeTruthy();
+  // Output 0 = cat at 546 sats to buyer's receive address.
+  // Output 1 = seller payment = priceSats + postage to seller.
+  // Output 2 (may or may not exist depending on change) = buyer change.
+  expect(settleTx.vout.length).toBeGreaterThanOrEqual(2);
+
+  // Query via bitcoin-cli to inspect address strings (electrs's
+  // vout shape is untyped in EsploraTx so a raw-tx dive is cleaner).
+  const settleRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', settleTxid, '2')
+  ) as {
+    vout: Array<{ value: number; scriptPubKey: { address?: string } }>;
+  };
+  expect(Math.round(settleRaw.vout[0].value * 1e8)).toBe(546);
+  expect(settleRaw.vout[0].scriptPubKey.address).toBe(buyerReceiveAddress);
+  expect(Math.round(settleRaw.vout[1].value * 1e8)).toBe(BUY_PRICE_SATS + 546);
+  expect(settleRaw.vout[1].scriptPubKey.address).toBe(sharedPaymentAddress);
+  console.log(`[offer-flow] cat moved to buyer @ ${buyerReceiveAddress}, seller paid ${BUY_PRICE_SATS + 546} sats @ ${sharedPaymentAddress}`);
+
   await page.close();
 });

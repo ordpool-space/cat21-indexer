@@ -83,11 +83,23 @@ export class MakeOffer {
     return !!outcome && !outcome.insufficient && !!outcome.simulation;
   });
 
-  /** Direct link the buyer hands the seller; auto-fills the accept page. */
+  /**
+   * Direct link the buyer hands the seller; auto-fills the accept page.
+   * Includes the cat outpoint the offer targets (`catTxid` + `catVout`)
+   * so the seller doesn't have to manually pick from the dropdown —
+   * the accept-page's `urlCatOutpoint` fallback picks it up.
+   */
   readonly shareableUrl = computed<string | null>(() => {
     const art = this.offerArtifact();
     if (!art) return null;
-    return `${window.location.origin}/dashboard/trade/accept?offer=${encodeURIComponent(art.base64)}`;
+    const target = this.targetCat();
+    const p = new URLSearchParams();
+    p.set('offer', art.base64);
+    if (target) {
+      p.set('catTxid', target.txid);
+      p.set('catVout', String(target.vout));
+    }
+    return `${window.location.origin}/dashboard/trade/accept?${p.toString()}`;
   });
 
   /** Audit M5 — wallet-swap form reset. See transfer.ts for the rationale. */

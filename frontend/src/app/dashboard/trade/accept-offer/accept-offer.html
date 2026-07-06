@@ -34,6 +34,16 @@
   } @else {
     <section class="accept-offer-section" data-testid="accept-offer-cat-section">
       <h2 class="accept-offer-section-heading">1. Which of your cats is the offer for?</h2>
+      @if (urlCatOutpoint(); as fromUrl) {
+        <!-- Buyer's reply link committed the cat outpoint in the URL,
+             so no manual pick needed. Show it as read-only info; the
+             seller can still override by picking from the dropdown. -->
+        <p class="text-muted small" data-testid="accept-offer-cat-from-url">
+          Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>
+          pre-selected from the buyer's link. Pick from the dropdown
+          below to override.
+        </p>
+      }
       @if (myHoldings().length === 0 && !holdingsResource.isLoading()) {
         <p class="text-muted small" data-testid="accept-offer-no-cats">
           We didn't find any cats at this wallet's ordinals address. To
