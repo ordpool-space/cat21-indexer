@@ -1367,7 +1367,25 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 
   // ─── Success card + broadcast txid ───
   const successCard = page.getByTestId('transfer-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  try {
+    await expect(successCard).toBeVisible({ timeout: 90_000 });
+  } catch (err) {
+    // Surface any transfer-error text + debug-state attrs before rethrowing,
+    // so the CI log attributes the failure without needing to open the
+    // trace zip.
+    await shot(page, 'transfer-04-post-sign-failure');
+    const errText = await page.getByTestId('transfer-error').textContent().catch(() => null);
+    // eslint-disable-next-line no-console
+    console.log('[transfer-flow] post-sign transfer-error =', errText);
+    const debugState = page.getByTestId('transfer-debug-state');
+    const attrs: Record<string, string | null> = {};
+    for (const name of ['data-state', 'data-sim-ready', 'data-sim-insufficient']) {
+      attrs[name] = await debugState.getAttribute(name).catch(() => null);
+    }
+    // eslint-disable-next-line no-console
+    console.log('[transfer-flow] post-sign debug-state =', JSON.stringify(attrs));
+    throw err;
+  }
   await shot(page, 'transfer-04-success');
   const successHref = await successCard.locator('a').first().getAttribute('href');
   const transferTxidMatch = successHref!.match(/\/tx\/([0-9a-f]{64})/);
