@@ -1200,11 +1200,78 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   } catch (err) {
     const debugState = page.getByTestId('transfer-debug-state');
     const attrs: Record<string, string | null> = {};
-    for (const name of ['data-state', 'data-has-cat', 'data-has-recipient', 'data-fee', 'data-sim-ready', 'data-sim-insufficient']) {
+    for (const name of [
+      'data-state', 'data-has-cat', 'data-has-recipient', 'data-fee',
+      'data-sim-ready', 'data-sim-insufficient',
+      'data-wallet-ord-address', 'data-wallet-ord-pubkey',
+      'data-wallet-pay-address', 'data-wallet-pay-pubkey',
+      'data-wallet-type',
+    ]) {
       attrs[name] = await debugState.getAttribute(name).catch(() => null);
     }
     // eslint-disable-next-line no-console
     console.log('[transfer-flow] button-disabled debug state =', JSON.stringify(attrs));
+
+    // Run the SDK's transfer simulation directly with the same inputs
+    // the orchestrator would use. The orchestrator's catch-all
+    // swallows any error as `insufficient: true`; running the same
+    // code path here surfaces the actual throw.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { buildCat21TransferPsbt: bldTx, Network: NetX } = require('ordpool-sdk/core') as {
+        buildCat21TransferPsbt: (args: unknown) => unknown;
+        Network: { Regtest: 'regtest' };
+      };
+      // Read the mint's actual output script from bitcoin-cli so we
+      // reproduce the SIM function's cat-input build.
+      const mintRaw = JSON.parse(
+        rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', freshTxid, '2')
+      ) as { vout: Array<{ scriptPubKey: { hex: string } }> };
+      const catScriptHex = mintRaw.vout[0].scriptPubKey.hex;
+      // The first funding UTXO we could find (any is fine for the sim).
+      const utxosResp = await fetch(`http://localhost:8999/api/address/${sharedPaymentAddress}/utxo`);
+      const utxos = await utxosResp.json() as Array<{ txid: string; vout: number; value: number }>;
+      if (!utxos.length) throw new Error('no funding UTXOs at paymentAddr');
+      const funding = utxos[0];
+      const fundingRaw = JSON.parse(
+        rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', funding.txid, '2')
+      ) as { vout: Array<{ scriptPubKey: { hex: string } }> };
+      const fundingScriptHex = fundingRaw.vout[funding.vout].scriptPubKey.hex;
+
+      const hexToBytes = (h: string): Uint8Array => {
+        const s = h.startsWith('0x') ? h.slice(2) : h;
+        const out = new Uint8Array(s.length / 2);
+        for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16);
+        return out;
+      };
+
+      const built = bldTx({
+        walletType: attrs['data-wallet-type'],
+        network: NetX.Regtest,
+        catUtxo: {
+          txid: freshTxid,
+          vout: 0,
+          value: 546,
+          scriptPubKey: hexToBytes(catScriptHex),
+        },
+        fundingInputs: [{
+          txid: funding.txid,
+          vout: funding.vout,
+          value: funding.value,
+          scriptPubKey: hexToBytes(fundingScriptHex),
+        }],
+        destinations: {
+          recipientAddress,
+          senderChangeAddress: sharedPaymentAddress,
+        },
+        feeSats: 200,
+      });
+      // eslint-disable-next-line no-console
+      console.log('[transfer-flow] direct SDK simulation succeeded:', built);
+    } catch (simErr) {
+      // eslint-disable-next-line no-console
+      console.log('[transfer-flow] direct SDK simulation THREW:', simErr instanceof Error ? simErr.message : simErr);
+    }
     throw err;
   }
   await shot(page, 'transfer-02-ready');

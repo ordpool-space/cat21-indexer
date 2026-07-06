@@ -11,6 +11,11 @@
   [attr.data-fee]="feeRate() ?? ''"
   [attr.data-sim-ready]="!!simulationOutcome()?.simulation"
   [attr.data-sim-insufficient]="!!simulationOutcome()?.insufficient"
+  [attr.data-wallet-ord-address]="connectedWallet()?.ordinalsAddress ?? ''"
+  [attr.data-wallet-ord-pubkey]="connectedWallet()?.ordinalsPublicKey ?? ''"
+  [attr.data-wallet-pay-address]="connectedWallet()?.paymentAddress ?? ''"
+  [attr.data-wallet-pay-pubkey]="connectedWallet()?.paymentPublicKey ?? ''"
+  [attr.data-wallet-type]="connectedWallet()?.type ?? ''"
   style="display: none;"></span>
 
 @if (!connectedWallet()) {
