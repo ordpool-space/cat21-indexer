@@ -1255,6 +1255,10 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
     ]) {
       attrs[name] = await debugState.getAttribute(name).catch(() => null);
     }
+    // eslint-disable-next-line no-console
+    console.log('[transfer-flow] button-disabled debug state =', JSON.stringify(attrs));
+    throw err;
+  }
   await shot(page, 'transfer-02-ready');
 
   // cat21-wallet signs the transfer's cat + funding inputs inside a
