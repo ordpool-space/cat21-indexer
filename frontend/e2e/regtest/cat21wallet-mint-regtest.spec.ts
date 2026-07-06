@@ -1120,6 +1120,20 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   transferUrl.searchParams.set('catVout', '0');
 
   const page = await context.newPage();
+  // Capture the browser console so the SDK's cat21-transfer-sim-error
+  // log surfaces here — the orchestrator's catch clause console.errors
+  // the underlying throw before returning insufficient=true.
+  page.on('console', (msg) => {
+    const text = msg.text();
+    if (text.includes('cat21-transfer-sim-error') || msg.type() === 'error') {
+      // eslint-disable-next-line no-console
+      console.log(`[browser-${msg.type()}] ${text}`);
+    }
+  });
+  page.on('pageerror', (err) => {
+    // eslint-disable-next-line no-console
+    console.log('[browser-pageerror]', err.message, err.stack);
+  });
   const knownBeforeNavigate = new Set(context.pages());
   await page.goto(transferUrl.toString(), { waitUntil: 'domcontentloaded' });
 
