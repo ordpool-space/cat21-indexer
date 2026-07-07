@@ -257,20 +257,16 @@ export class MakeOffer {
     });
   }
 
-  /**
-   * Copy-button feedback state — flips to 'copied' for two seconds so
-   * the button label briefly reads "Copied!" and the buyer knows the
-   * clipboard write landed. Held per-target so the URL button and the
-   * PSBT button don't fight over the same flag.
-   */
-  readonly copiedTarget = signal<'url' | 'psbt' | null>(null);
+  /** "Copied!" flash state per Copy button (two-second timer). */
+  readonly copiedUrl = signal(false);
+  readonly copiedPsbt = signal(false);
   private copiedResetTimer: ReturnType<typeof setTimeout> | undefined;
 
   onCopyArtifactClick(): void {
     const art = this.offerArtifact();
     if (!art) return;
     navigator.clipboard?.writeText(art.base64).then(
-      () => this.flashCopied('psbt'),
+      () => this.flashCopied(this.copiedPsbt),
       () => undefined,
     );
   }
@@ -279,15 +275,20 @@ export class MakeOffer {
     const url = this.shareableUrl();
     if (!url) return;
     navigator.clipboard?.writeText(url).then(
-      () => this.flashCopied('url'),
+      () => this.flashCopied(this.copiedUrl),
       () => undefined,
     );
   }
 
-  private flashCopied(target: 'url' | 'psbt'): void {
-    this.copiedTarget.set(target);
+  private flashCopied(target: typeof this.copiedUrl): void {
+    // Only one of the two flashes at a time — if the user clicked the
+    // other Copy button while the first was still lit, reset both
+    // before lighting the new one.
+    this.copiedUrl.set(false);
+    this.copiedPsbt.set(false);
+    target.set(true);
     if (this.copiedResetTimer !== undefined) clearTimeout(this.copiedResetTimer);
-    this.copiedResetTimer = setTimeout(() => this.copiedTarget.set(null), 2_000);
+    this.copiedResetTimer = setTimeout(() => target.set(false), 2_000);
   }
 
   onResetClick(): void {

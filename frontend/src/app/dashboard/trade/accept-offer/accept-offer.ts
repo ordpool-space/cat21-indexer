@@ -142,17 +142,14 @@ export class AcceptOffer implements OnInit {
   }
 
   ngOnInit(): void {
-    // Floor defaults to 0 = accept any positive offer. The seller sees
-    // pricePaidSats in the summary panel before signing, so the "final
-    // gate" is human review — not the floor. The floor exists so a
-    // seller who WANTS to enforce a minimum (e.g. "reject anything
-    // under 21 000 sats") can raise the number and let the SDK
-    // validator auto-reject lower offers. The SDK-level H2 gate that
-    // refuses to leave `idle` without a floor is still there — it
-    // protects headless / bot consumers who might forget to call
-    // `setFloorPriceSats`; the human UI opts in to the "0 is fine"
-    // default explicitly.
-    this.orchestrator.setFloorPriceSats(0);
+    // Opt out of the SDK's floor safety-net. The seller sees
+    // `pricePaidSats` in the summary panel before signing, so the
+    // human IS the check. The floor input stays available for
+    // sellers who WANT to enforce a minimum (raise the value → SDK
+    // validator auto-rejects lowballs). Bot / headless consumers
+    // keep the null-required gate (see docstring on
+    // `disableFloorGate`).
+    this.orchestrator.disableFloorGate();
 
     // Auto-fill from ?offer=…&catTxid=…&catVout=… so a buyer can hand
     // the seller a one-click accept link. The SDK's

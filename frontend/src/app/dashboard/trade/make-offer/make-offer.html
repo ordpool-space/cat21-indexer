@@ -54,7 +54,7 @@
           class="btn btn-primary mt-2"
           (click)="onCopyShareableUrlClick()"
           data-testid="make-offer-copy-url-cta">
-          {{ copiedTarget() === 'url' ? '✓ Copied — send this to the seller' : 'Copy accept-link' }}
+          {{ copiedUrl() ? '✓ Copied — send this to the seller' : 'Copy accept-link' }}
         </button>
       }
 
@@ -75,7 +75,7 @@
           class="btn btn-outline-secondary mt-2"
           (click)="onCopyArtifactClick()"
           data-testid="make-offer-copy-artifact-cta">
-          {{ copiedTarget() === 'psbt' ? '✓ Copied' : 'Copy PSBT' }}
+          {{ copiedPsbt() ? '✓ Copied' : 'Copy PSBT' }}
         </button>
       </details>
 
