@@ -194,22 +194,22 @@ export class Details {
     }
   }
 
-  /** Query params fed into `/dashboard/trade/make`. Delegates to the
-   *  SDK's `buildBuyOfferQueryParams` — single source of truth for the
-   *  ask-response URL shape. */
-  buyQueryParams(): Record<string, string> {
+  /** Query params for `/dashboard/trade/make`. Delegated to the SDK's
+   *  `buildBuyOfferQueryParams` and exposed as a computed signal so the
+   *  RouterLink binding memoises across change-detection cycles. */
+  readonly buyQueryParams = computed<Record<string, string>>(() => {
     const ask = this.askSats();
     return buildBuyOfferQueryParams(
       ask !== null
         ? { catNumber: this.catNumber(), askSats: ask }
         : { catNumber: this.catNumber() },
     );
-  }
+  });
 
-  /** Query params fed into `/dashboard/transfer`. Delegates to the SDK. */
-  sendQueryParams(): Record<string, string> {
-    return buildTransferQueryParams({ catNumber: this.catNumber() });
-  }
+  /** Query params for `/dashboard/transfer`. */
+  readonly sendQueryParams = computed<Record<string, string>>(() =>
+    buildTransferQueryParams({ catNumber: this.catNumber() }),
+  );
 
   navigateNewer() {
     const n = this.catNumber();

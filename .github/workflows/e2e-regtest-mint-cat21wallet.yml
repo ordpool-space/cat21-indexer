@@ -212,7 +212,6 @@ jobs:
           mkdir -p e2e/regtest/sdk-lib
           cp node_modules/ordpool-sdk/e2e/regtest/regtest-helpers.ts e2e/regtest/sdk-lib/
           cp node_modules/ordpool-sdk/e2e/playwright/approval-popup.ts e2e/regtest/sdk-lib/
-          cp node_modules/ordpool-sdk/e2e/playwright/cat21wallet-sign-popup.ts e2e/regtest/sdk-lib/
 
       - name: Run the cat21-wallet regtest spec
         working-directory: frontend

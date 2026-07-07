@@ -95,17 +95,14 @@ export class MakeOffer {
     const art = this.offerArtifact();
     if (!art) return null;
     const target = this.targetCat();
-    // Query builder lives in the SDK (`buildAcceptOfferQueryParams`) so
-    // the accept page's parser and this builder share one canonical
-    // shape. Without an outpoint the accept page falls back to the
-    // seller's cat-picker; the bundleComplete branch below drives the
-    // one-click flow.
-    const params = target
-      ? buildAcceptOfferQueryParams({
-          offerBase64: art.base64,
-          catOutpoint: { txid: target.txid, vout: target.vout },
-        })
-      : { offer: art.base64 };
+    // `buildAcceptOfferQueryParams` treats `catOutpoint` as optional —
+    // pass undefined when the seller hasn't locked the outpoint yet
+    // and the accept page falls back to its own cat-picker. When set,
+    // the seller gets a true one-click accept.
+    const params = buildAcceptOfferQueryParams({
+      offerBase64: art.base64,
+      catOutpoint: target ? { txid: target.txid, vout: target.vout } : undefined,
+    });
     const query = new URLSearchParams(params).toString();
     return `${window.location.origin}/dashboard/trade/accept?${query}`;
   });
