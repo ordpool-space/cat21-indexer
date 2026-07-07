@@ -8,6 +8,7 @@ import {
   bitcoinNetwork,
   Cat21Holding,
   Cat21TransferOrchestrator,
+  parseTransferQueryParams,
   toScureNetwork,
   TransferSimulationOutcome,
 } from 'ordpool-sdk';
@@ -218,18 +219,25 @@ export class Transfer {
    * is active. Returns null when either param is missing or malformed.
    */
   readonly urlCatUtxo = computed<Cat21Holding | null>(() => {
-    const txid = this.catTxidParam();
-    const voutRaw = this.catVoutParam();
-    if (!txid || !voutRaw) return null;
-    if (!TXID_RE.test(txid)) return null;
-    const vout = Number.parseInt(voutRaw, 10);
-    if (!Number.isFinite(vout) || vout < 0) return null;
-    const catNumberRaw = this.catNumberParam();
-    const catNumberParsed = catNumberRaw ? Number.parseInt(catNumberRaw, 10) : NaN;
-    const catNumber = Number.isFinite(catNumberParsed) && catNumberParsed >= 0
-      ? catNumberParsed
-      : 0; // unknown cat number is fine — Cat21Holding.catNumber is display-only for transfer
-    return { catNumber, txid: txid.toLowerCase(), vout, value: 546 };
+    // Router's `withComponentInputBinding()` delivers the params via
+    // input signals (catNumberParam, catTxidParam, catVoutParam). Feed
+    // them to the SDK's `parseTransferQueryParams` — the canonical
+    // parser for the same URL shape `buildTransferQueryParams` mints.
+    const parsed = parseTransferQueryParams({
+      catNumber: this.catNumberParam() ?? null,
+      catTxid: this.catTxidParam() ?? null,
+      catVout: this.catVoutParam() ?? null,
+    });
+    if (!parsed.catOutpoint) return null;
+    // catNumber is display-only for the transfer picker fallback — an
+    // unknown / malformed value degrades to 0 (Cat21Holding.catNumber
+    // is not part of the tx signing surface).
+    return {
+      catNumber: parsed.catNumber ?? 0,
+      txid: parsed.catOutpoint.txid,
+      vout: parsed.catOutpoint.vout,
+      value: 546,
+    };
   });
 
   // ---------- Commands ----------

@@ -73,19 +73,21 @@
     </section>
 
     <section class="accept-offer-section" data-testid="accept-offer-floor-section">
-      <h2 class="accept-offer-section-heading">2. Minimum price you'll accept (sats)</h2>
+      <h2 class="accept-offer-section-heading">2. Minimum acceptable price <small class="text-muted">(optional)</small></h2>
       <input
         type="text"
         inputmode="numeric"
         autocomplete="off"
         class="form-control"
-        placeholder="e.g. 100000"
+        placeholder="Leave empty — you'll see the price before signing"
         [value]="floorPriceInput()"
         (input)="onFloorPriceChange($any($event.target).value)"
         data-testid="accept-offer-floor-input" />
       <p class="text-muted small mt-1">
-        Any pasted offer below this price will be marked invalid. You
-        can leave it at 0 to skip the check (not recommended).
+        Skip this — the offer's price is shown below before you sign.
+        Only set a number if you want the app to auto-reject offers below
+        that value (e.g. paste a 100-sat lowball and see it flagged
+        instead of signing). Empty or <code>0</code> = accept any offer.
       </p>
     </section>
 

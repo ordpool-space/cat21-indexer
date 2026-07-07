@@ -2,7 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, nu
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { WalletService } from 'ordpool-sdk';
+import {
+  buildAskQueryParams,
+  buildBuyOfferQueryParams,
+  buildTransferQueryParams,
+  WalletService,
+} from 'ordpool-sdk';
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
 import { ApiService } from '../shared/cat21-api';
@@ -132,7 +137,8 @@ export class Details {
     const n = Number.parseInt(raw, 10);
     if (!Number.isFinite(n) || n <= 0) return null;
     if (typeof window === 'undefined') return null;
-    return `${window.location.origin}/cat/${this.catNumber()}?ask=${n}`;
+    const query = new URLSearchParams(buildAskQueryParams({ askSats: n })).toString();
+    return `${window.location.origin}/cat/${this.catNumber()}?${query}`;
   });
 
   /** Just-clicked feedback for the copy button. */
@@ -188,20 +194,21 @@ export class Details {
     }
   }
 
-  /** Query params fed into `/dashboard/trade/make`. */
+  /** Query params fed into `/dashboard/trade/make`. Delegates to the
+   *  SDK's `buildBuyOfferQueryParams` — single source of truth for the
+   *  ask-response URL shape. */
   buyQueryParams(): Record<string, string> {
-    const params: Record<string, string> = { catNumber: String(this.catNumber()) };
     const ask = this.askSats();
-    if (ask !== null) {
-      params['askPrice'] = String(ask);
-      params['fromAsk'] = '1';
-    }
-    return params;
+    return buildBuyOfferQueryParams(
+      ask !== null
+        ? { catNumber: this.catNumber(), askSats: ask }
+        : { catNumber: this.catNumber() },
+    );
   }
 
-  /** Query params fed into `/dashboard/transfer`. */
+  /** Query params fed into `/dashboard/transfer`. Delegates to the SDK. */
   sendQueryParams(): Record<string, string> {
-    return { catNumber: String(this.catNumber()) };
+    return buildTransferQueryParams({ catNumber: this.catNumber() });
   }
 
   navigateNewer() {

@@ -4,8 +4,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
   BuyOfferTargetCat,
+  buildAcceptOfferQueryParams,
   Cat21CreateOfferOrchestrator,
   CreateOfferSimulationOutcome,
+  parseBuyOfferQueryParams,
 } from 'ordpool-sdk';
 
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
@@ -93,13 +95,19 @@ export class MakeOffer {
     const art = this.offerArtifact();
     if (!art) return null;
     const target = this.targetCat();
-    const p = new URLSearchParams();
-    p.set('offer', art.base64);
-    if (target) {
-      p.set('catTxid', target.txid);
-      p.set('catVout', String(target.vout));
-    }
-    return `${window.location.origin}/dashboard/trade/accept?${p.toString()}`;
+    // Query builder lives in the SDK (`buildAcceptOfferQueryParams`) so
+    // the accept page's parser and this builder share one canonical
+    // shape. Without an outpoint the accept page falls back to the
+    // seller's cat-picker; the bundleComplete branch below drives the
+    // one-click flow.
+    const params = target
+      ? buildAcceptOfferQueryParams({
+          offerBase64: art.base64,
+          catOutpoint: { txid: target.txid, vout: target.vout },
+        })
+      : { offer: art.base64 };
+    const query = new URLSearchParams(params).toString();
+    return `${window.location.origin}/dashboard/trade/accept?${query}`;
   });
 
   /** Audit M5 — wallet-swap form reset. See transfer.ts for the rationale. */
@@ -137,27 +145,29 @@ export class MakeOffer {
 
     // Prefill from query params. Runs once per wallet connection per
     // catNumber param; on re-visit with the same params the state is
-    // already what we'd set, so no-op.
+    // already what we'd set, so no-op. Uses the SDK's canonical parser
+    // so the ask-permalink shape stays in one place (details.ts mints,
+    // this page consumes).
     effect(() => {
-      const catNumber = this.catNumberParam();
-      const askPrice = this.askPriceParam();
+      const rawCatNumber = this.catNumberParam();
       const wallet = this.connectedWallet();
-      if (!catNumber || !wallet) return;
-      if (this.prefilledFor === catNumber) return;
-      this.prefilledFor = catNumber;
+      if (!rawCatNumber || !wallet) return;
+      if (this.prefilledFor === rawCatNumber) return;
 
-      // Push the raw string into the draft first, so the input reflects it.
-      this.draft.update((d) => ({ ...d, catNumberInput: catNumber }));
-      // Then kick the on-chain lookup — the same code path as clicking
-      // the Lookup button manually.
+      const parsed = parseBuyOfferQueryParams({
+        catNumber: rawCatNumber,
+        askPrice: this.askPriceParam() ?? null,
+        fromAsk: this.fromAskParam() ?? null,
+      });
+      if (parsed.catNumber === null) return;
+
+      this.prefilledFor = rawCatNumber;
+      this.draft.update((d) => ({ ...d, catNumberInput: String(parsed.catNumber) }));
       this.onLookupCatClick();
 
-      if (askPrice) {
-        const n = Number.parseInt(askPrice, 10);
-        if (Number.isFinite(n) && n > 0) {
-          this.draft.update((d) => ({ ...d, priceSatsInput: String(n) }));
-          this.orchestrator.setPriceSats(n);
-        }
+      if (parsed.askSats !== null) {
+        this.draft.update((d) => ({ ...d, priceSatsInput: String(parsed.askSats) }));
+        this.orchestrator.setPriceSats(parsed.askSats);
       }
     });
   }
@@ -250,16 +260,37 @@ export class MakeOffer {
     });
   }
 
+  /**
+   * Copy-button feedback state — flips to 'copied' for two seconds so
+   * the button label briefly reads "Copied!" and the buyer knows the
+   * clipboard write landed. Held per-target so the URL button and the
+   * PSBT button don't fight over the same flag.
+   */
+  readonly copiedTarget = signal<'url' | 'psbt' | null>(null);
+  private copiedResetTimer: ReturnType<typeof setTimeout> | undefined;
+
   onCopyArtifactClick(): void {
     const art = this.offerArtifact();
     if (!art) return;
-    navigator.clipboard?.writeText(art.base64).catch(() => undefined);
+    navigator.clipboard?.writeText(art.base64).then(
+      () => this.flashCopied('psbt'),
+      () => undefined,
+    );
   }
 
   onCopyShareableUrlClick(): void {
     const url = this.shareableUrl();
     if (!url) return;
-    navigator.clipboard?.writeText(url).catch(() => undefined);
+    navigator.clipboard?.writeText(url).then(
+      () => this.flashCopied('url'),
+      () => undefined,
+    );
+  }
+
+  private flashCopied(target: 'url' | 'psbt'): void {
+    this.copiedTarget.set(target);
+    if (this.copiedResetTimer !== undefined) clearTimeout(this.copiedResetTimer);
+    this.copiedResetTimer = setTimeout(() => this.copiedTarget.set(null), 2_000);
   }
 
   onResetClick(): void {

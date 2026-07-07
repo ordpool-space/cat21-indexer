@@ -6,6 +6,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   Cat21AcceptOfferOrchestrator,
   Cat21OfferRejectionReason,
+  parseAcceptOfferQueryParams,
   WalletService,
 } from 'ordpool-sdk';
 
@@ -138,43 +139,33 @@ export class AcceptOffer implements OnInit {
       // wallet-change reset (Cat21AcceptOfferOrchestrator).
     });
 
-    // NOTE: parsedOffer only fires once validation succeeds, and
-    // validation requires floor to be set first — chicken-and-egg for
-    // the URL flow. Instead, ngOnInit sets floor=0 explicitly when the
-    // URL brings all three (offer, catTxid, catVout) — the seller has
-    // already consented to the price by clicking through the buyer's
-    // link, so the audit-H2 forgot-my-floor safety-net is irrelevant.
-    // Manual-paste flows still require the seller to type a floor.
   }
 
   ngOnInit(): void {
-    // Auto-fill from ?offer=… so a buyer can hand the seller a one-click link.
-    const params = this.route.snapshot.queryParamMap;
-    const offerParam = params.get('offer');
-    // Optional catTxid + catVout — the buyer's reply link commits the
-    // cat outpoint the offer targets, so the seller doesn't need to
-    // pick manually. Both required to take effect.
-    const catTxid = params.get('catTxid');
-    const catVoutRaw = params.get('catVout');
-    let urlBroughtFullOfferBundle = false;
-    if (catTxid && catVoutRaw) {
-      const vout = Number.parseInt(catVoutRaw, 10);
-      if (/^[0-9a-f]{64}$/i.test(catTxid) && Number.isFinite(vout) && vout >= 0) {
-        this.urlCatOutpoint.set({ txid: catTxid.toLowerCase(), vout });
-        urlBroughtFullOfferBundle = !!offerParam;
-      }
+    // Floor defaults to 0 = accept any positive offer. The seller sees
+    // pricePaidSats in the summary panel before signing, so the "final
+    // gate" is human review — not the floor. The floor exists so a
+    // seller who WANTS to enforce a minimum (e.g. "reject anything
+    // under 21 000 sats") can raise the number and let the SDK
+    // validator auto-reject lower offers. The SDK-level H2 gate that
+    // refuses to leave `idle` without a floor is still there — it
+    // protects headless / bot consumers who might forget to call
+    // `setFloorPriceSats`; the human UI opts in to the "0 is fine"
+    // default explicitly.
+    this.orchestrator.setFloorPriceSats(0);
+
+    // Auto-fill from ?offer=…&catTxid=…&catVout=… so a buyer can hand
+    // the seller a one-click accept link. The SDK's
+    // `parseAcceptOfferQueryParams` is the canonical parser — matches
+    // the shape `buildAcceptOfferQueryParams` produces on the make-offer
+    // page. Malformed values (bad txid, negative vout) come back null
+    // so a tampered URL degrades to the manual-paste flow.
+    const parsed = parseAcceptOfferQueryParams(this.route.snapshot.queryParams);
+    if (parsed.catOutpoint) {
+      this.urlCatOutpoint.set(parsed.catOutpoint);
     }
-    // Order matters: floor must be set BEFORE setPastedOffer triggers
-    // validation (validation reads floor sync). The URL one-click flow
-    // sets floor=0 — the seller consented by clicking a link with the
-    // buyer's already-committed price; the summary panel still shows
-    // pricePaidSats before signing, so the human is the final gate.
-    if (urlBroughtFullOfferBundle) {
-      this.floorPriceInput.set('0');
-      this.orchestrator.setFloorPriceSats(0);
-    }
-    if (offerParam) {
-      this.orchestrator.setPastedOffer(offerParam);
+    if (parsed.offerBase64) {
+      this.orchestrator.setPastedOffer(parsed.offerBase64);
     }
   }
 
@@ -190,7 +181,15 @@ export class AcceptOffer implements OnInit {
 
   onFloorPriceChange(value: string): void {
     this.floorPriceInput.set(value);
-    const n = Number.parseInt(value, 10);
+    const trimmed = value.trim();
+    // Empty input = "no floor" = accept any positive offer. Same
+    // effect as typing 0. Lets the seller clear the field to lower
+    // their minimum without hunting for the 0 key.
+    if (trimmed === '') {
+      this.orchestrator.setFloorPriceSats(0);
+      return;
+    }
+    const n = Number.parseInt(trimmed, 10);
     if (Number.isFinite(n) && n >= 0) {
       this.orchestrator.setFloorPriceSats(n);
     }

@@ -94,29 +94,21 @@ async function shot(p: Page, name: string): Promise<void> {
 }
 
 /**
- * Approval-popup Sign/Confirm/Approve click that survives the wallet
- * closing the popup mid-delivery. Chromium occasionally destroys the
- * popup between "locator resolved to element" and "performing click"
- * — Playwright then throws "Target page, context or browser has been
- * closed". When the popup is closing on its own after we've clicked,
- * that IS the expected success path. Callers assert the downstream
- * outcome (mint-success card, on-chain broadcast) so a false-success
- * here still surfaces at the next assertion.
+ * Approval-popup Sign/Confirm/Approve click.
+ *
+ * `{ noWaitAfter: true }` — cat21-wallet self-closes its sign-psbt
+ * popup the moment the confirm dispatch reaches the service worker.
+ * Playwright's default click awaits post-click stability; that race
+ * surfaces as "Target page, context or browser has been closed"
+ * when the popup tears down mid-click. The close IS the success
+ * signal, so we don't wait for stability. Same pattern as the SDK's
+ * `approveCat21WalletSignPopup` helper (`ordpool-sdk/e2e/playwright/
+ * cat21wallet-sign-popup.ts`) — the two are semantically identical.
  */
 async function clickApprovalButton(popup: Page): Promise<void> {
   const btn = popup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first();
-  try {
-    await btn.click({ timeout: 30_000 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('Target page, context or browser has been closed')) {
-      // Popup closed during click delivery — wallet handled the click
-      // before Playwright could confirm. Treat as success; downstream
-      // assertions verify the real outcome.
-      return;
-    }
-    throw err;
-  }
+  await expect(btn).toBeVisible({ timeout: 10_000 });
+  await btn.click({ noWaitAfter: true, timeout: 30_000 });
 }
 
 async function onboardCat21Wallet(page: Page): Promise<void> {

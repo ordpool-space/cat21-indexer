@@ -35,30 +35,13 @@
     <section class="make-offer-section" data-testid="make-offer-success">
       <h2>✓ Offer ready to share</h2>
       <p class="text-muted small">
-        Share the artifact below with the seller. They open
-        <em>Accept an offer</em>, paste it, review the deal, and sign
-        input 0 to broadcast. The transport doesn't matter — see the
-        HARD RULE in the workspace CLAUDE.md.
+        Send the accept-link below to the seller. One click opens their
+        wallet, shows them the deal, and they sign. Chat, email, tweet,
+        QR — any channel works.
       </p>
 
-      <label class="form-label mt-3" for="make-offer-artifact">Offer PSBT (base64)</label>
-      <textarea
-        id="make-offer-artifact"
-        class="form-control"
-        rows="4"
-        readonly
-        [value]="artifact.base64"
-        data-testid="make-offer-artifact-textarea"></textarea>
-      <button
-        type="button"
-        class="btn btn-outline-secondary mt-2"
-        (click)="onCopyArtifactClick()"
-        data-testid="make-offer-copy-artifact-cta">
-        Copy PSBT
-      </button>
-
       @if (shareableUrl(); as url) {
-        <label class="form-label mt-3" for="make-offer-shareable-url">Shareable URL (auto-fills the accept page)</label>
+        <label class="form-label mt-3" for="make-offer-shareable-url">Accept-link (send this to the seller)</label>
         <input
           id="make-offer-shareable-url"
           type="text"
@@ -68,16 +51,37 @@
           data-testid="make-offer-shareable-url-input" />
         <button
           type="button"
-          class="btn btn-outline-secondary mt-2"
+          class="btn btn-primary mt-2"
           (click)="onCopyShareableUrlClick()"
           data-testid="make-offer-copy-url-cta">
-          Copy URL
+          {{ copiedTarget() === 'url' ? '✓ Copied — send this to the seller' : 'Copy accept-link' }}
         </button>
       }
 
+      <details class="mt-4">
+        <summary class="text-muted small" style="cursor: pointer;">
+          Prefer the raw PSBT? (advanced — for wallets that don't handle the URL)
+        </summary>
+        <label class="form-label mt-2" for="make-offer-artifact">Offer PSBT (base64)</label>
+        <textarea
+          id="make-offer-artifact"
+          class="form-control"
+          rows="4"
+          readonly
+          [value]="artifact.base64"
+          data-testid="make-offer-artifact-textarea"></textarea>
+        <button
+          type="button"
+          class="btn btn-outline-secondary mt-2"
+          (click)="onCopyArtifactClick()"
+          data-testid="make-offer-copy-artifact-cta">
+          {{ copiedTarget() === 'psbt' ? '✓ Copied' : 'Copy PSBT' }}
+        </button>
+      </details>
+
       <button
         type="button"
-        class="btn btn-primary mt-3"
+        class="btn btn-outline-primary mt-3"
         (click)="onResetClick()"
         data-testid="make-offer-another-cta">
         Make another offer
