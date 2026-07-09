@@ -1,0 +1,103 @@
+.utxo-picker-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.utxo-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--bs-border-color, #ddd);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+
+  &.utxo-row-selected {
+    border-color: var(--bs-primary, #0d6efd);
+    background: rgba(13, 110, 253, 0.05);
+  }
+  &.utxo-row-assets {
+    border-color: var(--bs-danger, #dc3545);
+    background: rgba(220, 53, 69, 0.05);
+  }
+  &.utxo-row-clean {
+    border-color: var(--bs-success, #198754);
+  }
+}
+
+.utxo-pick {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--bs-primary, #0d6efd);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bs-primary, #0d6efd);
+  cursor: pointer;
+  font-size: 0.875rem;
+
+  &:hover { background: var(--bs-primary, #0d6efd); color: white; }
+  &.utxo-pick-override {
+    border-color: var(--bs-danger, #dc3545);
+    color: var(--bs-danger, #dc3545);
+    &:hover { background: var(--bs-danger, #dc3545); color: white; }
+  }
+}
+
+.utxo-id {
+  font-size: 0.75rem;
+  color: var(--bs-secondary, #6c757d);
+  word-break: break-all;
+}
+
+.utxo-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.utxo-bucket {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+
+  &.utxo-bucket-clean     { background: #d1e7dd; color: #0f5132; }
+  &.utxo-bucket-assets    { background: #f8d7da; color: #842029; }
+  &.utxo-bucket-unscanned { background: #e2e3e5; color: #41464b; }
+  &.utxo-bucket-scanning  { background: #cfe2ff; color: #084298; }
+  &.utxo-bucket-failed    { background: #fff3cd; color: #664d03; }
+}
+
+.link-button {
+  border: none;
+  background: transparent;
+  color: var(--bs-primary, #0d6efd);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.875rem;
+  text-decoration: underline;
+}
+
+.utxo-assets-detail {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding-top: 0.375rem;
+  border-top: 1px dashed var(--bs-border-color, #ddd);
+}
+
+.utxo-asset-tag {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  background: #fff3cd;
+  color: #664d03;
+  border-radius: 4px;
+
+  &.utxo-asset-tag-rare {
+    background: #f8d7da;
+    color: #842029;
+    font-weight: 600;
+  }
+}

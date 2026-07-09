@@ -1,0 +1,76 @@
+@if (rows().length === 0) {
+  <p class="text-muted small" data-testid="utxo-picker-empty">
+    No funding UTXOs at this address. Fund the wallet's payment address first.
+  </p>
+} @else {
+  <ul class="utxo-picker-list" data-testid="utxo-picker-list">
+    @for (row of rows(); track row.utxo.txid + ':' + row.utxo.vout) {
+      <li class="utxo-row"
+          [class.utxo-row-selected]="row === selectedRow()"
+          [class.utxo-row-assets]="row.bucket === 'assets'"
+          [class.utxo-row-clean]="row.bucket === 'clean'"
+          [attr.data-testid]="'utxo-row-' + row.utxo.txid + '-' + row.utxo.vout"
+          [attr.data-bucket]="row.bucket">
+        @if (row.bucket === 'assets') {
+          <button type="button" class="utxo-pick utxo-pick-override"
+                  (click)="onPick(row)"
+                  [attr.data-testid]="'utxo-pick-override-' + row.utxo.txid">
+            @if (row === selectedRow()) { ✓ Selected } @else { Use anyway }
+          </button>
+        } @else {
+          <button type="button" class="utxo-pick"
+                  (click)="onPick(row)"
+                  [attr.data-testid]="'utxo-pick-' + row.utxo.txid">
+            @if (row === selectedRow()) { ✓ } @else { Pick }
+          </button>
+        }
+        <code class="utxo-id">{{ row.utxo.txid }}:{{ row.utxo.vout }}</code>
+        <span class="utxo-val">{{ row.utxo.value | number }} sat</span>
+        <span class="utxo-bucket"
+              [title]="bucketTooltip(row.bucket)"
+              [class.utxo-bucket-clean]="row.bucket === 'clean'"
+              [class.utxo-bucket-assets]="row.bucket === 'assets'"
+              [class.utxo-bucket-unscanned]="row.bucket === 'unscanned'"
+              [class.utxo-bucket-scanning]="row.bucket === 'scanning'"
+              [class.utxo-bucket-failed]="row.bucket === 'failed'">
+          @switch (row.bucket) {
+            @case ('clean')     { ✓ safe }
+            @case ('assets')    { ⚠ asset found }
+            @case ('unscanned') { not scanned }
+            @case ('scanning')  { scanning… }
+            @case ('failed')    { scan failed }
+          }
+        </span>
+        @if (row.bucket === 'unscanned' || row.bucket === 'failed') {
+          <button type="button" class="link-button"
+                  (click)="onScanRow(row); $event.stopPropagation()"
+                  [attr.data-testid]="'utxo-scan-' + row.utxo.txid">
+            {{ row.bucket === 'failed' ? 'Retry scan' : 'Scan' }}
+          </button>
+        }
+        @if (row.scan.kind === 'scanned-with-assets') {
+          <div class="utxo-assets-detail">
+            @if (row.scan.content.inscriptionIds.length > 0) {
+              <span class="utxo-asset-tag">
+                {{ row.scan.content.inscriptionIds.length }} inscription{{ row.scan.content.inscriptionIds.length === 1 ? '' : 's' }}
+              </span>
+            }
+            @for (rune of runeNames(row.scan.content); track rune) {
+              <span class="utxo-asset-tag">rune: {{ rune }}</span>
+            }
+            @if (row.scan.content.catIds.length > 0) {
+              <span class="utxo-asset-tag">
+                {{ row.scan.content.catIds.length }} CAT-21 cat{{ row.scan.content.catIds.length === 1 ? '' : 's' }}
+              </span>
+            }
+            @if (row.scan.content.rareSat; as rare) {
+              <span class="utxo-asset-tag utxo-asset-tag-rare">
+                {{ rare.rarity }} sat (block {{ rare.block | number }})
+              </span>
+            }
+          </div>
+        }
+      </li>
+    }
+  </ul>
+}

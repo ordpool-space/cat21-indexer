@@ -11,9 +11,11 @@ import {
   parseTransferQueryParams,
   toScureNetwork,
   TransferSimulationOutcome,
+  TxnOutput,
 } from 'ordpool-sdk';
 
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
+import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 import { CatUtxoLookupService, MyCatHolding } from '../../shared/cat-utxo-lookup.service';
 import { rxResourceFixed } from '../../shared/rx-resource-fixed';
@@ -24,7 +26,7 @@ const TXID_RE = /^[0-9a-f]{64}$/i;
   selector: 'app-transfer',
   templateUrl: './transfer.html',
   styleUrl: './transfer.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect],
+  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Transfer {
@@ -69,6 +71,12 @@ export class Transfer {
   readonly feeRate = this.orchestrator.feeRate;
   readonly catUtxo = this.orchestrator.catUtxo;
   readonly recipientAddress = this.orchestrator.recipientAddress;
+  readonly selectedFundingUtxo = this.orchestrator.selectedFundingUtxo;
+
+  /** Live funding-UTXO list for the picker; empty array until wallet loads. */
+  readonly fundingUtxos = toSignal(this.orchestrator.fundingUtxos$, {
+    initialValue: [] as TxnOutput[],
+  });
 
   readonly simulationOutcome = toSignal<TransferSimulationOutcome | null>(
     this.orchestrator.simulation$,
@@ -281,5 +289,10 @@ export class Transfer {
   /** FeesPicker's feeRateChange forwarded into the transfer orchestrator. */
   onFeeRateChange(rate: number): void {
     this.orchestrator.setFeeRate(rate);
+  }
+
+  /** UtxoPicker's selectionChange forwarded into the transfer orchestrator. */
+  onFundingUtxoSelectionChange(utxo: TxnOutput): void {
+    this.orchestrator.setSelectedFundingUtxo(utxo);
   }
 }

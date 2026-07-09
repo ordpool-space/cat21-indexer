@@ -8,10 +8,12 @@ import {
   Cat21CreateOfferOrchestrator,
   CreateOfferSimulationOutcome,
   parseBuyOfferQueryParams,
+  TxnOutput,
 } from 'ordpool-sdk';
 
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { FeesPicker } from '../../../shared/fees-picker/fees-picker';
+import { UtxoPicker } from '../../../shared/utxo-picker/utxo-picker';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 
 interface MakeOfferDraft {
@@ -26,7 +28,7 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
   selector: 'app-make-offer',
   templateUrl: './make-offer.html',
   styleUrl: './make-offer.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect],
+  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MakeOffer {
@@ -56,6 +58,12 @@ export class MakeOffer {
   readonly sellerPaymentAddress = this.orchestrator.sellerPaymentAddress;
   readonly priceSats = this.orchestrator.priceSats;
   readonly buyerReceiveAddress = this.orchestrator.buyerReceiveAddress;
+  readonly selectedFundingUtxo = this.orchestrator.selectedFundingUtxo;
+
+  /** Live buyer-funding-UTXO list for the picker. Empty until wallet loads. */
+  readonly fundingUtxos = toSignal(this.orchestrator.buyerFundingUtxos$, {
+    initialValue: [] as TxnOutput[],
+  });
 
   readonly simulationOutcome = toSignal<CreateOfferSimulationOutcome | null>(
     this.orchestrator.simulation$,
@@ -306,5 +314,10 @@ export class MakeOffer {
   /** FeesPicker's feeRateChange forwarded into the create-offer orchestrator. */
   onFeeRateChange(rate: number): void {
     this.orchestrator.setFeeRate(rate);
+  }
+
+  /** UtxoPicker's selectionChange forwarded into the create-offer orchestrator. */
+  onFundingUtxoSelectionChange(utxo: TxnOutput): void {
+    this.orchestrator.setSelectedFundingUtxo(utxo);
   }
 }

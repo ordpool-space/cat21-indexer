@@ -110,6 +110,26 @@
       <app-fees-picker [minFeeRate]="0.1" [feeRate]="feeRate()" (feeRateChange)="onFeeRateChange($event)" />
     </section>
 
+    <section class="transfer-section" data-testid="transfer-funding-picker-section">
+      <details>
+        <summary class="transfer-section-heading" style="cursor: pointer;">
+          Funding source <small class="text-muted">— we auto-pick the safest; expand to review or override</small>
+        </summary>
+        <p class="text-muted small mt-2">
+          The transfer needs a funding UTXO from your payment address to pay
+          the miner fee. UTXOs flagged as <em>asset found</em> hold an
+          inscription, rune, CAT-21 cat, or rare sat — spending one sends
+          that asset away as fee. On single-address wallets this is the
+          only line of defense.
+        </p>
+        <app-utxo-picker
+          [utxos]="fundingUtxos()"
+          [selected]="selectedFundingUtxo()"
+          (selectionChange)="onFundingUtxoSelectionChange($event)"
+          data-testid="transfer-funding-picker" />
+      </details>
+    </section>
+
     @if (simulationOutcome()?.simulation; as sim) {
       <section class="transfer-section" data-testid="transfer-summary-section">
         <h2 class="transfer-section-heading">4. Confirm</h2>

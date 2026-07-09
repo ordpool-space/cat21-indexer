@@ -170,6 +170,26 @@
       <app-fees-picker [minFeeRate]="0.1" [feeRate]="feeRate()" (feeRateChange)="onFeeRateChange($event)" />
     </section>
 
+    <section class="make-offer-section" data-testid="make-offer-funding-picker-section">
+      <details>
+        <summary class="make-offer-section-heading" style="cursor: pointer;">
+          Funding source <small class="text-muted">— we auto-pick the safest; expand to review or override</small>
+        </summary>
+        <p class="text-muted small mt-2">
+          Your buy-offer commits one or more of your UTXOs to the buyer's side
+          of the trade. UTXOs flagged as <em>asset found</em> hold an
+          inscription, rune, CAT-21 cat, or rare sat — spending one sends
+          that asset away as fee to the miner (or worse, to the seller as
+          part of the trade). Review before creating the offer.
+        </p>
+        <app-utxo-picker
+          [utxos]="fundingUtxos()"
+          [selected]="selectedFundingUtxo()"
+          (selectionChange)="onFundingUtxoSelectionChange($event)"
+          data-testid="make-offer-funding-picker" />
+      </details>
+    </section>
+
     @if (simulationOutcome()?.simulation; as sim) {
       <section class="make-offer-section make-offer-confirm" data-testid="make-offer-summary-section">
         <h2 class="make-offer-section-heading">4. Confirm</h2>
