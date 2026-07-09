@@ -109,8 +109,11 @@
                 <td><a [routerLink]="['/sat', cat.sat]" class="text-white">{{ cat.sat }}</a></td>
               </tr>
               <tr>
-                <td><b ngbTooltip="The paid fee rate that determines the color of the cat.">i</b>Fee Rate</td>
-                <td>{{ cat.feeRate | number: '1.1-1' }} sat/vB</td>
+                <td><b ngbTooltip="Higher fee rates unlock rarer colour buckets — that's the only trait fees influence. Every other trait is deterministic from SHA256(txid || blockId).">i</b>Fee Rate</td>
+                <td>
+                  {{ cat.feeRate | number: '1.1-1' }} sat/vB
+                  <small class="text-muted d-block">→ drives colour rarity</small>
+                </td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The block height where this cat was minted.">i</b>Block</td>
@@ -131,7 +134,7 @@
                   <td>{{ cat.genesis ? 'Genesis cat' : 'Normal cat' }}</td>
                 </tr>
                 <tr>
-                  <td><b ngbTooltip="All colors used to paint the cat, excluding the colors of the laser eyes and other traits.">i</b>Cat Colors</td>
+                  <td><b ngbTooltip="All colors used to paint the cat, excluding the colors of the laser eyes and other traits. Colour bucket is chosen from the fee rate paid at mint — see Fee Rate above.">i</b>Cat Colors</td>
                   <td>
                     <app-color-list [colors]="cat.catColors" />
                   </td>

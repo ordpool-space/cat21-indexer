@@ -48,106 +48,118 @@
       [currentOwnerState]="currentOwnerState()" />
   </article>
 
-  <!-- Action row: Sell / Buy / Send. Buttons always visible so users
-       discover the features exist; disabled state carries the reason. -->
-  <div class="cat-actions" role="group" aria-label="Cat actions">
+  @if (isFree()) {
+    <!-- Cat is on an unspendable output. No one owns it, no one can move
+         it — Sell / Buy / Send are all structurally impossible. Skip the
+         action row entirely; the language matches First Owner / Current
+         Owner cells above. -->
+    <p class="cat-actions-free text-muted" data-testid="cat-actions-free">
+      This cat is free — its sat is at an unspendable output (OP_RETURN,
+      miner fee, or a script that can never sign). The cat still exists
+      on-chain forever, but no one owns it and no one ever will.
+    </p>
+  } @else {
+    <!-- Action row: Sell / Buy / Send. Buttons always visible so users
+         discover the features exist; disabled state carries the reason. -->
+    <div class="cat-actions" role="group" aria-label="Cat actions">
 
-    @switch (sellButtonState()) {
-      @case ('enabled') {
-        <button
-          type="button"
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-sell"
-          (click)="openSellModal()">
-          Sell this cat
-        </button>
+      @switch (sellButtonState()) {
+        @case ('enabled') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-sell"
+            (click)="openSellModal()">
+            Sell this cat
+          </button>
+        }
+        @case ('connect') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-sell"
+            disabled
+            title="Connect a wallet to sell your cats.">
+            Sell this cat
+          </button>
+        }
+        @case ('not-owner') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-sell"
+            disabled
+            title="You don't own this cat.">
+            Sell this cat
+          </button>
+        }
       }
-      @case ('connect') {
-        <button
-          type="button"
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-sell"
-          disabled
-          title="Connect a wallet to sell your cats.">
-          Sell this cat
-        </button>
-      }
-      @case ('not-owner') {
-        <button
-          type="button"
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-sell"
-          disabled
-          title="You don't own this cat.">
-          Sell this cat
-        </button>
-      }
-    }
 
-    @switch (buyButtonState()) {
-      @case ('enabled') {
-        <a
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-buy"
-          [routerLink]="['/dashboard/trade/make']"
-          [queryParams]="buyQueryParams()">
-          Buy this cat
-        </a>
+      @switch (buyButtonState()) {
+        @case ('enabled') {
+          <a
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-buy"
+            [routerLink]="['/dashboard/trade/make']"
+            [queryParams]="buyQueryParams()">
+            Buy this cat
+          </a>
+        }
+        @case ('connect') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-buy"
+            disabled
+            title="Connect a wallet to buy this cat.">
+            Buy this cat
+          </button>
+        }
+        @case ('owns-it') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-buy"
+            disabled
+            title="You already own this cat.">
+            Buy this cat
+          </button>
+        }
       }
-      @case ('connect') {
-        <button
-          type="button"
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-buy"
-          disabled
-          title="Connect a wallet to buy this cat.">
-          Buy this cat
-        </button>
-      }
-      @case ('owns-it') {
-        <button
-          type="button"
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-buy"
-          disabled
-          title="You already own this cat.">
-          Buy this cat
-        </button>
-      }
-    }
 
-    @switch (sendButtonState()) {
-      @case ('enabled') {
-        <a
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-send"
-          [routerLink]="['/dashboard/transfer']"
-          [queryParams]="sendQueryParams()">
-          Send
-        </a>
+      @switch (sendButtonState()) {
+        @case ('enabled') {
+          <a
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-send"
+            [routerLink]="['/dashboard/transfer']"
+            [queryParams]="sendQueryParams()">
+            Send
+          </a>
+        }
+        @case ('connect') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-send"
+            disabled
+            title="Connect a wallet to send your cats.">
+            Send
+          </button>
+        }
+        @case ('not-owner') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-send"
+            disabled
+            title="You don't own this cat.">
+            Send
+          </button>
+        }
       }
-      @case ('connect') {
-        <button
-          type="button"
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-send"
-          disabled
-          title="Connect a wallet to send your cats.">
-          Send
-        </button>
-      }
-      @case ('not-owner') {
-        <button
-          type="button"
-          class="btn btn-primary fw-bold"
-          data-testid="cat-action-send"
-          disabled
-          title="You don't own this cat.">
-          Send
-        </button>
-      }
-    }
-  </div>
+    </div>
+  }
 
   <a routerLink="/" class="btn btn-secondary fw-bold mt-4 mb-4">« Back</a>
 }

@@ -57,15 +57,15 @@ export class Dashboard {
     },
     {
       title: 'Transfer a cat',
-      description: 'Send one of your cats to another address. Coming soon.',
+      description: 'Send one of your cats to another address. nLockTime=21 preserved through the transfer, so the cat mints a fresh block-21 marker on arrival.',
       link: '/dashboard/transfer',
-      status: 'soon',
+      status: 'active',
     },
     {
       title: 'Trade a cat',
-      description: 'The native CAT-21 marketplace. The ultimate goal — list, bid, settle on-chain. Coming soon.',
+      description: 'Sniping-proof PSBT offers, ord-style. Buyer builds + signs, seller countersigns input 0, tx broadcasts, cat + payment settle in one block.',
       link: '/dashboard/trade',
-      status: 'soon',
+      status: 'active',
     },
   ];
 }

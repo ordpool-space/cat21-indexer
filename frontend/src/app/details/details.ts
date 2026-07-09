@@ -24,8 +24,12 @@ import { rxResourceFixed } from '../shared/rx-resource-fixed';
  * Sell and Send.
  * `owns-it` = wallet connected AND is the owner. Applies to Buy — you
  * can't buy a cat you already own.
+ * `free` = cat is on an unspendable output (OP_RETURN, miner fee, or a
+ * script that can never sign). No one can move it — sell, buy, and send
+ * all become impossible actions rather than "for later" ones. Precedes
+ * every other state; wins even before wallet-connect.
  */
-type ActionButtonState = 'enabled' | 'connect' | 'not-owner' | 'owns-it';
+type ActionButtonState = 'enabled' | 'connect' | 'not-owner' | 'owns-it' | 'free';
 
 @Component({
   selector: 'app-details',
@@ -104,19 +108,30 @@ export class Details {
     return wallet.ordinalsAddress === owner;
   });
 
+  /**
+   * True when ord reports the cat's sat is at an unspendable output —
+   * OP_RETURN, miner fee, or any script that can never sign. The three
+   * action buttons all downgrade to `free` in this state so the user
+   * doesn't waste time trying to move a cat that structurally can't.
+   */
+  readonly isFree = computed<boolean>(() => this.currentOwnerState() === 'free');
+
   readonly sellButtonState = computed<ActionButtonState>(() => {
+    if (this.isFree()) return 'free';
     if (!this.connectedWallet()) return 'connect';
     if (!this.isOwner()) return 'not-owner';
     return 'enabled';
   });
 
   readonly buyButtonState = computed<ActionButtonState>(() => {
+    if (this.isFree()) return 'free';
     if (!this.connectedWallet()) return 'connect';
     if (this.isOwner()) return 'owns-it';
     return 'enabled';
   });
 
   readonly sendButtonState = computed<ActionButtonState>(() => {
+    if (this.isFree()) return 'free';
     if (!this.connectedWallet()) return 'connect';
     if (!this.isOwner()) return 'not-owner';
     return 'enabled';
