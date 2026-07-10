@@ -110,10 +110,7 @@
               </tr>
               <tr>
                 <td><b ngbTooltip="Higher fee rates unlock rarer colour buckets — that's the only trait fees influence. Every other trait is deterministic from SHA256(txid || blockId).">i</b>Fee Rate</td>
-                <td>
-                  {{ cat.feeRate | number: '1.1-1' }} sat/vB
-                  <small class="text-muted d-block">→ drives colour rarity</small>
-                </td>
+                <td>{{ cat.feeRate | number: '1.1-1' }} sat/vB</td>
               </tr>
               <tr>
                 <td><b ngbTooltip="The block height where this cat was minted.">i</b>Block</td>
