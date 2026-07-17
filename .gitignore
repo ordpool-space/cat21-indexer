@@ -31,5 +31,5 @@ Thumbs.db
 # Angular cache
 .angular
 
-frontend/playwright-report/
+frontend/playwright-report*/
 frontend/test-results/
