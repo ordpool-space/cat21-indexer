@@ -2,15 +2,18 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, nu
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { EMPTY } from 'rxjs';
 import {
   buildAskQueryParams,
   buildBuyOfferQueryParams,
   buildTransferQueryParams,
+  CatOutpoint,
   WalletService,
 } from 'ordpool-sdk';
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
 import { ApiService } from '../shared/cat21-api';
+import { CatUtxoLookupService } from '../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../shared/ord-api.service';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 
@@ -34,8 +37,14 @@ import { rxResourceFixed } from '../shared/rx-resource-fixed';
  * A misclassified `enabled` for the actual owner meant they could
  * click "Buy" on their own cat when ord flaked. The unknown state
  * disables the button with an "owner lookup unavailable" tooltip.
+ * `stale` = URL brought a `catTxid`/`catVout` intent from an ask
+ * link, but the cat's current on-chain outpoint doesn't match. The
+ * cat has moved since the link was created — the seller may have
+ * already sold it to someone else. Only the Buy button downgrades
+ * (Sell/Send are the current owner's actions, evaluated against
+ * live ownership; a stale URL doesn't invalidate them).
  */
-type ActionButtonState = 'enabled' | 'connect' | 'not-owner' | 'owns-it' | 'free' | 'unknown';
+type ActionButtonState = 'enabled' | 'connect' | 'not-owner' | 'owns-it' | 'free' | 'unknown' | 'stale';
 
 @Component({
   selector: 'app-details',
@@ -54,6 +63,7 @@ export class Details {
   private router = inject(Router);
   private walletService = inject(WalletService);
   private modalService = inject(NgbModal);
+  private catUtxoLookup = inject(CatUtxoLookupService);
 
   readonly catNumber = input(0, { transform: numberAttribute });
 
@@ -73,6 +83,18 @@ export class Details {
    */
   readonly payTo = input<string | undefined>(undefined);
 
+  /**
+   * Query params `?catTxid=<64hex>&catVout=<n>` — the cat UTXO
+   * outpoint the seller's link was minted against. Forms the
+   * seller's INTENT lock: if the URL brings these AND the cat's
+   * current on-chain outpoint doesn't match, the cat has moved
+   * since the link was created (someone else already bought/
+   * transferred it) → the offer is void, Buy button downgrades to
+   * `stale`. Legacy links without these params skip the check.
+   */
+  readonly catTxid = input<string | undefined>(undefined);
+  readonly catVout = input<string | undefined>(undefined);
+
   readonly askSats = computed<number | null>(() => {
     const raw = this.ask();
     if (!raw) return null;
@@ -89,6 +111,30 @@ export class Details {
   currentOwnerResource = rxResourceFixed({
     params: () => ({ catNumber: this.catNumber() }),
     stream: ({ params }) => this.ordApi.getCurrentOwner(params.catNumber),
+  });
+
+  /**
+   * The cat's CURRENT on-chain outpoint (txid + vout). Used for two
+   * purposes:
+   *   1. Detecting stale ask links (compare against `linkedOutpoint()`
+   *      from the URL).
+   *   2. Pinning the seller's intent when THIS user opens the sell
+   *      modal — the outpoint at modal-open time gets baked into
+   *      `generatedPermalink()` so the shared link is self-invalidating
+   *      once the cat moves.
+   *
+   * Uses the same lookup path (indexer → ord → esplora cross-check)
+   * as make-offer's target resolution — one source of truth for
+   * "where does this cat live right now".
+   */
+  currentTargetResource = rxResourceFixed({
+    params: () => ({ catNumber: this.catNumber() }),
+    stream: ({ params }) =>
+      // Guard against negative / NaN early — the router transform can
+      // still emit 0 before the URL is real.
+      Number.isFinite(params.catNumber) && params.catNumber >= 0
+        ? this.catUtxoLookup.getTargetByNumber(params.catNumber)
+        : EMPTY,
   });
 
   currentOwnerState = computed(() => {
@@ -138,6 +184,38 @@ export class Details {
     return state === 'loading' || state === 'error';
   });
 
+  /**
+   * Cat outpoint the URL was minted against (from `?catTxid=…&catVout=…`).
+   * Null when either param is missing / malformed — legacy ask links
+   * carry no intent-lock and get no stale check.
+   */
+  readonly linkedOutpoint = computed<CatOutpoint | null>(() => {
+    const txid = this.catTxid();
+    const voutRaw = this.catVout();
+    if (!txid || !voutRaw) return null;
+    if (!/^[0-9a-f]{64}$/i.test(txid)) return null;
+    const vout = Number.parseInt(voutRaw, 10);
+    if (!Number.isInteger(vout) || vout < 0) return null;
+    return { txid: txid.toLowerCase(), vout };
+  });
+
+  /**
+   * True when the URL brought an intent-lock (`linkedOutpoint`) AND the
+   * cat's current on-chain outpoint doesn't match — the cat has moved
+   * since the link was created. Buy button downgrades to `stale`; Sell
+   * and Send still evaluate against live ownership (the OWNER can act
+   * on their own cat regardless of what stale URL they landed on).
+   * Returns false while the current-outpoint lookup is still loading
+   * (would misfire as stale before the truth is known).
+   */
+  readonly isStaleOffer = computed<boolean>(() => {
+    const linked = this.linkedOutpoint();
+    if (!linked) return false;
+    const target = this.currentTargetResource.value();
+    if (!target) return false;
+    return target.target.txid !== linked.txid || target.target.vout !== linked.vout;
+  });
+
   readonly sellButtonState = computed<ActionButtonState>(() => {
     if (this.isFree()) return 'free';
     if (this.ownerLookupUnknown()) return 'unknown';
@@ -149,6 +227,11 @@ export class Details {
   readonly buyButtonState = computed<ActionButtonState>(() => {
     if (this.isFree()) return 'free';
     if (this.ownerLookupUnknown()) return 'unknown';
+    // Stale check runs AFTER we know the cat is spendable and its
+    // owner has been resolved, so `stale` is a distinct terminal
+    // state — the button never oscillates back to `enabled` once
+    // the URL's intent-lock is confirmed invalid.
+    if (this.isStaleOffer()) return 'stale';
     if (!this.connectedWallet()) return 'connect';
     if (this.isOwner()) return 'owns-it';
     return 'enabled';
@@ -192,11 +275,15 @@ export class Details {
     // wallet-swap fires between open and copy, fall back to the ask-
     // only shape — the buyer's make-offer form then prompts them to
     // ask the seller for the address instead of a silent misroute.
-    const query = new URLSearchParams(
-      buildAskQueryParams(
-        paymentAddress ? { askSats: n, sellerPaymentAddress: paymentAddress } : { askSats: n },
-      ),
-    ).toString();
+    // Include the cat's current outpoint if we've resolved it — pins
+    // the seller's intent to a specific UTXO. If the cat moves after
+    // the link is shared, the buyer's page detects the mismatch and
+    // refuses to build a PSBT (see SDK `AskQueryArgs.catOutpoint`).
+    const currentTarget = this.currentTargetResource.value()?.target;
+    const args: Parameters<typeof buildAskQueryParams>[0] = { askSats: n };
+    if (paymentAddress) args.sellerPaymentAddress = paymentAddress;
+    if (currentTarget) args.catOutpoint = { txid: currentTarget.txid, vout: currentTarget.vout };
+    const query = new URLSearchParams(buildAskQueryParams(args)).toString();
     return `${window.location.origin}/cat/${this.catNumber()}?${query}`;
   });
 
@@ -259,13 +346,19 @@ export class Details {
   readonly buyQueryParams = computed<Record<string, string>>(() => {
     const ask = this.askSats();
     const payTo = this.payTo();
-    // Forward whatever ask + payTo the URL brought. `payTo` MUST come
-    // from the URL — the SDK HARD RULE forbids deriving it from any
-    // on-chain lookup. If the ask link was minted without it (legacy),
-    // make-offer's form asks the buyer to fill it manually.
+    const linked = this.linkedOutpoint();
+    // Forward whatever ask + payTo + catOutpoint the URL brought.
+    // `payTo` MUST come from the URL — the SDK HARD RULE forbids
+    // deriving it from any on-chain lookup. `catOutpoint` also
+    // stays URL-sourced (never derived from current state) so the
+    // make-offer page sees the SAME intent-lock the seller minted
+    // — otherwise a stale link forwarded through this page would
+    // silently upgrade to a fresh outpoint and the intent-lock
+    // would be defeated.
     const args: Parameters<typeof buildBuyOfferQueryParams>[0] = { catNumber: this.catNumber() };
     if (ask !== null) args.askSats = ask;
     if (payTo) args.sellerPaymentAddress = payTo;
+    if (linked) args.catOutpoint = linked;
     return buildBuyOfferQueryParams(args);
   });
 

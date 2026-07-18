@@ -59,6 +59,24 @@
       on-chain forever, but no one owns it and no one ever will.
     </p>
   } @else {
+    @if (isStaleOffer()) {
+      <!-- The URL brought a `catTxid`/`catVout` intent-lock from an ask
+           link, but the cat's current on-chain outpoint has changed
+           since the link was minted. The seller may have already sold
+           the cat to someone else, or transferred it away. The Buy
+           button is disabled below with the same reason as a tooltip;
+           this banner is the surfaced version for screen readers and
+           users who don't hover-inspect. -->
+      <div
+        class="alert alert-warning"
+        role="alert"
+        data-testid="cat-stale-offer-banner">
+        <strong>This offer link is stale.</strong> The cat has moved
+        since the seller created the link — the cat's current UTXO no
+        longer matches the one pinned in the URL. The offer is void;
+        ask the seller for a fresh link if they still want to trade.
+      </div>
+    }
     <!-- Action row: Sell / Buy / Send. Buttons always visible so users
          discover the features exist; disabled state carries the reason. -->
     <div class="cat-actions" role="group" aria-label="Cat actions">
@@ -142,6 +160,16 @@
             data-testid="cat-action-buy"
             disabled
             title="Owner lookup unavailable — refresh in a moment.">
+            Buy this cat
+          </button>
+        }
+        @case ('stale') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-buy"
+            disabled
+            title="This offer link is stale — the cat has moved since the seller created it. Ask the seller for a fresh link.">
             Buy this cat
           </button>
         }

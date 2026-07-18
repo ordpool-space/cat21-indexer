@@ -54,8 +54,48 @@ export class MakeOffer {
    * lookup — that returns the ordinals address. See SDK HARD RULE.
    */
   readonly payToParam = input<string | undefined>(undefined, { alias: 'payTo' });
+  /**
+   * `?catTxid=…&catVout=…` — the cat UTXO outpoint the seller's link
+   * was minted against (intent-lock). After the on-chain lookup
+   * resolves, if the current outpoint doesn't match, the offer is
+   * stale (cat has moved since the link was created — someone else
+   * already bought/transferred it) and `staleOffer()` fires. The
+   * form disables and shows the stale banner; the buyer must ask
+   * for a fresh link.
+   */
+  readonly catTxidParam = input<string | undefined>(undefined, { alias: 'catTxid' });
+  readonly catVoutParam = input<string | undefined>(undefined, { alias: 'catVout' });
 
   readonly showRespondingToAskBanner = computed(() => this.fromAskParam() === '1');
+
+  /**
+   * Parsed intent-lock outpoint from the URL. Null when either param
+   * is missing / malformed. See `catTxidParam` for semantics.
+   */
+  readonly linkedOutpoint = computed<{ txid: string; vout: number } | null>(() => {
+    const txid = this.catTxidParam();
+    const voutRaw = this.catVoutParam();
+    if (!txid || !voutRaw) return null;
+    if (!/^[0-9a-f]{64}$/i.test(txid)) return null;
+    const vout = Number.parseInt(voutRaw, 10);
+    if (!Number.isInteger(vout) || vout < 0) return null;
+    return { txid: txid.toLowerCase(), vout };
+  });
+
+  /**
+   * True when the URL brought an intent-lock outpoint AND the on-chain
+   * lookup returned a DIFFERENT outpoint. The seller's cat has moved
+   * since the link was minted; the offer is void. Form disables +
+   * banner surfaces. `false` while the lookup hasn't resolved yet
+   * (would misfire before the truth is known).
+   */
+  readonly staleOffer = computed<boolean>(() => {
+    const linked = this.linkedOutpoint();
+    if (!linked) return false;
+    const target = this.targetCat();
+    if (!target) return false;
+    return target.txid !== linked.txid || target.vout !== linked.vout;
+  });
 
   // ---------- Live state from the orchestrator ----------
 
@@ -95,6 +135,12 @@ export class MakeOffer {
 
   readonly canCreateOffer = computed(() => {
     if (this.state() !== 'ready') return false;
+    // Intent-lock check: if the URL pinned a specific cat UTXO and
+    // the on-chain lookup returned a different one, the seller has
+    // already moved the cat (sold/transferred). Refuse to build a
+    // PSBT against a UTXO that no longer represents the seller's
+    // consent.
+    if (this.staleOffer()) return false;
     if (!this.targetCat()) return false;
     if (!this.sellerPaymentAddress()) return false;
     if (!this.priceSats()) return false;

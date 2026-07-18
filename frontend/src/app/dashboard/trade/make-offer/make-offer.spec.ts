@@ -212,3 +212,174 @@ describe('MakeOffer regression — sellerPaymentAddress never derived from on-ch
     expect(paymentCalls).not.toContain(CAT_OWNER_ORDINALS_ADDRESS);
   });
 });
+
+describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
+
+  const URL_TXID = 'aa'.repeat(32); // outpoint the seller's link was pinned to
+  const OTHER_TXID = 'bb'.repeat(32); // cat's current outpoint (differs → stale)
+
+  it('URL-supplied catTxid + catVout parse via linkedOutpoint()', async () => {
+    const orchestrator = new OrchestratorStub();
+    const scanner = new ScannerStub();
+    const walletService = new WalletServiceStub();
+    const lookup = new LookupStub();
+
+    await TestBed.configureTestingModule({
+      imports: [MakeOffer],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
+        { provide: UtxoContentScanner, useValue: scanner },
+        { provide: WalletService, useValue: walletService },
+        { provide: CatUtxoLookupService, useValue: lookup },
+        {
+          provide: cat21Config,
+          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
+        },
+      ],
+    })
+      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(MakeOffer);
+    fixture.componentRef.setInput('catTxid', URL_TXID);
+    fixture.componentRef.setInput('catVout', '0');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.linkedOutpoint()).toEqual({ txid: URL_TXID, vout: 0 });
+  });
+
+  it('staleOffer=true when URL outpoint ≠ orchestrator targetCat outpoint (cat moved)', async () => {
+    const orchestrator = new OrchestratorStub();
+    const scanner = new ScannerStub();
+    const walletService = new WalletServiceStub();
+    const lookup = new LookupStub();
+
+    await TestBed.configureTestingModule({
+      imports: [MakeOffer],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
+        { provide: UtxoContentScanner, useValue: scanner },
+        { provide: WalletService, useValue: walletService },
+        { provide: CatUtxoLookupService, useValue: lookup },
+        {
+          provide: cat21Config,
+          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
+        },
+      ],
+    })
+      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(MakeOffer);
+    fixture.componentRef.setInput('catTxid', URL_TXID);
+    fixture.componentRef.setInput('catVout', '0');
+    // Simulate the on-chain lookup completing with a DIFFERENT outpoint
+    // (cat has moved since the URL was minted).
+    orchestrator.targetCat.set(target({ txid: OTHER_TXID, vout: 0 }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.staleOffer()).toBe(true);
+    expect(fixture.componentInstance.canCreateOffer()).toBe(false);
+  });
+
+  it('staleOffer=false when URL outpoint == orchestrator targetCat outpoint (fresh link)', async () => {
+    const orchestrator = new OrchestratorStub();
+    const scanner = new ScannerStub();
+    const walletService = new WalletServiceStub();
+    const lookup = new LookupStub();
+
+    await TestBed.configureTestingModule({
+      imports: [MakeOffer],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
+        { provide: UtxoContentScanner, useValue: scanner },
+        { provide: WalletService, useValue: walletService },
+        { provide: CatUtxoLookupService, useValue: lookup },
+        {
+          provide: cat21Config,
+          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
+        },
+      ],
+    })
+      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(MakeOffer);
+    fixture.componentRef.setInput('catTxid', URL_TXID);
+    fixture.componentRef.setInput('catVout', '0');
+    orchestrator.targetCat.set(target({ txid: URL_TXID, vout: 0 }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.staleOffer()).toBe(false);
+  });
+
+  it('staleOffer=false when URL has no intent-lock (legacy link — no stale check)', async () => {
+    const orchestrator = new OrchestratorStub();
+    const scanner = new ScannerStub();
+    const walletService = new WalletServiceStub();
+    const lookup = new LookupStub();
+
+    await TestBed.configureTestingModule({
+      imports: [MakeOffer],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
+        { provide: UtxoContentScanner, useValue: scanner },
+        { provide: WalletService, useValue: walletService },
+        { provide: CatUtxoLookupService, useValue: lookup },
+        {
+          provide: cat21Config,
+          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
+        },
+      ],
+    })
+      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(MakeOffer);
+    orchestrator.targetCat.set(target({ txid: OTHER_TXID, vout: 0 }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.linkedOutpoint()).toBeNull();
+    expect(fixture.componentInstance.staleOffer()).toBe(false);
+  });
+
+  it('staleOffer=false while the lookup has not resolved (do NOT block the form before truth is known)', async () => {
+    const orchestrator = new OrchestratorStub();
+    const scanner = new ScannerStub();
+    const walletService = new WalletServiceStub();
+    const lookup = new LookupStub();
+
+    await TestBed.configureTestingModule({
+      imports: [MakeOffer],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
+        { provide: UtxoContentScanner, useValue: scanner },
+        { provide: WalletService, useValue: walletService },
+        { provide: CatUtxoLookupService, useValue: lookup },
+        {
+          provide: cat21Config,
+          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
+        },
+      ],
+    })
+      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(MakeOffer);
+    fixture.componentRef.setInput('catTxid', URL_TXID);
+    fixture.componentRef.setInput('catVout', '0');
+    // orchestrator.targetCat stays null (lookup in flight).
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.staleOffer()).toBe(false);
+  });
+});

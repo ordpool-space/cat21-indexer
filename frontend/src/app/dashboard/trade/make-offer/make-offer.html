@@ -15,6 +15,24 @@
   </div>
 }
 
+@if (staleOffer()) {
+  <!-- URL brought a `catTxid`/`catVout` intent-lock; the on-chain
+       lookup returned a different outpoint. The cat has moved since
+       the seller minted the link — either the seller already sold it,
+       or someone else did, or the seller transferred it. Their sell
+       intent no longer applies to the cat's current UTXO. The Create
+       Offer button is disabled via `canCreateOffer()`. -->
+  <div class="alert alert-warning" role="alert" data-testid="stale-offer-banner">
+    <strong>This offer link is stale.</strong>
+    <span>
+      The cat has moved since the seller created this link — its
+      current UTXO no longer matches the one the offer was pinned
+      to. The offer is void; ask the seller for a fresh link if
+      they still want to trade.
+    </span>
+  </div>
+}
+
 @if (!connectedWallet()) {
   <div class="connect-card" data-testid="make-offer-cta">
     <h2>Connect your wallet to make an offer</h2>
