@@ -93,6 +93,16 @@
             Sell this cat
           </button>
         }
+        @case ('unknown') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-sell"
+            disabled
+            title="Owner lookup unavailable — refresh in a moment.">
+            Sell this cat
+          </button>
+        }
       }
 
       @switch (buyButtonState()) {
@@ -125,6 +135,16 @@
             Buy this cat
           </button>
         }
+        @case ('unknown') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-buy"
+            disabled
+            title="Owner lookup unavailable — refresh in a moment.">
+            Buy this cat
+          </button>
+        }
       }
 
       @switch (sendButtonState()) {
@@ -154,6 +174,16 @@
             data-testid="cat-action-send"
             disabled
             title="You don't own this cat.">
+            Send
+          </button>
+        }
+        @case ('unknown') {
+          <button
+            type="button"
+            class="btn btn-primary fw-bold"
+            data-testid="cat-action-send"
+            disabled
+            title="Owner lookup unavailable — refresh in a moment.">
             Send
           </button>
         }

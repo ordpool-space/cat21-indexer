@@ -350,7 +350,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
     it('E2: largest is assets, second is clean → picks the clean', () => {
       pushRows([
-        { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [] } } },
+        { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null } } },
         { u: big(20_000), scan: { kind: 'scanned-clean' } },
       ]);
       expect(orch.selectedUtxo()!.value).toBe(20_000);
@@ -366,7 +366,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
     it('E4: mixed clean+unscanned+assets → clean wins regardless of size', () => {
       pushRows([
-        { u: big(90_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [] } } },
+        { u: big(90_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null } } },
         { u: big(70_000), scan: { kind: 'not-scanned' } },
         { u: big(5_000), scan: { kind: 'scanned-clean' } },
       ]);
@@ -375,8 +375,8 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
     it('E5: all assets → no auto-pick (selectedUtxo cleared)', () => {
       pushRows([
-        { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [] } } },
-        { u: big(20_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'b:0', inscriptionIds: [], runes: { RUNE: {} }, catIds: [] } } },
+        { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null } } },
+        { u: big(20_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'b:0', inscriptionIds: [], runes: { RUNE: {} }, catIds: [], rareSat: null } } },
       ]);
       expect(orch.selectedUtxo()).toBeNull();
     });
@@ -498,7 +498,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('G2: scanned-with-assets → bucket "assets"', () => {
-      pushRows([{ u, scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['x'], runes: null, catIds: [] } } }]);
+      pushRows([{ u, scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['x'], runes: null, catIds: [], rareSat: null } } }]);
       // assets is never auto-picked; the user has to pick it themselves
       orch.setSelectedUtxo(u);
       fixture.detectChanges();
@@ -538,7 +538,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
     it('H4: selectedUtxo null → false', () => {
       orch.feeRate.set(5);
-      pushRows([{ u: utxo(), scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [] } } }]);
+      pushRows([{ u: utxo(), scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null } } }]);
       // auto-pick refuses assets-only, so selectedUtxo stays null
       expect(orch.selectedUtxo()).toBeNull();
       expect(component.canMint()).toBe(false);
@@ -596,7 +596,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
         paymentAddress: 'same-addr',
       }));
       const u = utxo({ value: 5_000 });
-      pushRows([{ u, scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [] } } }]);
+      pushRows([{ u, scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null } } }]);
       orch.setSelectedUtxo(u);
       fixture.detectChanges();
       expect(component.showSmallUtxoWarning()).toBe(false);
@@ -704,7 +704,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       orch.connectedWallet.set(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
-      const assetsScan: UtxoScanState = { kind: 'scanned-with-assets', content: { outpoint: `${u.txid}:0`, inscriptionIds: ['inscription-id'], runes: null, catIds: [] } };
+      const assetsScan: UtxoScanState = { kind: 'scanned-with-assets', content: { outpoint: `${u.txid}:0`, inscriptionIds: ['inscription-id'], runes: null, catIds: [], rareSat: null } };
       pushRows([{ u, scan: assetsScan }]);
       // auto-pick refused → selectedUtxo null
       expect(orch.selectedUtxo()).toBeNull();
@@ -721,8 +721,8 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('M. small helpers', () => {
     it('M1: runeNames extracts keys; null runes → empty array', () => {
-      expect(component.runeNames({ outpoint: 'x:0', inscriptionIds: [], runes: null, catIds: [] })).toEqual([]);
-      expect(component.runeNames({ outpoint: 'x:0', inscriptionIds: [], runes: { ALPHA: {}, BETA: {} }, catIds: [] }).sort()).toEqual(['ALPHA', 'BETA']);
+      expect(component.runeNames({ outpoint: 'x:0', inscriptionIds: [], runes: null, catIds: [], rareSat: null })).toEqual([]);
+      expect(component.runeNames({ outpoint: 'x:0', inscriptionIds: [], runes: { ALPHA: {}, BETA: {} }, catIds: [], rareSat: null }).sort()).toEqual(['ALPHA', 'BETA']);
     });
 
     it('M2: autoScanThreshold matches the SDK constant', () => {
@@ -872,7 +872,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       // but the user MUST still see the panel to override with "Use anyway".
       const assetsScan: UtxoScanState = {
         kind: 'scanned-with-assets',
-        content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [] },
+        content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null },
       };
       pushRows([{ u: big(50_000), scan: assetsScan }]);
       expect(component.viableRows().length).toBeGreaterThan(0);
@@ -896,7 +896,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       // Only-assets scenario triggers no auto-pick
       pushRows([{
         u: big(50_000),
-        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [] } },
+        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null } },
       }]);
       expect(component.selectedRow()).toBeNull();
       expect(component.pickerOpenByDefault()).toBe(true);
@@ -909,7 +909,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       const u1 = big(50_000);
       const assetsScan: UtxoScanState = {
         kind: 'scanned-with-assets',
-        content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [] },
+        content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null },
       };
       pushRows([{ u: u1, scan: assetsScan }]);
       orch.setSelectedUtxo(u1);
@@ -949,7 +949,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     it('MATRIX-E10(B): summary panel is hidden when no row is selected', () => {
       pushRows([{
         u: big(50_000),
-        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [] } },
+        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null } },
       }]);
       expect(component.selectedRow()).toBeNull();
       const el: HTMLElement = fixture.nativeElement;
@@ -962,7 +962,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     it('MATRIX-E11(B): mint button disabled when there is no row selection', () => {
       pushRows([{
         u: big(50_000),
-        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [] } },
+        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null } },
       }]);
       expect(orch.selectedUtxo()).toBeNull();
       expect(component.canMint()).toBe(false);
@@ -972,7 +972,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       const u1 = big(50_000);
       const assetsScan: UtxoScanState = {
         kind: 'scanned-with-assets',
-        content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [] },
+        content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [], rareSat: null },
       };
       pushRows([{ u: u1, scan: assetsScan }]);
       // Pre: auto-pick refuses, mint disabled
@@ -985,7 +985,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('MATRIX-I. edge cases', () => {
     it('MATRIX-I20(B): runeNames returns [] for null runes (no crash)', () => {
-      const empty = component.runeNames({ outpoint: 'x:0', inscriptionIds: [], runes: null, catIds: [] });
+      const empty = component.runeNames({ outpoint: 'x:0', inscriptionIds: [], runes: null, catIds: [], rareSat: null });
       expect(empty).toEqual([]);
     });
 

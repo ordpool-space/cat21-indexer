@@ -127,7 +127,11 @@
 
       @if (lookupState() === 'ready' && resolvedSellerAddress(); as sellerAddr) {
         <p class="text-success small mt-2" data-testid="make-offer-resolved">
-          ✓ Found. Currently owned by <code>{{ sellerAddr }}</code>.
+          ✓ Found. This cat currently lives at ordinals address
+          <code>{{ sellerAddr }}</code>. This is <strong>not</strong>
+          the seller's payment address — payments go to a different
+          address the seller controls; ask them for it, or click their
+          Buy-this-cat link which prefills it below.
         </p>
       } @else if (lookupState() === 'error' && lookupError(); as err) {
         <p class="text-danger small mt-2" data-testid="make-offer-lookup-error">{{ err }}</p>
@@ -136,7 +140,14 @@
 
     <section class="make-offer-section" data-testid="make-offer-deal-section">
       <h2 class="make-offer-section-heading">2. The deal</h2>
-      <label class="form-label" for="make-offer-seller-payment">Seller's payment address</label>
+      <label class="form-label" for="make-offer-seller-payment">
+        Seller's payment address
+        @if (draft().sellerPaymentAddressInput) {
+          <small class="text-muted">— prefilled from the seller's ask link</small>
+        } @else {
+          <small class="text-muted">— ask the seller for their payment address (bc1q… / 3… / bc1p…)</small>
+        }
+      </label>
       <input
         id="make-offer-seller-payment"
         type="text"

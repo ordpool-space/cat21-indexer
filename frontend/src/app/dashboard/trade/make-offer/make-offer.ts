@@ -44,6 +44,15 @@ export class MakeOffer {
   readonly catNumberParam = input<string | undefined>(undefined, { alias: 'catNumber' });
   readonly askPriceParam = input<string | undefined>(undefined, { alias: 'askPrice' });
   readonly fromAskParam = input<string | undefined>(undefined, { alias: 'fromAsk' });
+  /**
+   * `?payTo=<address>` — the seller's PAYMENT address, forwarded
+   * from the ask permalink. Prefills the seller-payment field so
+   * the buyer never has to type it. If missing (legacy ask link or
+   * a manually-typed URL), the form field stays empty and the buyer
+   * is asked to type it. NEVER derived from the cat's on-chain owner
+   * lookup — that returns the ordinals address. See SDK HARD RULE.
+   */
+  readonly payToParam = input<string | undefined>(undefined, { alias: 'payTo' });
 
   readonly showRespondingToAskBanner = computed(() => this.fromAskParam() === '1');
 
@@ -163,6 +172,7 @@ export class MakeOffer {
         catNumber: rawCatNumber,
         askPrice: this.askPriceParam() ?? null,
         fromAsk: this.fromAskParam() ?? null,
+        payTo: this.payToParam() ?? null,
       });
       if (parsed.catNumber === null) return;
 
@@ -173,6 +183,16 @@ export class MakeOffer {
       if (parsed.askSats !== null) {
         this.draft.update((d) => ({ ...d, priceSatsInput: String(parsed.askSats) }));
         this.orchestrator.setPriceSats(parsed.askSats);
+      }
+      if (parsed.sellerPaymentAddress !== null) {
+        // Prefill the seller-payment field from the URL. This is the
+        // only correct source for this value — see SDK HARD RULE
+        // "Never derive a payment address from an on-chain lookup".
+        this.draft.update((d) => ({
+          ...d,
+          sellerPaymentAddressInput: parsed.sellerPaymentAddress!,
+        }));
+        this.orchestrator.setSellerPaymentAddress(parsed.sellerPaymentAddress);
       }
     });
   }
@@ -219,10 +239,15 @@ export class MakeOffer {
           return;
         }
         this.orchestrator.setTargetCat(result.target);
+        // `result.sellerAddress` is the cat's on-chain owner — the
+        // seller's ORDINALS address (that's where cats live per
+        // ordinal theory). It is NEVER the right value for the
+        // seller's PAYMENT address. Surface it as a display-only
+        // "current owner" hint; the payment address must come from
+        // the seller (via the URL's `payTo` param or the buyer typing
+        // it in). See SDK HARD RULE "Never derive a payment address
+        // from an on-chain lookup".
         this.resolvedSellerAddress.set(result.sellerAddress);
-        // Auto-fill seller payment address to the resolved owning address.
-        this.draft.update((d) => ({ ...d, sellerPaymentAddressInput: result.sellerAddress }));
-        this.orchestrator.setSellerPaymentAddress(result.sellerAddress);
         this.lookupState.set('ready');
       },
       error: (err: unknown) => {

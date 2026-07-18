@@ -28,8 +28,14 @@ import { rxResourceFixed } from '../shared/rx-resource-fixed';
  * script that can never sign). No one can move it — sell, buy, and send
  * all become impossible actions rather than "for later" ones. Precedes
  * every other state; wins even before wallet-connect.
+ * `unknown` = ord's owner lookup is loading OR errored, so we can't
+ * decide isOwner honestly. Every action button downgrades to this
+ * (not to `enabled` / `owns-it` / `not-owner`) rather than guess wrong.
+ * A misclassified `enabled` for the actual owner meant they could
+ * click "Buy" on their own cat when ord flaked. The unknown state
+ * disables the button with an "owner lookup unavailable" tooltip.
  */
-type ActionButtonState = 'enabled' | 'connect' | 'not-owner' | 'owns-it' | 'free';
+type ActionButtonState = 'enabled' | 'connect' | 'not-owner' | 'owns-it' | 'free' | 'unknown';
 
 @Component({
   selector: 'app-details',
@@ -53,11 +59,19 @@ export class Details {
 
   /**
    * Query param `?ask=<sats>` — a seller's asking-price advertisement.
-   * The parameter is minimal on purpose: no seller address, no
-   * signature — the buy flow resolves the current owner from ord at
-   * click time. See workspace HQ "Offers can be shared in the wild".
+   * See workspace HQ "Offers can be shared in the wild".
    */
   readonly ask = input<string | undefined>(undefined);
+
+  /**
+   * Query param `?payTo=<address>` — the seller's PAYMENT address
+   * from the sell modal. Forwarded to /dashboard/trade/make so the
+   * buyer's make-offer form prefills the payment output destination.
+   * NEVER derive this from the cat's on-chain owner (that's the
+   * ordinals address; wrong context). See SDK HARD RULE "Never
+   * derive a payment address from an on-chain lookup".
+   */
+  readonly payTo = input<string | undefined>(undefined);
 
   readonly askSats = computed<number | null>(() => {
     const raw = this.ask();
@@ -116,8 +130,17 @@ export class Details {
    */
   readonly isFree = computed<boolean>(() => this.currentOwnerState() === 'free');
 
+  /** True when the owner lookup hasn't yielded a definitive answer
+   *  yet — either still loading or errored. All three action buttons
+   *  fall back to `unknown` in this state rather than guess. */
+  readonly ownerLookupUnknown = computed<boolean>(() => {
+    const state = this.currentOwnerState();
+    return state === 'loading' || state === 'error';
+  });
+
   readonly sellButtonState = computed<ActionButtonState>(() => {
     if (this.isFree()) return 'free';
+    if (this.ownerLookupUnknown()) return 'unknown';
     if (!this.connectedWallet()) return 'connect';
     if (!this.isOwner()) return 'not-owner';
     return 'enabled';
@@ -125,6 +148,7 @@ export class Details {
 
   readonly buyButtonState = computed<ActionButtonState>(() => {
     if (this.isFree()) return 'free';
+    if (this.ownerLookupUnknown()) return 'unknown';
     if (!this.connectedWallet()) return 'connect';
     if (this.isOwner()) return 'owns-it';
     return 'enabled';
@@ -132,6 +156,7 @@ export class Details {
 
   readonly sendButtonState = computed<ActionButtonState>(() => {
     if (this.isFree()) return 'free';
+    if (this.ownerLookupUnknown()) return 'unknown';
     if (!this.connectedWallet()) return 'connect';
     if (!this.isOwner()) return 'not-owner';
     return 'enabled';
@@ -145,14 +170,33 @@ export class Details {
   /** Ask price the seller is entering in the modal (raw string input). */
   readonly askInput = signal<string>('');
 
-  /** Permalink derived from `askInput`; null until a valid positive integer is entered. */
+  /**
+   * Permalink derived from `askInput`; null until a valid positive
+   * integer is entered. Encodes the seller's own PAYMENT address
+   * (from the connected wallet) as `payTo=` so the buyer's make-offer
+   * page never has to derive the seller's payment address from an
+   * on-chain lookup — which would return the ORDINALS address for a
+   * CAT-21 cat and cause `payment-output-wrong-address` validator
+   * rejects on every split-address wallet. See the SDK HARD RULE
+   * "Never derive a payment address from an on-chain lookup".
+   */
   readonly generatedPermalink = computed<string | null>(() => {
     const raw = this.askInput().trim();
     if (!raw) return null;
     const n = Number.parseInt(raw, 10);
     if (!Number.isFinite(n) || n <= 0) return null;
     if (typeof window === 'undefined') return null;
-    const query = new URLSearchParams(buildAskQueryParams({ askSats: n })).toString();
+    const paymentAddress = this.connectedWallet()?.paymentAddress;
+    // Sell button is gated on `enabled` (wallet connected + isOwner),
+    // so paymentAddress should be present when the modal opens. If a
+    // wallet-swap fires between open and copy, fall back to the ask-
+    // only shape — the buyer's make-offer form then prompts them to
+    // ask the seller for the address instead of a silent misroute.
+    const query = new URLSearchParams(
+      buildAskQueryParams(
+        paymentAddress ? { askSats: n, sellerPaymentAddress: paymentAddress } : { askSats: n },
+      ),
+    ).toString();
     return `${window.location.origin}/cat/${this.catNumber()}?${query}`;
   });
 
@@ -214,11 +258,15 @@ export class Details {
    *  RouterLink binding memoises across change-detection cycles. */
   readonly buyQueryParams = computed<Record<string, string>>(() => {
     const ask = this.askSats();
-    return buildBuyOfferQueryParams(
-      ask !== null
-        ? { catNumber: this.catNumber(), askSats: ask }
-        : { catNumber: this.catNumber() },
-    );
+    const payTo = this.payTo();
+    // Forward whatever ask + payTo the URL brought. `payTo` MUST come
+    // from the URL — the SDK HARD RULE forbids deriving it from any
+    // on-chain lookup. If the ask link was minted without it (legacy),
+    // make-offer's form asks the buyer to fill it manually.
+    const args: Parameters<typeof buildBuyOfferQueryParams>[0] = { catNumber: this.catNumber() };
+    if (ask !== null) args.askSats = ask;
+    if (payTo) args.sellerPaymentAddress = payTo;
+    return buildBuyOfferQueryParams(args);
   });
 
   /** Query params for `/dashboard/transfer`. */
