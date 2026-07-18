@@ -14,7 +14,6 @@ import {
 import {
   AUTO_SCAN_MAX_VALUE_SAT,
   Cat21MintOrchestrator,
-  KnownOrdinalWalletType,
   RecommendedFees,
   SimulateTransactionResult,
   TxnOutput,
@@ -27,6 +26,7 @@ import {
 } from 'ordpool-sdk';
 
 import { Mint } from './mint';
+import { makeWallet, WalletServiceStub } from '../../testing/wallet.fixtures';
 
 // ---------------------------------------------------------------------------
 // Tiny fixture builders. Real production types have lots of fields we don't
@@ -59,17 +59,7 @@ function simulation(over: Partial<SimulateTransactionResult> = {}): SimulateTran
   };
 }
 
-function wallet(over: Partial<WalletInfo> = {}): WalletInfo {
-  return {
-    type: KnownOrdinalWalletType.xverse,
-    ordinalsAddress: 'bc1p-ordinals-addr',
-    paymentAddress: '3-payment-addr',
-    paymentPublicKey: '02' + 'aa'.repeat(32),
-    ordinalsPublicKey: '02' + 'bb'.repeat(32),
-    signingSupported: true,
-    ...over,
-  };
-}
+const wallet = makeWallet;
 
 /**
  * Lightweight stand-in for Cat21MintOrchestrator. Every reactive field
@@ -126,15 +116,6 @@ class ScannerStub {
   setStates(states: Iterable<[string, UtxoScanState]>): void {
     this.statesSubject.next(new Map(states));
   }
-}
-
-class WalletServiceStub {
-  readonly connectedWalletSubject = new BehaviorSubject<WalletInfo | null>(null);
-  readonly connectedWallet$ = this.connectedWalletSubject.asObservable();
-  readonly wallets$ = new BehaviorSubject({ installedWallets: [], notInstalledWallets: [] }).asObservable();
-  connectWallet = jest.fn();
-  disconnectWallet = jest.fn();
-  requestWalletConnect = jest.fn();
 }
 
 // ---------------------------------------------------------------------------

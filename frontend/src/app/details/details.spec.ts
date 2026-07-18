@@ -1,15 +1,15 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
-import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { BehaviorSubject, EMPTY, Observable, of, throwError } from 'rxjs';
+import { EMPTY, Observable, of, throwError } from 'rxjs';
 
-import { KnownOrdinalWalletType, WalletInfo, WalletService } from 'ordpool-sdk';
+import { WalletInfo, WalletService } from 'ordpool-sdk';
 
 import { Details } from './details';
 import { ApiService } from '../shared/cat21-api';
 import { OrdApiService } from '../shared/ord-api.service';
+import { makeWallet, WalletServiceStub } from '../testing/wallet.fixtures';
 
 // ---------------------------------------------------------------------------
 // Split payment vs ordinals addresses ARE THE POINT of this spec. We're
@@ -21,27 +21,7 @@ import { OrdApiService } from '../shared/ord-api.service';
 const WALLET_PAYMENT = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx';
 const WALLET_ORDINALS = 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9';
 
-const wallet = (over: Partial<WalletInfo> = {}): WalletInfo =>
-  ({
-    type: KnownOrdinalWalletType.xverse,
-    paymentAddress: WALLET_PAYMENT,
-    paymentPublicKey: '02' + 'aa'.repeat(32),
-    ordinalsAddress: WALLET_ORDINALS,
-    ordinalsPublicKey: '02' + 'bb'.repeat(32),
-    signingSupported: true,
-    ...over,
-  }) as WalletInfo;
-
-class WalletServiceStub {
-  readonly connectedWalletSubject = new BehaviorSubject<WalletInfo | null>(null);
-  readonly connectedWallet$ = this.connectedWalletSubject.asObservable();
-  readonly wallets$ = new BehaviorSubject({ installedWallets: [], notInstalledWallets: [] }).asObservable();
-  readonly networkMismatch$ = new BehaviorSubject(false).asObservable();
-  readonly expectedNetworkGroup = signal<'mainnet' | 'testnet' | 'regtest'>('mainnet');
-  connectWallet = jest.fn();
-  disconnectWallet = jest.fn();
-  requestWalletConnect = jest.fn();
-}
+const wallet = makeWallet;
 
 class ApiServiceStub {
   catsControllerGetCatByNumber = jest.fn((_: number) => of({} as unknown));

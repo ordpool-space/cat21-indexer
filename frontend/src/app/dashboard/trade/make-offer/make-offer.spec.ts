@@ -9,7 +9,6 @@ import {
   BuyOfferTargetCat,
   Cat21CreateOfferOrchestrator,
   CreateOfferSimulationOutcome,
-  KnownOrdinalWalletType,
   RecommendedFees,
   TxnOutput,
   UtxoContentScanner,
@@ -21,6 +20,7 @@ import {
 
 import { MakeOffer } from './make-offer';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
+import { makeWallet, WalletServiceStub } from '../../../testing/wallet.fixtures';
 
 // ---------------------------------------------------------------------------
 // Distinct addresses ARE THE POINT of this spec. Splitting them ensures
@@ -39,16 +39,15 @@ const WALLET_PAYMENT_ADDRESS = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx';
 // returns in production.
 const CAT_OWNER_ORDINALS_ADDRESS = 'bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh';
 
-function wallet(over: Partial<WalletInfo> = {}): WalletInfo {
-  return {
-    type: KnownOrdinalWalletType.xverse,
+// Local wrapper — same shape as the shared `makeWallet` but with the
+// spec's specific WALLET_* addresses baked in as the defaults. Callers
+// can still override any field.
+const wallet = (over: Partial<WalletInfo> = {}): WalletInfo =>
+  makeWallet({
     ordinalsAddress: WALLET_ORDINALS_ADDRESS,
     paymentAddress: WALLET_PAYMENT_ADDRESS,
-    paymentPublicKey: '02' + 'aa'.repeat(32),
-    ordinalsPublicKey: '02' + 'bb'.repeat(32),
-    signingSupported: true,
-  } as WalletInfo;
-}
+    ...over,
+  });
 
 function target(over: Partial<BuyOfferTargetCat> = {}): BuyOfferTargetCat {
   return {
@@ -101,17 +100,6 @@ class ScannerStub {
   autoScan = jest.fn((_: unknown[]) => undefined);
   reset = jest.fn();
   getState = jest.fn((_: string): UtxoScanState => ({ kind: 'not-scanned' }));
-}
-
-class WalletServiceStub {
-  readonly connectedWalletSubject = new BehaviorSubject<WalletInfo | null>(null);
-  readonly connectedWallet$ = this.connectedWalletSubject.asObservable();
-  readonly wallets$ = new BehaviorSubject({ installedWallets: [], notInstalledWallets: [] }).asObservable();
-  readonly networkMismatch$ = new BehaviorSubject(false).asObservable();
-  readonly expectedNetworkGroup = signal<'mainnet' | 'testnet' | 'regtest'>('mainnet');
-  connectWallet = jest.fn();
-  disconnectWallet = jest.fn();
-  requestWalletConnect = jest.fn();
 }
 
 class LookupStub {

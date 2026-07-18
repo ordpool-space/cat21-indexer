@@ -9,7 +9,6 @@ import {
   Cat21AcceptOfferOrchestrator,
   Cat21OfferValidation,
   CatOutpoint,
-  KnownOrdinalWalletType,
   ParsedOffer,
   WalletInfo,
   WalletService,
@@ -18,20 +17,17 @@ import {
 
 import { AcceptOffer } from './accept-offer';
 import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';
+import { makeWallet, WalletServiceStub } from '../../../testing/wallet.fixtures';
 
 const WALLET_ORDINALS = 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9';
 const WALLET_PAYMENT = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx';
 
 const wallet = (over: Partial<WalletInfo> = {}): WalletInfo =>
-  ({
-    type: KnownOrdinalWalletType.xverse,
+  makeWallet({
     ordinalsAddress: WALLET_ORDINALS,
     paymentAddress: WALLET_PAYMENT,
-    paymentPublicKey: '02' + 'aa'.repeat(32),
-    ordinalsPublicKey: '02' + 'bb'.repeat(32),
-    signingSupported: true,
     ...over,
-  }) as WalletInfo;
+  });
 
 class OrchestratorStub {
   readonly connectedWallet: WritableSignal<WalletInfo | null> = signal(null);
@@ -52,17 +48,6 @@ class OrchestratorStub {
   setFloorPriceSats = jest.fn((n: number) => this.floorPriceSats.set(n));
   acceptOffer = jest.fn((): Observable<{ txid: string }> => of({ txid: 'broadcast-txid' }));
   reset = jest.fn();
-}
-
-class WalletServiceStub {
-  readonly connectedWalletSubject = new BehaviorSubject<WalletInfo | null>(null);
-  readonly connectedWallet$ = this.connectedWalletSubject.asObservable();
-  readonly wallets$ = new BehaviorSubject({ installedWallets: [], notInstalledWallets: [] }).asObservable();
-  readonly networkMismatch$ = new BehaviorSubject(false).asObservable();
-  readonly expectedNetworkGroup = signal<'mainnet' | 'testnet' | 'regtest'>('mainnet');
-  connectWallet = jest.fn();
-  disconnectWallet = jest.fn();
-  requestWalletConnect = jest.fn();
 }
 
 class LookupStub {
