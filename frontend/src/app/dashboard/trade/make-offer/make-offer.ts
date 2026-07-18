@@ -189,16 +189,14 @@ export class MakeOffer {
         // Prefill the seller-payment field from the URL. This is the
         // only correct source for this value — see SDK HARD RULE
         // "Never derive a payment address from an on-chain lookup".
+        // The parser already returns a branded PaymentAddress at this
+        // seam, so no cast — the compiler ratifies the URL-ingress
+        // contract end-to-end.
         this.draft.update((d) => ({
           ...d,
           sellerPaymentAddressInput: parsed.sellerPaymentAddress!,
         }));
-        // The SDK setter is branded — the toPaymentAddress cast is
-        // where the "is this really a payment address?" question gets
-        // asked. Value came from parseBuyOfferQueryParams, which was
-        // constructed on the seller's device from wallet.paymentAddress
-        // (per the `payTo` permalink round-trip), so it is.
-        this.orchestrator.setSellerPaymentAddress(toPaymentAddress(parsed.sellerPaymentAddress));
+        this.orchestrator.setSellerPaymentAddress(parsed.sellerPaymentAddress);
       }
     });
   }
