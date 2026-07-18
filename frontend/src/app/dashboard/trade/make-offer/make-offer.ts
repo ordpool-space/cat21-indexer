@@ -8,6 +8,7 @@ import {
   Cat21CreateOfferOrchestrator,
   CreateOfferSimulationOutcome,
   parseBuyOfferQueryParams,
+  toPaymentAddress,
   TxnOutput,
 } from 'ordpool-sdk';
 
@@ -192,7 +193,12 @@ export class MakeOffer {
           ...d,
           sellerPaymentAddressInput: parsed.sellerPaymentAddress!,
         }));
-        this.orchestrator.setSellerPaymentAddress(parsed.sellerPaymentAddress);
+        // The SDK setter is branded — the toPaymentAddress cast is
+        // where the "is this really a payment address?" question gets
+        // asked. Value came from parseBuyOfferQueryParams, which was
+        // constructed on the seller's device from wallet.paymentAddress
+        // (per the `payTo` permalink round-trip), so it is.
+        this.orchestrator.setSellerPaymentAddress(toPaymentAddress(parsed.sellerPaymentAddress));
       }
     });
   }
@@ -273,7 +279,21 @@ export class MakeOffer {
 
   onSellerPaymentAddressChange(value: string): void {
     this.draft.update((d) => ({ ...d, sellerPaymentAddressInput: value }));
-    this.orchestrator.setSellerPaymentAddress(value);
+    // Buyer typed this into the form — the toPaymentAddress cast
+    // runs assertShape, so an obviously-bad string throws before it
+    // reaches the orchestrator. Empty / whitespace → clear the field.
+    const trimmed = value.trim();
+    if (!trimmed) {
+      this.orchestrator.setSellerPaymentAddress(null);
+      return;
+    }
+    try {
+      this.orchestrator.setSellerPaymentAddress(toPaymentAddress(trimmed));
+    } catch {
+      // Malformed address as the buyer's typing — leave the orchestrator
+      // in its previous state; the input's own validation surfaces the
+      // problem to the UI. Don't null the orchestrator on every bad keystroke.
+    }
   }
 
   onPriceSatsChange(value: string): void {
