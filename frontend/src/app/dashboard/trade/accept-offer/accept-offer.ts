@@ -7,6 +7,7 @@ import {
   Cat21AcceptOfferOrchestrator,
   Cat21OfferRejectionReason,
   parseAcceptOfferQueryParams,
+  toPaymentAddress,
   WalletService,
 } from 'ordpool-sdk';
 
@@ -119,7 +120,9 @@ export class AcceptOffer implements OnInit {
         // seller wants their BTC. Default to their connected wallet's
         // payment address (the typical case); the buyer's offer
         // builds the seller-payment-output against this address.
-        this.orchestrator.setExpectedSellerPaymentAddress(wallet.paymentAddress);
+        // The setter is branded — `toPaymentAddress` is where we ratify
+        // "this is the wallet's payment address, not its ordinals one".
+        this.orchestrator.setExpectedSellerPaymentAddress(toPaymentAddress(wallet.paymentAddress));
       }
     });
 
