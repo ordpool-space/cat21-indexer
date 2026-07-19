@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { validate } from './env.config';
 import { DrizzleModule } from './modules/shared/drizzle/drizzle.module';
 import { CatsModule } from './modules/cats/cats.module';
+import { ListingsModule } from './modules/listings/listings.module';
 import { SyncModule } from './modules/sync/sync.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { SyncModule } from './modules/sync/sync.module';
     DrizzleModule,
     CatsModule,
     SyncModule,
+    ListingsModule,
   ],
   controllers: [AppController],
 })

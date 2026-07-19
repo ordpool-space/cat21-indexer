@@ -64,6 +64,13 @@
       "when": 1780243200000,
       "tag": "0008_reset_color_for_yellow_window",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1784419200000,
+      "tag": "0009_add_listings_table",
+      "breakpoints": true
     }
   ]
 }

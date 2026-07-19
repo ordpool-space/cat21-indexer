@@ -33,6 +33,11 @@
     "drizzle-orm": "^0.44.4",
     "mysql2": "^3.11.5",
     "ordpool-parser": "github:ordpool-space/ordpool-parser#c8206c1bfb945fb7bddbc7b93f5a3ba5c35c45ea",
+    "ordpool-sdk": "github:ordpool-space/ordpool-sdk#f615a5c",
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.8.0",
+    "@scure/base": "^1.2.0",
+    "@scure/btc-signer": "1.2.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5"

@@ -16,7 +16,15 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      // Direct alias to the SDK's plain-CJS `dist-core` bundle. The
+      // SDK's package.json declares this via the exports map subpath
+      // `./core`, but tsc under classic-node resolution + module=cjs
+      // can't parse exports maps (would need moduleResolution=node16 +
+      // module=node16, a much bigger change). Node's runtime require
+      // DOES respect the exports map, so the paths alias is a
+      // compile-time-only accommodation.
+      "ordpool-sdk/core": ["node_modules/ordpool-sdk/dist-core/core"]
     }
   },
   "include": ["src/**/*"],
