@@ -1,4 +1,4 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -8,6 +8,7 @@ import helmet from '@fastify/helmet';
 import { ConfigService } from '@nestjs/config';
 import * as sharp from 'sharp';
 import { AppModule } from './app.module';
+import { NoStoreOnErrorFilter } from './modules/shared/no-store-on-error.filter';
 import { setupSwagger } from './swagger';
 
 // Minimize Sharp memory usage on low-memory environments (512MB)
@@ -40,6 +41,12 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Guards / pipes / interceptors throw BEFORE the controller method
+  // body runs, so any Cache-Control the controller would have set via
+  // `reply.header(...)` never lands on the response. This filter is
+  // the single place every error path picks up `no-store`.
+  app.useGlobalFilters(new NoStoreOnErrorFilter(app.get(HttpAdapterHost)));
 
   setupSwagger(app);
 

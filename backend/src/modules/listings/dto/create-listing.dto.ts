@@ -31,13 +31,13 @@ export class CreateListingDto {
 
   @ApiProperty({
     description:
-      'Bitcoin network the seller signed against. Binds the signature to a specific network — a testnet-signed listing bytes replayed against mainnet is rejected as `signature-does-not-verify`.',
+      'Bitcoin network the seller signed against. Binds the signature to a specific network — a testnet-signed listing bytes replayed against mainnet is rejected as `signature-does-not-verify`. Full enum matches ordpool-sdk `Network`; per-deployment the backend only accepts one of these via `network-mismatch`.',
     example: 'mainnet',
-    enum: ['mainnet', 'testnet3', 'testnet4', 'regtest'],
+    enum: ['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'],
   })
   @IsString()
-  @IsIn(['mainnet', 'testnet3', 'testnet4', 'regtest'])
-  network!: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest';
+  @IsIn(['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'])
+  network!: 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest';
 
   @ApiProperty({
     description: `Asking price in sats. Positive integer, capped at MAX_ASK_SATS (${MAX_ASK_SATS} = 21 M BTC — total supply). Any value above is rejected as nonsense.`,

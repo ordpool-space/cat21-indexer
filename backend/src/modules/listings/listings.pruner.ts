@@ -99,7 +99,6 @@ export class ListingsPruner implements OnModuleInit, OnModuleDestroy {
     let checked = 0;
     let dropped = 0;
     let ordErrors = 0;
-    let racedAndSurvived = 0;
     for (const row of allListings) {
       checked++;
       let current;
@@ -116,7 +115,7 @@ export class ListingsPruner implements OnModuleInit, OnModuleDestroy {
       // Cat has moved to an unspendable output OR ord doesn't know it
       // anymore — either way the sell intent is void.
       if (!current) {
-        await this.dropIfUnchanged(row, 'no current location on ord', racedAndSurvived);
+        await this.dropIfUnchanged(row, 'no current location on ord');
         dropped++;
         continue;
       }
@@ -125,7 +124,6 @@ export class ListingsPruner implements OnModuleInit, OnModuleDestroy {
         await this.dropIfUnchanged(
           row,
           `outpoint drifted ${row.catTxid}:${row.catVout} → ${current.txid}:${current.vout}`,
-          racedAndSurvived,
         );
         dropped++;
       }
@@ -138,12 +136,14 @@ export class ListingsPruner implements OnModuleInit, OnModuleDestroy {
   /**
    * Delete guarded by `id + signedAt` (see class docstring for the
    * race). If the row was re-listed since our snapshot, the WHERE
-   * doesn't match and we skip with a log — the fresh row survives.
+   * doesn't match and the delete affects 0 rows — the fresh row
+   * survives; we log the intended cause regardless because the
+   * mysql2 driver doesn't surface affectedRows through Drizzle's
+   * delete builder in a stable way.
    */
   private async dropIfUnchanged(
     row: typeof listings.$inferSelect,
     reason: string,
-    _racedCount: number,
   ): Promise<void> {
     await this.listingsService.deleteByIdIfUnchanged(row.id, row.signedAt);
     this.logger.log(`Prune: dropped cat #${row.catNumber} — ${reason}`);

@@ -32,11 +32,12 @@ const BACKEND_NETWORK = 'mainnet';
  * `verifyListingSignature` (which threads it into the canonical
  * message). Fixed strings for a fixed enum — no dynamic mapping.
  */
-function toSdkNetwork(name: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'): Network {
+function toSdkNetwork(name: 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest'): Network {
   switch (name) {
     case 'mainnet': return Network.Mainnet;
     case 'testnet3': return Network.Testnet3;
     case 'testnet4': return Network.Testnet4;
+    case 'signet': return Network.Signet;
     case 'regtest': return Network.Regtest;
   }
 }
