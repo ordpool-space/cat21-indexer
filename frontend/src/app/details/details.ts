@@ -13,6 +13,7 @@ import {
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
 import { ApiService } from '../shared/cat21-api';
+import { Cat21ListingService, CreateListingError } from '../shared/cat21-listing.service';
 import { CatUtxoLookupService } from '../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../shared/ord-api.service';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
@@ -64,6 +65,7 @@ export class Details {
   private walletService = inject(WalletService);
   private modalService = inject(NgbModal);
   private catUtxoLookup = inject(CatUtxoLookupService);
+  private listingService = inject(Cat21ListingService);
 
   readonly catNumber = input(0, { transform: numberAttribute });
 
@@ -290,6 +292,27 @@ export class Details {
   /** Just-clicked feedback for the copy button. */
   readonly copyStatus = signal<'idle' | 'copied'>('idle');
 
+  // ---------- Orderbook publish ----------
+
+  /**
+   * Pre-checked: the seller opts INTO the orderbook by default (the
+   * whole point is to be discoverable). Unchecking means "just give
+   * me a shareable link, don't publish anywhere public".
+   */
+  readonly publishToOrderbook = signal<boolean>(true);
+
+  /**
+   * State machine for the "list on orderbook" flow:
+   *   - `idle` — checkbox may be on or off; nothing has been posted.
+   *   - `signing` — wallet's signature-prompt is open.
+   *   - `posting` — signature back, HTTP POST in flight.
+   *   - `success` — listing accepted; row is live.
+   *   - `error` — one of the CreateListingErrorCode reasons; see
+   *               `orderbookError()` for the code + human message.
+   */
+  readonly orderbookState = signal<'idle' | 'signing' | 'posting' | 'success' | 'error'>('idle');
+  readonly orderbookError = signal<CreateListingError | null>(null);
+
   constructor() {
     // Close the sell modal automatically when the wallet disconnects
     // or switches to a non-owner. Otherwise the modal would stay open
@@ -324,10 +347,76 @@ export class Details {
   onCopyPermalinkClick(): void {
     const url = this.generatedPermalink();
     if (!url) return;
+    // Always copy the URL — an offline "just share this link" workflow
+    // still needs to work even if the checkbox is off.
     navigator.clipboard?.writeText(url).then(
       () => this.copyStatus.set('copied'),
       () => this.copyStatus.set('idle'),
     );
+    // Additionally publish to the orderbook if opted in. Sequential so
+    // a wallet rejection during signing doesn't clobber the copied-URL
+    // feedback the user already got.
+    if (this.publishToOrderbook()) {
+      this.publishListing();
+    }
+  }
+
+  /**
+   * Toggle handler for the "list on orderbook" checkbox. Persists
+   * signal state; also clears any prior error so the UI doesn't show
+   * a stale rejection after the seller unchecks + re-checks.
+   */
+  onPublishToOrderbookToggle(value: boolean): void {
+    this.publishToOrderbook.set(value);
+    if (!value) {
+      this.orderbookState.set('idle');
+      this.orderbookError.set(null);
+    }
+  }
+
+  /**
+   * Publish the current ask to the CAT-21 orderbook via the SDK's
+   * BIP-322 signing flow + backend POST. Requires a wallet with a
+   * signMessage-capable signer (cat21-wallet, Xverse, Leather,
+   * Unisat, OKX today) and the cat's current outpoint from the
+   * lookup resource — if either is missing the state stays idle
+   * with a descriptive error.
+   */
+  private publishListing(): void {
+    const ask = this.askInput().trim();
+    const askSats = Number.parseInt(ask, 10);
+    if (!Number.isFinite(askSats) || askSats <= 0) return;
+    const target = this.currentTargetResource.value()?.target;
+    if (!target) {
+      this.orderbookState.set('error');
+      this.orderbookError.set({
+        code: 'network-error',
+        detail: 'Cat outpoint not yet resolved. Try again in a moment.',
+      });
+      return;
+    }
+    this.orderbookState.set('signing');
+    this.orderbookError.set(null);
+    this.listingService
+      .publishListing({
+        catNumber: this.catNumber(),
+        askSats,
+        catTxid: target.txid,
+        catVout: target.vout,
+      })
+      .subscribe({
+        next: () => {
+          this.orderbookState.set('success');
+        },
+        error: (err: CreateListingError) => {
+          this.orderbookState.set('error');
+          this.orderbookError.set(err);
+        },
+      });
+    // Transition signing → posting happens implicitly when signMessage
+    // resolves and the POST fires. We could poll for that, but the
+    // signMessage RPC is opaque; the UI shows "signing…" until the
+    // whole thing completes. Good enough for MVP.
   }
 
   onShareOnXClick(): void {

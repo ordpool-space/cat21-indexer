@@ -8,6 +8,7 @@ import { BuyOfferTargetCat, WalletInfo, WalletService } from 'ordpool-sdk';
 
 import { Details } from './details';
 import { ApiService } from '../shared/cat21-api';
+import { Cat21ListingService } from '../shared/cat21-listing.service';
 import { CatUtxoLookupService } from '../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../shared/ord-api.service';
 import { makeWallet, WalletServiceStub } from '../testing/wallet.fixtures';
@@ -52,6 +53,11 @@ class LookupStub {
   getMyHoldings = jest.fn();
 }
 
+class ListingServiceStub {
+  publishListing = jest.fn();
+  getListingForCat = jest.fn();
+}
+
 async function setup(opts: {
   catNumber?: number;
   payTo?: string;
@@ -65,6 +71,7 @@ async function setup(opts: {
   const api = new ApiServiceStub();
   const ordApi = new OrdApiServiceStub();
   const lookup = new LookupStub();
+  const listingService = new ListingServiceStub();
   if (opts.owner) ordApi.setOwner(opts.owner);
   if (opts.currentTarget) lookup.setTarget(opts.currentTarget);
 
@@ -77,6 +84,7 @@ async function setup(opts: {
       { provide: ApiService, useValue: api },
       { provide: OrdApiService, useValue: ordApi },
       { provide: CatUtxoLookupService, useValue: lookup },
+      { provide: Cat21ListingService, useValue: listingService },
     ],
   })
     .overrideComponent(Details, { set: { template: '', imports: [] } })
@@ -90,7 +98,7 @@ async function setup(opts: {
   if (opts.catVout !== undefined) fixture.componentRef.setInput('catVout', opts.catVout);
   fixture.detectChanges();
 
-  return { fixture, component: fixture.componentInstance, walletService, ordApi, api, lookup };
+  return { fixture, component: fixture.componentInstance, walletService, ordApi, api, lookup, listingService };
 }
 
 describe('Details — sell permalink (`generatedPermalink`)', () => {
@@ -398,5 +406,114 @@ describe('Details — catOutpoint intent-lock (stale detection)', () => {
     const params = component.buyQueryParams();
     expect(params['catTxid']).toBeUndefined();
     expect(params['catVout']).toBeUndefined();
+  });
+});
+
+
+describe('Details — orderbook publish flow (sell modal checkbox → sign → POST)', () => {
+
+  const TXID = 'aa'.repeat(32);
+
+  it('checkbox defaults to CHECKED — publishing is the default seller intent', async () => {
+    const { component } = await setup();
+    expect(component.publishToOrderbook()).toBe(true);
+  });
+
+  it('Copy click with checkbox ON invokes listingService.publishListing with the ask + current outpoint', async () => {
+    const { component, walletService, listingService } = await setup({
+      currentTarget: () => of(targetAt(TXID, 0)),
+    });
+    walletService.connectedWalletSubject.next(wallet());
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    component.onAskInputChange('21000');
+    listingService.publishListing.mockReturnValue(of({ id: 'x' } as never));
+
+    component.onCopyPermalinkClick();
+    expect(listingService.publishListing).toHaveBeenCalledTimes(1);
+    expect(listingService.publishListing.mock.calls[0]?.[0]).toEqual({
+      catNumber: 42,
+      askSats: 21_000,
+      catTxid: TXID,
+      catVout: 0,
+    });
+  });
+
+  it('Copy click with checkbox OFF does NOT invoke publishListing', async () => {
+    const { component, walletService, listingService } = await setup({
+      currentTarget: () => of(targetAt(TXID, 0)),
+    });
+    walletService.connectedWalletSubject.next(wallet());
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    component.onAskInputChange('21000');
+    component.onPublishToOrderbookToggle(false);
+    component.onCopyPermalinkClick();
+
+    expect(listingService.publishListing).not.toHaveBeenCalled();
+  });
+
+  it('publishListing success → orderbookState becomes "success", no error', async () => {
+    const { component, walletService, listingService } = await setup({
+      currentTarget: () => of(targetAt(TXID, 0)),
+    });
+    walletService.connectedWalletSubject.next(wallet());
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    component.onAskInputChange('21000');
+    listingService.publishListing.mockReturnValue(of({ id: 'x' } as never));
+
+    component.onCopyPermalinkClick();
+    // Sync subscribe — of() is synchronous.
+    expect(component.orderbookState()).toBe('success');
+    expect(component.orderbookError()).toBeNull();
+  });
+
+  it('publishListing error → orderbookState becomes "error", orderbookError carries {code, detail}', async () => {
+    const { component, walletService, listingService } = await setup({
+      currentTarget: () => of(targetAt(TXID, 0)),
+    });
+    walletService.connectedWalletSubject.next(wallet());
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    component.onAskInputChange('21000');
+    listingService.publishListing.mockReturnValue(
+      throwError(() => ({ code: 'not-current-owner', detail: 'not owner' })),
+    );
+
+    component.onCopyPermalinkClick();
+    expect(component.orderbookState()).toBe('error');
+    expect(component.orderbookError()).toEqual({ code: 'not-current-owner', detail: 'not owner' });
+  });
+
+  it('publishListing bails when current outpoint has not resolved yet — state=error with a helpful message', async () => {
+    const { component, walletService, listingService } = await setup({
+      currentTarget: () => EMPTY, // never emits
+    });
+    walletService.connectedWalletSubject.next(wallet());
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    component.onAskInputChange('21000');
+
+    component.onCopyPermalinkClick();
+    // listingService NEVER called — we short-circuit before signing.
+    expect(listingService.publishListing).not.toHaveBeenCalled();
+    expect(component.orderbookState()).toBe('error');
+    expect(component.orderbookError()?.detail).toContain('outpoint not yet resolved');
+  });
+
+  it('unchecking the checkbox clears prior error state', async () => {
+    const { component, walletService, listingService } = await setup({
+      currentTarget: () => of(targetAt(TXID, 0)),
+    });
+    walletService.connectedWalletSubject.next(wallet());
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    component.onAskInputChange('21000');
+    listingService.publishListing.mockReturnValue(
+      throwError(() => ({ code: 'wallet-signature-failed', detail: 'rejected' })),
+    );
+    component.onCopyPermalinkClick();
+    expect(component.orderbookState()).toBe('error');
+
+    component.onPublishToOrderbookToggle(false);
+    expect(component.orderbookState()).toBe('idle');
+    expect(component.orderbookError()).toBeNull();
   });
 });

@@ -263,6 +263,43 @@
         data-testid="sell-modal-permalink"
         [value]="url" />
 
+      <!-- Orderbook opt-in — pre-checked because the whole point of
+           listing is to be discoverable. Unchecking degrades to the
+           original "just give me a link" behaviour. -->
+      <div class="form-check mt-3">
+        <input
+          id="publish-to-orderbook"
+          type="checkbox"
+          class="form-check-input"
+          data-testid="sell-modal-publish-to-orderbook"
+          [checked]="publishToOrderbook()"
+          (change)="onPublishToOrderbookToggle($any($event.target).checked)" />
+        <label class="form-check-label" for="publish-to-orderbook">
+          <strong>List on the CAT-21 orderbook (public).</strong>
+          Anyone browsing cat21.space will see this ask. You'll sign a
+          message proving you own the cat — no on-chain cost.
+        </label>
+      </div>
+
+      @if (orderbookState() === 'signing') {
+        <div class="alert alert-info mt-3" role="status" data-testid="sell-modal-orderbook-signing">
+          Waiting for your wallet to sign the listing message…
+        </div>
+      }
+      @if (orderbookState() === 'success') {
+        <div class="alert alert-success mt-3" role="status" data-testid="sell-modal-orderbook-success">
+          <strong>Listed on the orderbook.</strong>
+          Buyers browsing cat21.space now see cat #{{ catNumber() }} at your price.
+          If the cat moves before someone buys it, the listing self-invalidates.
+        </div>
+      }
+      @if (orderbookState() === 'error') {
+        <div class="alert alert-danger mt-3" role="alert" data-testid="sell-modal-orderbook-error">
+          <strong>Couldn't publish listing.</strong>
+          {{ orderbookError()?.detail || 'Unknown error — please retry.' }}
+        </div>
+      }
+
       <div class="permalink-actions mt-3">
         <button
           type="button"
