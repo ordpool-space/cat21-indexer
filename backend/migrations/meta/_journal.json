@@ -71,6 +71,20 @@
       "when": 1784419200000,
       "tag": "0009_add_listings_table",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1784505600000,
+      "tag": "0010_signed_at_bigint",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1784505700000,
+      "tag": "0011_add_listings_network",
+      "breakpoints": true
     }
   ]
 }

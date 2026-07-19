@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Post,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -19,7 +20,9 @@ import {
   ApiOperation,
   ApiParam,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
 
 import { CreateListingDto } from './dto/create-listing.dto';
@@ -43,6 +46,13 @@ export class ListingsController {
 
   @Post()
   @HttpCode(201)
+  // Rate limit: 5 listing publishes / minute / IP. Guards our ord
+  // instance against DoS via valid-but-flooded POSTs (each POST costs
+  // ~2 ord API calls). Legitimate sellers won't publish more than a
+  // handful of listings per minute across their entire cat inventory;
+  // an attacker flooding with signed junk is capped hard.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({
     summary: 'Create or overwrite a cat listing',
     description:
@@ -52,19 +62,20 @@ export class ListingsController {
       'DTO\'s `ordinalsAddress` really owns cat #`catNumber` at outpoint `catTxid:catVout` ' +
       "RIGHT NOW. Any tamper / staleness / attacker-signature is rejected with a specific " +
       'error code. cat_number is unique — re-POSTing for a cat OVERWRITES the previous ' +
-      'listing (price change flow).',
+      'listing (price change flow). Rate-limited to 5/min/IP.',
   })
+  @ApiTooManyRequestsResponse({ description: 'Exceeded 5 listing publishes per minute per IP.' })
   @ApiCreatedResponse({ type: ListingDto })
   @ApiBadRequestResponse({
     description:
       'Rejection with a code:\n' +
-      '- `invalid-listing-fields` — shape check failed (e.g. non-hex txid)\n' +
+      '- `network-mismatch` — DTO network doesn\'t match this backend\'s deployment\n' +
+      '- `signature-too-old` — signedAt > 24h in the past\n' +
+      '- `signature-in-future` — signedAt > 1h in the future\n' +
       '- `signature-malformed-signature` — base64 or witness structure decode failed\n' +
       '- `signature-unsupported-address-type` — ordinalsAddress is not P2TR\n' +
       '- `signature-invalid-address` — ordinalsAddress does not decode\n' +
       '- `signature-signature-does-not-verify` — schnorr verify returned false\n' +
-      '- `signature-too-old` — signedAt > 24h in the past\n' +
-      '- `signature-in-future` — signedAt > 1h in the future\n' +
       '- `ord-lookup-failed` — upstream ord unreachable\n' +
       '- `cat-not-found` — ord does not know this cat (or it sits at an unspendable output)\n' +
       '- `not-current-owner` — signature valid but the address does not own the cat right now\n' +

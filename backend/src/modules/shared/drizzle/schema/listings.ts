@@ -21,15 +21,13 @@ import {
  * dropped at INSERT time. External clients can re-verify a row's
  * signature offline from the columns alone.
  *
- * Pruning: an hourly job fetches each listing's cat via ord and
- * compares `(cat_txid, cat_vout)` against the current on-chain
- * outpoint. Mismatch → cat has moved → the sell intent is void → row
- * DELETED. See `listings.pruner.ts`.
- *
  * Unique per cat: at most one active listing per `cat_number` — a
  * seller re-listing at a new price overwrites the old row (see the
  * unique index). This keeps the "orderbook" a snapshot of current
- * intent, not a historical log.
+ * intent, not a historical log. The pruner deletes by primary key
+ * `id`, not by `cat_number`, so an in-flight upsert can never be
+ * accidentally killed by a stale pruner snapshot (see the pruner
+ * for the race explanation).
  */
 export const listings = mysqlTable(
   'listings',
@@ -39,16 +37,23 @@ export const listings = mysqlTable(
     // ---- Signed fields — the BIP-322 signature commits to these ----
     // Order matches ordpool-sdk `buildListingMessage`'s field order.
     catNumber: int('cat_number').notNull().unique(),
+    // Bitcoin network the seller signed against — 'mainnet' /
+    // 'testnet3' / 'regtest'. Load-bearing for anti-replay across
+    // networks (see SDK v2 listing message shape).
+    network: varchar('network', { length: 16 }).notNull(),
     // askSats is bigint because Bitcoin prices routinely exceed 2^32
-    // sats (2^32 = ~42 BTC — normal for a rare-cat listing).
+    // sats (2^32 = ~42 BTC — normal for a rare-cat listing). Capped
+    // at 21 M BTC in application code (MAX_ASK_SATS in the SDK).
     askSats: bigint('ask_sats', { mode: 'number' }).notNull(),
     payTo: varchar('pay_to', { length: 128 }).notNull(),
     catTxid: varchar('cat_txid', { length: 64 }).notNull(),
     catVout: int('cat_vout').notNull(),
     ordinalsAddress: varchar('ordinals_address', { length: 128 }).notNull(),
-    // Unix seconds at signing time. Anti-replay hint — the service
-    // MAY reject listings whose signedAt is outside a sanity window.
-    signedAt: int('signed_at').notNull(),
+    // Unix seconds at signing time. BIGINT (not INT) — INT overflows
+    // 2038-01-19 (Y2038). Anti-replay hint — the service rejects
+    // listings whose signedAt is outside a 24h back / 1h future
+    // window.
+    signedAt: bigint('signed_at', { mode: 'number' }).notNull(),
 
     // ---- Signature over the above (base64, wallet-emitted) ----
     // Length up to ~256 chars: Xverse's wrapped-witness format is

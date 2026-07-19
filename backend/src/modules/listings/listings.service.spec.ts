@@ -17,6 +17,14 @@ let mockBuildMessage: jest.Mock;
 jest.mock('ordpool-sdk/core', () => ({
   buildListingMessage: (fields: unknown) => mockBuildMessage(fields),
   verifyListingSignature: (args: unknown) => mockVerify(args),
+  Network: {
+    Mainnet: 'mainnet',
+    Testnet3: 'testnet3',
+    Testnet4: 'testnet4',
+    Signet: 'signet',
+    Regtest: 'regtest',
+  },
+  MAX_ASK_SATS: 21_000_000 * 100_000_000,
 }));
 
 // ---------------------------------------------------------------------------
@@ -31,8 +39,9 @@ const NOW_S = 1_784_419_200; // fixed clock for anti-replay tests
 
 // Freshly-signed listing DTO shape. `signedAt` = NOW_S so it's inside the
 // anti-replay window by default; tests that care shift it explicitly.
-const validDto = (over: Partial<Parameters<ListingsService['create']>[0]> = {}) => ({
+const validDto = (over: Partial<Parameters<ListingsService['create']>[0]> = {}): Parameters<ListingsService['create']>[0] => ({
   catNumber: 42,
+  network: 'mainnet',
   askSats: 21_000,
   payTo: PAY_ADDR,
   catTxid: REAL_TXID,
@@ -115,14 +124,17 @@ describe('ListingsService.create — signature verification', () => {
     }
   });
 
-  it('rejects invalid-listing-fields when buildListingMessage throws (e.g. UPPERCASE txid)', async () => {
-    mockBuildMessage.mockImplementation(() => { throw new Error('catTxid must be 64-char lowercase hex'); });
+  it('surfaces signature-* codes for malformed input the SDK verify rejects (no separate build-message step)', async () => {
+    // Field-shape validation lives in class-validator on the DTO; anything
+    // that slips through and mismatches the canonical message the SDK
+    // rebuilds internally comes back as a `signature-*` failure. There is
+    // no longer a separate `invalid-listing-fields` code — the service
+    // does not call buildListingMessage at all now.
+    mockVerify.mockReturnValue({ ok: false, reason: 'malformed-signature', detail: 'witness structure decode failed' });
     const service = new ListingsService(createDrizzleMock() as never, createOrdMock() as never);
-    await expect(service.create(validDto({ catTxid: REAL_TXID.toUpperCase() }))).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'invalid-listing-fields' }),
+    await expect(service.create(validDto())).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'signature-malformed-signature' }),
     });
-    // Neither verify nor ord should be reached — field shape fails first.
-    expect(mockVerify).not.toHaveBeenCalled();
   });
 });
 

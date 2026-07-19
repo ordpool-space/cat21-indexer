@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsIn,
   IsInt,
   IsString,
   Matches,
@@ -7,6 +8,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { MAX_ASK_SATS } from 'ordpool-sdk/core';
 
 /**
  * POST body for `/api/v1/listings`. Every field maps 1:1 to the
@@ -28,13 +30,24 @@ export class CreateListingDto {
   catNumber!: number;
 
   @ApiProperty({
-    description: 'Asking price in sats. Positive integer, no upper cap other than 2^53-1 (JS safe-int).',
+    description:
+      'Bitcoin network the seller signed against. Binds the signature to a specific network — a testnet-signed listing bytes replayed against mainnet is rejected as `signature-does-not-verify`.',
+    example: 'mainnet',
+    enum: ['mainnet', 'testnet3', 'testnet4', 'regtest'],
+  })
+  @IsString()
+  @IsIn(['mainnet', 'testnet3', 'testnet4', 'regtest'])
+  network!: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest';
+
+  @ApiProperty({
+    description: `Asking price in sats. Positive integer, capped at MAX_ASK_SATS (${MAX_ASK_SATS} = 21 M BTC — total supply). Any value above is rejected as nonsense.`,
     example: 21_000,
     minimum: 1,
+    maximum: MAX_ASK_SATS,
   })
   @IsInt()
   @Min(1)
-  @Max(Number.MAX_SAFE_INTEGER)
+  @Max(MAX_ASK_SATS)
   askSats!: number;
 
   @ApiProperty({

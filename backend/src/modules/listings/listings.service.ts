@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { count, desc, eq, or, sql } from 'drizzle-orm';
-import { buildListingMessage, verifyListingSignature } from 'ordpool-sdk/core';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { and, count, desc, eq } from 'drizzle-orm';
+import { Network, verifyListingSignature } from 'ordpool-sdk/core';
 
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { listings } from '../shared/drizzle/schema/listings';
@@ -18,6 +18,29 @@ import { ListingDto, PaginatedListingsDto } from './dto/listing.dto';
 const ANTI_REPLAY_MAX_AGE_S = 24 * 60 * 60;
 const CLOCK_SKEW_FUTURE_S = 60 * 60;
 
+/**
+ * Backend's Bitcoin network — mainnet in production. Read from env
+ * via ConfigModule if we ever want a testnet deployment; for now the
+ * infra is mainnet-only and hardcoding here catches misconfigured
+ * DTOs (a seller sends `network=testnet3` to the mainnet backend
+ * expecting anything to happen with it).
+ */
+const BACKEND_NETWORK = 'mainnet';
+
+/**
+ * Map the DTO's serialized network string back to the SDK enum for
+ * `verifyListingSignature` (which threads it into the canonical
+ * message). Fixed strings for a fixed enum — no dynamic mapping.
+ */
+function toSdkNetwork(name: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'): Network {
+  switch (name) {
+    case 'mainnet': return Network.Mainnet;
+    case 'testnet3': return Network.Testnet3;
+    case 'testnet4': return Network.Testnet4;
+    case 'regtest': return Network.Regtest;
+  }
+}
+
 @Injectable()
 export class ListingsService {
   private readonly logger = new Logger(ListingsService.name);
@@ -28,50 +51,52 @@ export class ListingsService {
   ) {}
 
   /**
-   * Create (or overwrite) the active listing for a cat. Steps:
+   * Create (or overwrite) the active listing for a cat.
    *
-   *   1. Verify the BIP-322 signature via ordpool-sdk.
-   *   2. Check `signedAt` is within the anti-replay window.
-   *   3. Cross-check with ord: the cat's CURRENT ordinals address
-   *      MUST equal the DTO's `ordinalsAddress`, AND the cat's
-   *      CURRENT outpoint MUST equal `(catTxid, catVout)`. A seller
-   *      can't list a cat someone else already moved.
-   *   4. Upsert into `listings` — `cat_number` is unique, so re-listing
-   *      a cat at a new price replaces the old row.
+   * Check order — CHEAP checks before expensive ones so a spammer
+   * can't burn CPU by flooding malformed payloads:
+   *
+   *   1. Network match (constant equality, sub-µs).
+   *   2. Anti-replay window (arithmetic).
+   *   3. BIP-322 signature verify (schnorr, ~ms).
+   *   4. On-chain cross-check via ord (network, tens of ms).
+   *   5. Upsert.
    *
    * Any step that fails throws `BadRequestException` with a code the
    * frontend surfaces to the seller. No partial writes.
    */
   async create(dto: CreateListingDto): Promise<ListingDto> {
-    // (1) BIP-322 signature verify — recomputes the canonical message
-    //     from the DTO fields and validates the schnorr sig against
-    //     the seller's ordinals P2TR address. Any tampered field
-    //     invalidates the signature.
-    let message: string;
-    try {
-      message = buildListingMessage({
-        catNumber: dto.catNumber,
-        askSats: dto.askSats,
-        payTo: dto.payTo as never,             // brand check runs inside verify via toPaymentAddress
-        catTxid: dto.catTxid,
-        catVout: dto.catVout,
-        ordinalsAddress: dto.ordinalsAddress as never,
-        signedAt: dto.signedAt,
-      });
-    } catch (err) {
-      // Field-level shape check failed (class-validator already ran, but
-      // sdk's builder has stricter rules e.g. lowercase-hex catTxid).
+    // (1) Network — cheap fail-fast. Also blocks a seller who typo'd
+    //     `network=testnet3` from submitting to the mainnet backend.
+    if (dto.network !== BACKEND_NETWORK) {
       throw new BadRequestException({
-        code: 'invalid-listing-fields',
-        detail: err instanceof Error ? err.message : String(err),
+        code: 'network-mismatch',
+        detail: `Listing signed for network=${dto.network}; this backend serves ${BACKEND_NETWORK}.`,
       });
     }
-    // `message` was built but the actual verify call rebuilds it too;
-    // that's fine — deterministic + cheap. The double-build keeps the
-    // "single canonical message" invariant readable in this code.
+
+    // (2) Anti-replay window — arithmetic on a couple of ints.
+    const nowS = Math.floor(Date.now() / 1000);
+    if (dto.signedAt < nowS - ANTI_REPLAY_MAX_AGE_S) {
+      throw new BadRequestException({
+        code: 'signature-too-old',
+        detail: `signedAt is ${nowS - dto.signedAt}s in the past; max ${ANTI_REPLAY_MAX_AGE_S}s`,
+      });
+    }
+    if (dto.signedAt > nowS + CLOCK_SKEW_FUTURE_S) {
+      throw new BadRequestException({
+        code: 'signature-in-future',
+        detail: `signedAt is ${dto.signedAt - nowS}s in the future; max ${CLOCK_SKEW_FUTURE_S}s`,
+      });
+    }
+
+    // (3) BIP-322 signature verify — schnorr, ~ms. The SDK's verify
+    //     rebuilds the canonical message from the fields; no separate
+    //     builder call here.
     const verifyResult = verifyListingSignature({
       fields: {
         catNumber: dto.catNumber,
+        network: toSdkNetwork(dto.network),
         askSats: dto.askSats,
         payTo: dto.payTo as never,
         catTxid: dto.catTxid,
@@ -88,29 +113,7 @@ export class ListingsService {
       });
     }
 
-    // (2) Anti-replay window. Anything older than 24h or > 1h in the
-    //     future is either a stale submission or a clock-skew attack.
-    const nowS = Math.floor(Date.now() / 1000);
-    if (dto.signedAt < nowS - ANTI_REPLAY_MAX_AGE_S) {
-      throw new BadRequestException({
-        code: 'signature-too-old',
-        detail: `signedAt is ${nowS - dto.signedAt}s in the past; max ${ANTI_REPLAY_MAX_AGE_S}s`,
-      });
-    }
-    if (dto.signedAt > nowS + CLOCK_SKEW_FUTURE_S) {
-      throw new BadRequestException({
-        code: 'signature-in-future',
-        detail: `signedAt is ${dto.signedAt - nowS}s in the future; max ${CLOCK_SKEW_FUTURE_S}s`,
-      });
-    }
-
-    // (3) On-chain cross-check via ord. Confirms:
-    //       a. The cat exists.
-    //       b. The DTO's `ordinalsAddress` really is the current owner
-    //          (attacker with a valid sig for a cat they no longer own
-    //          gets rejected).
-    //       c. The DTO's outpoint matches the CURRENT one (self-anti-
-    //          stale — seller can't list against a stale UTXO).
+    // (4) On-chain cross-check via ord.
     let current;
     try {
       current = await this.ordClient.getCatCurrentLocation(dto.catNumber);
@@ -127,13 +130,16 @@ export class ListingsService {
         detail: `Cat #${dto.catNumber} not found on ord (or sits at an unspendable output).`,
       });
     }
-    if (current.ordinalsAddress !== dto.ordinalsAddress) {
+    // Address equality with lowercase normalization — bech32 addresses
+    // are canonical-lowercase, but any HRP-case drift between ord and
+    // the DTO would false-negative the equality check.
+    if (current.ordinalsAddress.toLowerCase() !== dto.ordinalsAddress.toLowerCase()) {
       throw new BadRequestException({
         code: 'not-current-owner',
         detail: `Signature is valid, but ${dto.ordinalsAddress} is not the current owner of cat #${dto.catNumber}.`,
       });
     }
-    if (current.txid !== dto.catTxid || current.vout !== dto.catVout) {
+    if (current.txid !== dto.catTxid.toLowerCase() || current.vout !== dto.catVout) {
       throw new BadRequestException({
         code: 'outpoint-mismatch',
         detail:
@@ -142,10 +148,11 @@ export class ListingsService {
       });
     }
 
-    // (4) Upsert. cat_number is unique — a re-listing at a new price
+    // (5) Upsert. cat_number is unique — a re-listing at a new price
     //     replaces the old row atomically.
     const row = {
       catNumber: dto.catNumber,
+      network: dto.network,
       askSats: dto.askSats,
       payTo: dto.payTo,
       catTxid: dto.catTxid,
@@ -159,6 +166,7 @@ export class ListingsService {
       .values(row)
       .onDuplicateKeyUpdate({
         set: {
+          network: row.network,
           askSats: row.askSats,
           payTo: row.payTo,
           catTxid: row.catTxid,
@@ -229,11 +237,27 @@ export class ListingsService {
   }
 
   /**
-   * Remove a listing (server-side; no signature required). Used by
-   * the pruner and by an eventual seller-side cancel flow.
+   * Remove a listing by cat number (server-side; no signature
+   * required). Used by an eventual seller-side cancel flow. The
+   * pruner uses `deleteById` instead to avoid the read-then-delete
+   * race that would kill a freshly-upserted row.
    */
   async deleteByCatNumber(catNumber: number): Promise<void> {
     await this.drizzle.db.delete(listings).where(eq(listings.catNumber, catNumber));
+  }
+
+  /**
+   * Remove a listing by its server-assigned id + expected signedAt.
+   * Used exclusively by the pruner: guarantees the row we delete is
+   * the one we read (the pruner captured `id` at snapshot time). If
+   * a seller re-lists between the pruner's snapshot and the delete,
+   * `onDuplicateKeyUpdate` swaps `signedAt`; the delete's WHERE now
+   * doesn't match, so the fresh row survives.
+   */
+  async deleteByIdIfUnchanged(id: string, signedAt: number): Promise<void> {
+    await this.drizzle.db
+      .delete(listings)
+      .where(and(eq(listings.id, id), eq(listings.signedAt, signedAt)));
   }
 
   /**
@@ -244,6 +268,7 @@ export class ListingsService {
     return {
       id: row.id,
       catNumber: row.catNumber,
+      network: row.network,
       askSats: row.askSats,
       payTo: row.payTo,
       catTxid: row.catTxid,

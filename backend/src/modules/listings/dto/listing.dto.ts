@@ -16,6 +16,13 @@ export class ListingDto {
   @ApiProperty({ description: 'Cat number the listing covers.', example: 42 })
   catNumber!: number;
 
+  @ApiProperty({
+    description: 'Bitcoin network the seller signed against.',
+    example: 'mainnet',
+    enum: ['mainnet', 'testnet3', 'testnet4', 'regtest'],
+  })
+  network!: string;
+
   @ApiProperty({ description: 'Asking price in sats.', example: 21_000 })
   askSats!: number;
 
