@@ -72,7 +72,7 @@ describe('Cat21ListingService.publishListing', () => {
     expect(caught?.code).toBe('wallet-not-connected');
   });
 
-  it('signs via WalletService.signMessage and POSTs the listing DTO with the returned signature', async () => {
+  it('signs via WalletService.signMessage and POSTs the listing DTO (v2 shape: includes network) with the returned signature', async () => {
     const { service, walletService, httpMock } = await setup();
     walletService.connectedWallet$.next(wallet);
     walletService.signMessage.mockReturnValue(of({ signature: 'sig-base64-bytes' }));
@@ -80,19 +80,22 @@ describe('Cat21ListingService.publishListing', () => {
     let result: Cat21Listing | null = null;
     service.publishListing(publishArgs()).subscribe({ next: (r) => { result = r; }, error: () => {} });
 
-    // The signer got the ordinals address + a message starting with the version prefix.
+    // The signer got the ordinals address + a v2 message with the network line.
     expect(walletService.signMessage).toHaveBeenCalledTimes(1);
     const signArgs = walletService.signMessage.mock.calls[0]?.[0] as { address: string; message: string };
     expect(signArgs.address).toBe(WALLET_ORDINALS);
-    expect(signArgs.message.startsWith('cat21-ask:v1\n')).toBe(true);
+    expect(signArgs.message.startsWith('cat21-ask:v2\n')).toBe(true);
+    expect(signArgs.message).toContain('network=mainnet');
     // payTo in the message MUST be the wallet's payment address — never ordinals.
     expect(signArgs.message).toContain(`payTo=${WALLET_PAYMENT}`);
     expect(signArgs.message).not.toContain(`payTo=${WALLET_ORDINALS}`);
 
-    // Then the HTTP POST fires.
+    // Then the HTTP POST fires. Body includes `network` (v2) so the backend
+    // can cross-check against its BACKEND_NETWORK.
     const req = httpMock.expectOne((r) => r.method === 'POST' && r.url.endsWith('/api/v1/listings'));
     expect(req.request.body).toMatchObject({
       catNumber: 42,
+      network: 'mainnet',
       askSats: 21_000,
       payTo: WALLET_PAYMENT,
       catTxid: publishArgs().catTxid,
@@ -104,6 +107,7 @@ describe('Cat21ListingService.publishListing', () => {
     const persisted = {
       id: 'uuid-1',
       catNumber: 42,
+      network: 'mainnet',
       askSats: 21_000,
       payTo: WALLET_PAYMENT,
       catTxid: publishArgs().catTxid,
@@ -116,6 +120,29 @@ describe('Cat21ListingService.publishListing', () => {
     req.flush(persisted);
     httpMock.verify();
     expect(result).toEqual(persisted);
+  });
+
+  it('fails wallet-swapped-mid-sign when the wallet changes between signMessage call and its resolution', async () => {
+    const { service, walletService, httpMock } = await setup();
+    walletService.connectedWallet$.next(wallet);
+    // Simulate the swap: the signMessage RPC returns a signature, but by
+    // then the connectedWallet$ subject holds a DIFFERENT wallet's
+    // address. Fail closed rather than attribute wallet B's signature to
+    // wallet A's DTO.
+    const OTHER_ORD = 'bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh';
+    walletService.signMessage.mockImplementation(() => {
+      walletService.connectedWallet$.next({ ...wallet, ordinalsAddress: OTHER_ORD });
+      return of({ signature: 'sig-from-old-wallet' });
+    });
+
+    let caught: any = null;
+    service.publishListing(publishArgs()).subscribe({
+      next: () => {},
+      error: (e: CreateListingError) => { caught = e; },
+    });
+    expect(caught?.code).toBe('wallet-swapped-mid-sign');
+    // The HTTP POST must NOT have fired — no way to attribute the signature.
+    httpMock.verify();
   });
 
   it('bubbles a wallet-side rejection with wallet-signature-failed', async () => {

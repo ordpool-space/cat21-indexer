@@ -4,6 +4,8 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 
+import { Network } from 'ordpool-sdk';
+
 import { PersistedCat21Listing } from '../shared/cat21-listing.service';
 import { Orderbook } from './orderbook';
 
@@ -13,6 +15,7 @@ const PAY_ADDR = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx';
 const listing = (over: Partial<PersistedCat21Listing> = {}): PersistedCat21Listing => ({
   id: 'uuid-1',
   catNumber: 42,
+  network: Network.Mainnet,
   askSats: 21_000,
   payTo: PAY_ADDR as never,
   catTxid: REAL_TXID,

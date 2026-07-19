@@ -64,17 +64,68 @@
            owner via BIP-322 and cross-checked by the backend against
            the on-chain outpoint before insert; the pruner hourly
            re-checks and drops any listing whose cat has moved. If a
-           listing is present here, it's currently valid. -->
+           listing is present here, it's currently valid.
+
+           The Buy button downgrades to disabled when the underlying
+           `buyButtonState()` says the click would misfire — owner
+           can't buy their own cat, no wallet connected, stale intent
+           lock, or an unspendable output. Reasons match the action-
+           row buttons below so the two Buy affordances never
+           disagree. -->
       <div class="alert alert-primary" role="status" data-testid="cat-active-listing-badge">
         <strong>Listed for {{ listing.askSats.toLocaleString() }} sats</strong>
         on the CAT-21 orderbook.
-        <a
-          class="btn btn-primary btn-sm ms-2"
-          [routerLink]="['/dashboard/trade/make']"
-          [queryParams]="listingBuyQueryParams()"
-          data-testid="cat-active-listing-buy">
-          Buy
-        </a>
+        @switch (buyButtonState()) {
+          @case ('enabled') {
+            <a
+              class="btn btn-primary btn-sm ms-2"
+              [routerLink]="['/dashboard/trade/make']"
+              [queryParams]="listingBuyQueryParams()"
+              data-testid="cat-active-listing-buy">
+              Buy
+            </a>
+          }
+          @case ('connect') {
+            <button
+              type="button"
+              class="btn btn-primary btn-sm ms-2"
+              data-testid="cat-active-listing-buy"
+              disabled
+              title="Connect a wallet to buy this cat.">
+              Buy
+            </button>
+          }
+          @case ('owns-it') {
+            <button
+              type="button"
+              class="btn btn-primary btn-sm ms-2"
+              data-testid="cat-active-listing-buy"
+              disabled
+              title="You already own this cat.">
+              Buy
+            </button>
+          }
+          @case ('unknown') {
+            <button
+              type="button"
+              class="btn btn-primary btn-sm ms-2"
+              data-testid="cat-active-listing-buy"
+              disabled
+              title="Owner lookup unavailable — refresh in a moment.">
+              Buy
+            </button>
+          }
+          @case ('stale') {
+            <button
+              type="button"
+              class="btn btn-primary btn-sm ms-2"
+              data-testid="cat-active-listing-buy"
+              disabled
+              title="This offer link is stale — the cat has moved since the listing was signed.">
+              Buy
+            </button>
+          }
+        }
       </div>
     }
     @if (isStaleOffer()) {

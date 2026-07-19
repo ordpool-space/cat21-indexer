@@ -39,12 +39,14 @@ export type CreateListingErrorCode =
   | 'signature-signature-does-not-verify'
   | 'signature-too-old'
   | 'signature-in-future'
+  | 'network-mismatch'
   | 'ord-lookup-failed'
   | 'cat-not-found'
   | 'not-current-owner'
   | 'outpoint-mismatch'
   | 'persist-race'
   | 'wallet-signature-failed'
+  | 'wallet-swapped-mid-sign'
   | 'wallet-not-connected'
   | 'network-error';
 
@@ -98,6 +100,15 @@ export class Cat21ListingService {
     }
 
     const signedAt = Math.floor(Date.now() / 1000);
+    const network = this.walletService.network;
+    // Snapshot the wallet identity at message-build time. The wallet
+    // signMessage RPC is async and the user could swap wallets in the
+    // extension between call-open and RPC-return; if that happens,
+    // wallet B's signature would land on wallet A's fields and the
+    // POST would attribute the listing to the wrong party. Post-sign
+    // we compare `walletAtSignTime` against `connectedWallet$` and
+    // fail closed on mismatch.
+    const walletAtSignTime = wallet;
     // Build the canonical message the wallet will sign. The backend
     // rebuilds this same message from the DTO fields to verify, so
     // any drift here breaks the signature verify server-side. Fields
@@ -106,6 +117,7 @@ export class Cat21ListingService {
     // from the wallet's ordinalsAddress.
     const fields: ListingMessageFields = {
       catNumber: args.catNumber,
+      network,
       askSats: args.askSats,
       payTo: toPaymentAddress(wallet.paymentAddress),
       catTxid: args.catTxid,
@@ -128,7 +140,7 @@ export class Cat21ListingService {
       .signMessage({
         address: wallet.ordinalsAddress,
         message,
-        network: this.walletService.network,
+        network,
       })
       .pipe(
         catchError((err) => {
@@ -138,18 +150,32 @@ export class Cat21ListingService {
             detail,
           }));
         }),
-        switchMap((result) =>
-          this.http
+        switchMap((result) => {
+          // Wallet-swap race check — if the connected wallet changed
+          // while the signMessage RPC was in flight, the returned
+          // signature was produced by a different wallet than the one
+          // whose ordinalsAddress + paymentAddress are baked into
+          // `fields`. Refuse to POST rather than silently attribute
+          // the signature to the wrong wallet.
+          const current = this.walletService.connectedWallet$.getValue();
+          if (
+            !current ||
+            current.ordinalsAddress !== walletAtSignTime.ordinalsAddress ||
+            current.paymentAddress !== walletAtSignTime.paymentAddress
+          ) {
+            return throwError(() => ({
+              code: 'wallet-swapped-mid-sign' as CreateListingErrorCode,
+              detail:
+                'The connected wallet changed while signing. Reconnect the original wallet and retry.',
+            }));
+          }
+          return this.http
             .post<PersistedCat21Listing>(this.baseUrl, {
               ...fields,
-              // The backend takes bare strings; branded types survive
-              // JSON.stringify as their underlying string value.
-              payTo: fields.payTo,
-              ordinalsAddress: fields.ordinalsAddress,
               signature: result.signature,
             })
-            .pipe(catchError((err) => throwError(() => this.mapHttpError(err)))),
-        ),
+            .pipe(catchError((err) => throwError(() => this.mapHttpError(err))));
+        }),
       );
   }
 
