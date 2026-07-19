@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable, catchError, map, switchMap, throwError } from 'rxjs';
+import { Observable, catchError, map, of, switchMap, throwError } from 'rxjs';
 
 import {
   buildListingMessage,
@@ -12,6 +12,19 @@ import {
 } from 'ordpool-sdk';
 
 import { environment } from '../../environments/environment';
+
+/**
+ * What the backend stores + returns — the canonical signed
+ * `Cat21Listing` plus server-assigned `id` and `createdAt`. The
+ * signature still verifies against the message rebuilt from the
+ * canonical fields alone (id + createdAt are NOT part of the
+ * message); the two extras exist only for row identity and freshness
+ * display.
+ */
+export interface PersistedCat21Listing extends Cat21Listing {
+  id: string;
+  createdAt: string;
+}
 
 /**
  * The backend's create-listing error codes (see cat21-indexer/backend
@@ -75,7 +88,7 @@ export class Cat21ListingService {
 
   private readonly baseUrl = `${environment.api}/api/v1/listings`;
 
-  publishListing(args: PublishListingArgs): Observable<Cat21Listing> {
+  publishListing(args: PublishListingArgs): Observable<PersistedCat21Listing> {
     const wallet = this.walletService.connectedWallet$.getValue();
     if (!wallet) {
       return throwError(() => ({
@@ -127,7 +140,7 @@ export class Cat21ListingService {
         }),
         switchMap((result) =>
           this.http
-            .post<Cat21Listing>(this.baseUrl, {
+            .post<PersistedCat21Listing>(this.baseUrl, {
               ...fields,
               // The backend takes bare strings; branded types survive
               // JSON.stringify as their underlying string value.
@@ -142,14 +155,17 @@ export class Cat21ListingService {
 
   /**
    * GET the active listing for a cat, or null if none. Frontend uses
-   * this to show "Listed for X sats" on the details page.
+   * this to show "Listed for X sats" on the details page. 404 maps
+   * to null (not-listed is a normal state); everything else throws
+   * a CreateListingError.
    */
-  getListingForCat(catNumber: number): Observable<Cat21Listing | null> {
+  getListingForCat(catNumber: number): Observable<PersistedCat21Listing | null> {
     return this.http
-      .get<Cat21Listing>(`${this.baseUrl}/cat/${catNumber}`)
+      .get<PersistedCat21Listing>(`${this.baseUrl}/cat/${catNumber}`)
       .pipe(
+        map((listing) => listing as PersistedCat21Listing | null),
         catchError((err: HttpErrorResponse) => {
-          if (err.status === 404) return throwError(() => null as never);
+          if (err.status === 404) return of(null);
           return throwError(() => this.mapHttpError(err));
         }),
       );

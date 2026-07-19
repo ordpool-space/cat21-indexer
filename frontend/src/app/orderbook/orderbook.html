@@ -1,0 +1,99 @@
+<h1 data-testid="orderbook-heading">CAT-21 Orderbook</h1>
+
+<p class="mb-3">
+  Public sell listings, signed by their owners via BIP-322. Every row
+  self-invalidates once the cat moves — the hourly pruner drops any
+  listing whose cat has changed hands. Click a listing to build a
+  buy-offer PSBT.
+</p>
+
+@if (feedResource.value(); as feed) {
+
+  @if (feed.items.length === 0) {
+    <div class="alert alert-info" data-testid="orderbook-empty">
+      No active listings right now. Sellers who publish will show up here.
+    </div>
+  } @else {
+
+    <table class="table" data-testid="orderbook-table">
+      <thead>
+        <tr>
+          <th scope="col">Cat</th>
+          <th scope="col">Price</th>
+          <th scope="col">Signed</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of feed.items; track row.id) {
+          <tr data-testid="orderbook-row">
+            <td>
+              <a
+                [routerLink]="['/cat', row.catNumber]"
+                data-testid="orderbook-row-cat">
+                Cat #{{ row.catNumber }}
+              </a>
+            </td>
+            <td data-testid="orderbook-row-price">
+              {{ row.askSats.toLocaleString() }} sats
+            </td>
+            <td data-testid="orderbook-row-signed-at">
+              <time [attr.datetime]="row.signedAt">
+                {{ (row.signedAt * 1000) | date: 'medium' }}
+              </time>
+            </td>
+            <td>
+              <a
+                class="btn btn-primary btn-sm"
+                [routerLink]="['/dashboard/trade/make']"
+                [queryParams]="buyQueryParams(row)"
+                data-testid="orderbook-row-buy">
+                Buy
+              </a>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (totalPages() > 1) {
+      <nav aria-label="Orderbook pagination">
+        <ul class="pagination" data-testid="orderbook-pagination">
+          <li class="page-item" [class.disabled]="feed.currentPage <= 1">
+            <button
+              type="button"
+              class="page-link"
+              (click)="goToPage(feed.currentPage - 1)"
+              [disabled]="feed.currentPage <= 1"
+              data-testid="orderbook-pagination-prev">
+              Prev
+            </button>
+          </li>
+          <li class="page-item disabled">
+            <span class="page-link">
+              Page {{ feed.currentPage }} of {{ totalPages() }} · {{ feed.total }} total
+            </span>
+          </li>
+          <li class="page-item" [class.disabled]="feed.currentPage >= totalPages()">
+            <button
+              type="button"
+              class="page-link"
+              (click)="goToPage(feed.currentPage + 1)"
+              [disabled]="feed.currentPage >= totalPages()"
+              data-testid="orderbook-pagination-next">
+              Next
+            </button>
+          </li>
+        </ul>
+      </nav>
+    }
+  }
+
+} @else if (feedResource.isLoading()) {
+  <p role="status" data-testid="orderbook-loading">Loading listings…</p>
+} @else {
+  <div class="alert alert-danger" role="alert" data-testid="orderbook-error">
+    Couldn't load the orderbook.
+    <a role="button" (click)="feedResource.reload()">Retry</a>
+  </div>
+}

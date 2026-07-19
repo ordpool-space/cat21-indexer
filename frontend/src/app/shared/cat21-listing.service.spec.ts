@@ -169,3 +169,49 @@ describe('Cat21ListingService.publishListing', () => {
     expect(caught?.code).toBe('network-error');
   });
 });
+
+describe('Cat21ListingService.getListingForCat', () => {
+
+  it('returns the persisted listing when the backend has one', async () => {
+    const { service, httpMock } = await setup();
+    let result: Cat21Listing | null = null;
+    service.getListingForCat(42).subscribe({ next: (r) => { result = r; } });
+    const req = httpMock.expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/cat/42'));
+    const listing = {
+      id: 'x', catNumber: 42, askSats: 21_000, payTo: WALLET_PAYMENT,
+      catTxid: 'aa'.repeat(32), catVout: 0, ordinalsAddress: WALLET_ORDINALS,
+      signedAt: 1_700_000_000, signature: 'sig', createdAt: '2026-07-19T10:00:00Z',
+    };
+    req.flush(listing);
+    httpMock.verify();
+    expect(result).toEqual(listing);
+  });
+
+  it('returns null when the backend responds 404 (no active listing is a normal state)', async () => {
+    const { service, httpMock } = await setup();
+    let result: Cat21Listing | null | undefined = undefined;
+    let error: unknown = null;
+    service.getListingForCat(42).subscribe({
+      next: (r) => { result = r; },
+      error: (e) => { error = e; },
+    });
+    const req = httpMock.expectOne((r) => r.method === 'GET');
+    req.flush({ statusCode: 404, message: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+    httpMock.verify();
+    expect(result).toBeNull();
+    expect(error).toBeNull();
+  });
+
+  it('propagates non-404 errors as CreateListingError', async () => {
+    const { service, httpMock } = await setup();
+    let caught: any = null;
+    service.getListingForCat(42).subscribe({
+      next: () => {},
+      error: (e) => { caught = e; },
+    });
+    const req = httpMock.expectOne((r) => r.method === 'GET');
+    req.flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+    httpMock.verify();
+    expect(caught?.code).toBe('network-error');
+  });
+});

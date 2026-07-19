@@ -13,6 +13,7 @@ import { AcceptOffer } from './dashboard/trade/accept-offer/accept-offer';
 import { DebugColors } from './debug-colors/debug-colors';
 import { Details } from './details/details';
 import { MyCats } from './my-cats/my-cats';
+import { Orderbook } from './orderbook/orderbook';
 import { Sat } from './sat/sat';
 import { Search } from './search/search';
 import { Start } from './start/start';
@@ -29,6 +30,12 @@ export const routes: Routes = [
   { path: 'search/:currentPage', component: Search, data: { smallHeader: true }, title: 'CAT-21 - Search by trait' },
   { path: 'debug/colors', component: DebugColors, data: { smallHeader: true }, title: 'CAT-21 - Debug colors' },
   { path: 'about', component: About, data: { smallHeader: true }, title: 'CAT-21 - About' },
+
+  // CAT-21 orderbook — public feed of seller-signed listings. No
+  // wallet required for read; sellers publish from the sell modal
+  // on their cat's details page.
+  { path: 'orderbook', component: Orderbook, data: { smallHeader: true }, title: 'CAT-21 - Orderbook' },
+  { path: 'orderbook/:itemsPerPage/:currentPage', component: Orderbook, data: { smallHeader: true }, title: 'CAT-21 - Orderbook' },
 
   // Workspace — gated on a connected wallet via the components' own
   // CTA card (no router guard, since reads-without-wallet still

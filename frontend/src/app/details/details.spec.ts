@@ -55,7 +55,7 @@ class LookupStub {
 
 class ListingServiceStub {
   publishListing = jest.fn();
-  getListingForCat = jest.fn();
+  getListingForCat = jest.fn((_: number) => of(null as unknown));
 }
 
 async function setup(opts: {
@@ -515,5 +515,54 @@ describe('Details — orderbook publish flow (sell modal checkbox → sign → P
     component.onPublishToOrderbookToggle(false);
     expect(component.orderbookState()).toBe('idle');
     expect(component.orderbookError()).toBeNull();
+  });
+});
+
+
+describe('Details — active orderbook listing badge', () => {
+
+  it('activeListing() is null when getListingForCat returns null', async () => {
+    const { component, listingService } = await setup();
+    listingService.getListingForCat.mockReturnValue(of(null));
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(component.activeListing()).toBeNull();
+  });
+
+  // Install the listing BEFORE fixture creation so the resource fires
+  // once — with the real DTO — instead of null-then-reload dance.
+  const setupWithListing = async (catNumber: number) => {
+    const listing = {
+      id: 'x', catNumber, askSats: 21_000, payTo: WALLET_PAYMENT,
+      catTxid: 'aa'.repeat(32), catVout: 0, ordinalsAddress: WALLET_ORDINALS,
+      signedAt: 1_700_000_000, signature: 'sig', createdAt: '2026-07-19T10:00:00Z',
+    };
+    const s = await setup({ catNumber });
+    s.listingService.getListingForCat.mockReturnValue(of(listing));
+    s.component.listingResource.reload();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    s.fixture.detectChanges();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    return s;
+  };
+
+  it('activeListing() carries the DTO when the backend has a listing for this cat', async () => {
+    const { component } = await setupWithListing(42);
+    expect(component.activeListing()?.catNumber).toBe(42);
+    expect(component.activeListing()?.askSats).toBe(21_000);
+  });
+
+  it('listingBuyQueryParams forwards catNumber + askSats + payTo + outpoint (intent-lock survives to make-offer)', async () => {
+    const { component } = await setupWithListing(42);
+    const params = component.listingBuyQueryParams();
+    expect(params['catNumber']).toBe('42');
+    expect(params['askPrice']).toBe('21000');
+    expect(params['payTo']).toBe(WALLET_PAYMENT);
+    expect(params['catTxid']).toBe('aa'.repeat(32));
+    expect(params['catVout']).toBe('0');
+  });
+
+  it('listingBuyQueryParams returns empty object when no active listing', async () => {
+    const { component } = await setup();
+    expect(component.listingBuyQueryParams()).toEqual({});
   });
 });

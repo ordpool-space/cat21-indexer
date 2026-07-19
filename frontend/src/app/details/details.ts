@@ -13,7 +13,7 @@ import {
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
 import { ApiService } from '../shared/cat21-api';
-import { Cat21ListingService, CreateListingError } from '../shared/cat21-listing.service';
+import { Cat21ListingService, CreateListingError, PersistedCat21Listing } from '../shared/cat21-listing.service';
 import { CatUtxoLookupService } from '../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../shared/ord-api.service';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
@@ -108,6 +108,42 @@ export class Details {
   catResource = rxResourceFixed({
     params: () => ({ catNumber: this.catNumber() }),
     stream: ({ params }) => this.api.catsControllerGetCatByNumber(params.catNumber),
+  });
+
+  /**
+   * Active orderbook listing for THIS cat, if any. Fetches from the
+   * cat21-indexer backend's GET /api/v1/listings/cat/:catNumber. The
+   * backend returns null (404) when there's no active listing —
+   * getListingForCat swallows that as `null` here, so the template
+   * just uses `activeListing()` truthy-check to render the badge.
+   *
+   * The stale check is server-side (the pruner drops moved cats
+   * hourly), so if a row is present, it's cryptographically signed
+   * for the CURRENT outpoint within the pruner's freshness window.
+   */
+  listingResource = rxResourceFixed({
+    params: () => ({ catNumber: this.catNumber() }),
+    stream: ({ params }) => this.listingService.getListingForCat(params.catNumber),
+  });
+
+  readonly activeListing = computed<PersistedCat21Listing | null>(() => this.listingResource.value() ?? null);
+
+  /**
+   * Query params for the "Buy" button on the active-listing badge.
+   * Threads through everything the seller signed so make-offer's
+   * stale-detection can compare against the cat's current outpoint
+   * — a listing might have been pruned in the ~hour window between
+   * the seller's sign and the buyer's click.
+   */
+  readonly listingBuyQueryParams = computed<Record<string, string>>(() => {
+    const listing = this.activeListing();
+    if (!listing) return {};
+    return buildBuyOfferQueryParams({
+      catNumber: listing.catNumber,
+      askSats: listing.askSats,
+      sellerPaymentAddress: listing.payTo,
+      catOutpoint: { txid: listing.catTxid, vout: listing.catVout },
+    });
   });
 
   currentOwnerResource = rxResourceFixed({

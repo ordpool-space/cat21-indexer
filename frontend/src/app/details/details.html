@@ -59,6 +59,24 @@
       on-chain forever, but no one owns it and no one ever will.
     </p>
   } @else {
+    @if (activeListing(); as listing) {
+      <!-- Active orderbook listing for this cat. Signed by the current
+           owner via BIP-322 and cross-checked by the backend against
+           the on-chain outpoint before insert; the pruner hourly
+           re-checks and drops any listing whose cat has moved. If a
+           listing is present here, it's currently valid. -->
+      <div class="alert alert-primary" role="status" data-testid="cat-active-listing-badge">
+        <strong>Listed for {{ listing.askSats.toLocaleString() }} sats</strong>
+        on the CAT-21 orderbook.
+        <a
+          class="btn btn-primary btn-sm ms-2"
+          [routerLink]="['/dashboard/trade/make']"
+          [queryParams]="listingBuyQueryParams()"
+          data-testid="cat-active-listing-buy">
+          Buy
+        </a>
+      </div>
+    }
     @if (isStaleOffer()) {
       <!-- The URL brought a `catTxid`/`catVout` intent-lock from an ask
            link, but the cat's current on-chain outpoint has changed

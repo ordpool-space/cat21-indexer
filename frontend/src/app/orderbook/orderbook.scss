@@ -1,0 +1,9 @@
+// Component-scoped styles for the orderbook — kept minimal; the
+// Bootstrap 5 base + shared table.scss handles most of it.
+
+:host {
+  display: block;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 1rem;
+}
