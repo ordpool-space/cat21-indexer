@@ -111,9 +111,9 @@
           @if (sel.scan.content.catIds.length > 0) {
             <p>
               <strong>CAT-21 cat{{ sel.scan.content.catIds.length === 1 ? '' : 's' }}:</strong>
-              @for (id of sel.scan.content.catIds; track id) {
-                <a [href]="catTxLink(id)" target="_blank" rel="noopener">{{ id }}</a>
-                @if (!$last) { , }
+              {{ sel.scan.content.catIds.length }}
+              @if (sel.scan.content.catSat; as catSat) {
+                — <a [href]="catSatLink(catSat)" target="_blank" rel="noopener">view on cat21.space</a>
               }
             </p>
           }

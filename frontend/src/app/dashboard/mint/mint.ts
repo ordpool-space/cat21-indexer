@@ -52,12 +52,14 @@ export class Mint {
   readonly cat21OrdReviewBase = this.config.cat21OrdApiUrl;
 
   /**
-   * Mint transaction of a cat, for the "you are about to spend this" warning.
-   * ord.cat21.space serves JSON only, so a browser link there is refused;
-   * ordpool.space renders the transaction and decodes the CAT-21 marker.
+   * Sat-page link for the cats on a funding UTXO, shown in the "you are about
+   * to spend this" warning. All cats at an outpoint share offset 0, so one sat
+   * page lists every one of them and shows where each sits now. The mint tx
+   * would be wrong here: it shows where a cat started, not where it is after a
+   * transfer.
    */
-  catTxLink(catId: string): string {
-    return this.txLinkBase + catId.replace(/i\d+$/, '');
+  catSatLink(catSat: number): string {
+    return `https://cat21.space/sat/${catSat}`;
   }
 
   /** Auto-scan threshold passed through to the template for the "Scan anyway" label. */

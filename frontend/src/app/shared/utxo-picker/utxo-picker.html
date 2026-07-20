@@ -59,9 +59,15 @@
               <span class="utxo-asset-tag">rune: {{ rune }}</span>
             }
             @if (row.scan.content.catIds.length > 0) {
-              <span class="utxo-asset-tag">
-                {{ row.scan.content.catIds.length }} CAT-21 cat{{ row.scan.content.catIds.length === 1 ? '' : 's' }}
-              </span>
+              @if (row.scan.content.catSat; as catSat) {
+                <a class="utxo-asset-tag" [href]="catSatLink(catSat)" target="_blank" rel="noopener">
+                  {{ row.scan.content.catIds.length }} CAT-21 cat{{ row.scan.content.catIds.length === 1 ? '' : 's' }}
+                </a>
+              } @else {
+                <span class="utxo-asset-tag">
+                  {{ row.scan.content.catIds.length }} CAT-21 cat{{ row.scan.content.catIds.length === 1 ? '' : 's' }}
+                </span>
+              }
             }
             @if (row.scan.content.rareSat; as rare) {
               <span class="utxo-asset-tag utxo-asset-tag-rare">

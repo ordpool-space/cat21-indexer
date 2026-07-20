@@ -117,6 +117,11 @@ export class UtxoPicker {
     return runeNamesFromContent(content);
   }
 
+  /** cat21.space sat page listing the cats on this UTXO. All share offset 0. */
+  catSatLink(catSat: number): string {
+    return `https://cat21.space/sat/${catSat}`;
+  }
+
   bucketTooltip(bucket: UtxoScanBucket): string {
     switch (bucket) {
       case 'clean':
