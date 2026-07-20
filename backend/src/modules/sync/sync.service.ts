@@ -19,7 +19,6 @@ export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
   private syncing = false;
   private localMax = -1;
-  private readonly blockHashCache = new Map<number, string>();
 
   private lastSuccessAt: Date | null = null;
   private lastErrorAt: Date | null = null;
@@ -113,15 +112,6 @@ export class SyncService implements OnModuleInit {
     await this.sync();
   }
 
-  private async getBlockHashCached(height: number): Promise<string> {
-    const cached = this.blockHashCache.get(height);
-    if (cached) return cached;
-
-    const hash = await this.ordClient.getBlockHash(height);
-    this.blockHashCache.set(height, hash);
-    return hash;
-  }
-
   async sync() {
     if (this.syncing) {
       this.logger.debug('Sync already in progress, skipping');
@@ -169,13 +159,17 @@ export class SyncService implements OnModuleInit {
 
         if (details.length === 0) break;
 
-        // Fetch block hashes for unique heights in parallel
-        const uniqueHeights = [...new Set(details.map((d) => d.height))];
-        await Promise.all(uniqueHeights.map((h) => this.getBlockHashCached(h)));
-
         // Process and insert
         const rows = details.map((detail) => {
-          const blockHash = this.blockHashCache.get(detail.height)!;
+          // ord serves block_hash inline on /cat/<n>, and always has a header
+          // for an indexed inscription, so a missing hash means a malformed
+          // response. Fail the pass instead of storing a cat that cannot be
+          // rendered: cat numbering is contiguous, so skipping past one would
+          // leave a hole nothing backfills. The next tick retries this cat.
+          const blockHash = detail.block_hash;
+          if (!blockHash) {
+            throw new Error(`Cat #${detail.number} has no block_hash`);
+          }
           const txid = detail.id.replace(/i\d+$/, '');
 
           const parsed = Cat21ParserService.parse({
@@ -266,7 +260,6 @@ export class SyncService implements OnModuleInit {
       this.lastError = error instanceof Error ? error.message : String(error);
       this.logger.error('Sync failed', error);
     } finally {
-      this.blockHashCache.clear();
       this.syncing = false;
     }
   }

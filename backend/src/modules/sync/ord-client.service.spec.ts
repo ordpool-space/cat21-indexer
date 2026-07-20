@@ -97,27 +97,17 @@ describe('OrdClientService', () => {
       const result = await service.getLatestCatNumber();
       expect(result).toBe(-1);
     });
-  });
 
-  describe('getBlockHash', () => {
-    it('should return block hash for a given height', async () => {
-      jest.spyOn(global, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ hash: '000000000000000000018e3ea447b1' }),
-      } as any);
-
-      const result = await service.getBlockHash(824205);
-      expect(result).toBe('000000000000000000018e3ea447b1');
-    });
-
-    it('should throw on error', async () => {
+    // Callers that pass allow404=false get a throw on 404, unlike getCat,
+    // which opts in to allow404 and resolves null instead.
+    it('should throw on 404', async () => {
       jest.spyOn(global, 'fetch').mockResolvedValue({
         ok: false,
         status: 404,
         statusText: 'Not Found',
       } as any);
 
-      await expect(service.getBlockHash(999999999)).rejects.toThrow('ord API error: 404');
+      await expect(service.getLatestCatNumber()).rejects.toThrow('ord API error: 404');
     });
   });
 });

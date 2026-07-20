@@ -10,6 +10,7 @@ export interface OrdCatDetail {
   sat: number;
   fee: number;
   height: number;
+  block_hash: string | null;   // hash of the mining block; with txid + fee + weight it renders the cat
   timestamp: number;
   value: number;
   weight: number;
@@ -57,11 +58,6 @@ export class OrdClientService {
 
   async getCat(catNumberOrId: number | string): Promise<OrdCatDetail | null> {
     return this.fetchJson<OrdCatDetail>(`${this.baseUrl}/cat/${catNumberOrId}`, true);
-  }
-
-  async getBlockHash(height: number): Promise<string> {
-    const data = await this.fetchJson<{ hash: string }>(`${this.baseUrl}/block/${height}`);
-    return data.hash;
   }
 
   /**

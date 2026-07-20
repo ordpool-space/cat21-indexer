@@ -58,6 +58,9 @@ describe('SyncService', () => {
       sat: 100000 + n,
       fee: 1000,
       height,
+      // ord serves the mining block's hash inline; createCatHash() validates
+      // the length, so pad to 64 hex chars like the txid above.
+      block_hash: height.toString(16).padStart(64, '0'),
       timestamp: 1700000000 + n,
       value: 546,
       weight: 500,
@@ -83,7 +86,6 @@ describe('SyncService', () => {
     const ordClient = {
       getLatestCatNumber: jest.fn().mockResolvedValue(remoteMax),
       getCat: jest.fn().mockImplementation((n: number) => Promise.resolve(makeCat(n))),
-      getBlockHash: jest.fn().mockImplementation(() => Promise.resolve('0'.repeat(64))),
     };
 
     const cache = { onNewCatsSynced: jest.fn() };
@@ -142,34 +144,6 @@ describe('SyncService', () => {
 
   // --- Block hash dedup ---
 
-  it('should fetch block hashes for unique heights only', async () => {
-    const { service, ordClient } = createMocks(-1, 1);
-
-    // Both cats in same block
-    ordClient.getCat
-      .mockResolvedValueOnce(makeCat(0, 800000))
-      .mockResolvedValueOnce(makeCat(1, 800000));
-
-    await service.sync();
-
-    expect(ordClient.getBlockHash).toHaveBeenCalledWith(800000);
-    expect(ordClient.getBlockHash).toHaveBeenCalledTimes(1);
-  });
-
-  it('should fetch separate block hashes for different heights', async () => {
-    const { service, ordClient } = createMocks(-1, 1);
-
-    ordClient.getCat
-      .mockResolvedValueOnce(makeCat(0, 800000))
-      .mockResolvedValueOnce(makeCat(1, 800001));
-
-    await service.sync();
-
-    expect(ordClient.getBlockHash).toHaveBeenCalledWith(800000);
-    expect(ordClient.getBlockHash).toHaveBeenCalledWith(800001);
-    expect(ordClient.getBlockHash).toHaveBeenCalledTimes(2);
-  });
-
   // --- Concurrency ---
 
   it('should prevent concurrent syncs', async () => {
@@ -225,11 +199,22 @@ describe('SyncService', () => {
     await expect(service.sync()).resolves.toBeUndefined();
   });
 
-  it('should not throw when getBlockHash fails mid-sync', async () => {
-    const { service, ordClient } = createMocks(-1, 0);
-    ordClient.getBlockHash.mockRejectedValue(new Error('500 Internal Server Error'));
+  it('should retry a cat with no block_hash rather than advance past it', async () => {
+    const { service, ordClient, insertMock } = createMocks(-1, 0);
 
+    // Malformed response: the pass fails, so the cursor never moves.
+    ordClient.getCat.mockResolvedValueOnce({ ...makeCat(0), block_hash: null });
     await expect(service.sync()).resolves.toBeUndefined();
+
+    // Next tick ord answers properly and the same cat must land, proving
+    // the gap was not skipped over.
+    ordClient.getCat.mockResolvedValueOnce(makeCat(0));
+    await service.sync();
+
+    const insertedValues =
+      insertMock.mock.results[0].value.ignore.mock.results[0].value.values.mock.calls[0][0];
+    expect(insertedValues).toHaveLength(1);
+    expect(insertedValues[0].catNumber).toBe(0);
   });
 
   it('should reset syncing flag after error (allows retry on next tick)', async () => {
@@ -244,24 +229,6 @@ describe('SyncService', () => {
 
     // If flag wasn't reset, second call would skip and getLatestCatNumber would be called only once
     expect(ordClient.getLatestCatNumber).toHaveBeenCalledTimes(2);
-  });
-
-  it('should clear blockHashCache after error (no stale data)', async () => {
-    const { service, ordClient } = createMocks(-1, 0);
-
-    // First sync: succeeds, caches block hash
-    await service.sync();
-    expect(ordClient.getBlockHash).toHaveBeenCalledTimes(1);
-
-    // Second sync: localMax is now 0 (cached in memory after first sync).
-    // Set remoteMax to 1 so there's a new cat to sync, triggering block hash fetch.
-    ordClient.getLatestCatNumber.mockResolvedValue(1);
-    ordClient.getCat.mockResolvedValue(makeCat(1));
-
-    await service.sync();
-
-    // Block hash fetched again because blockHashCache was cleared after first sync
-    expect(ordClient.getBlockHash).toHaveBeenCalledTimes(2);
   });
 
   it('should recover after ord goes down and comes back', async () => {
