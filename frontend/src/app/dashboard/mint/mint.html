@@ -112,7 +112,7 @@
             <p>
               <strong>CAT-21 cat{{ sel.scan.content.catIds.length === 1 ? '' : 's' }}:</strong>
               @for (id of sel.scan.content.catIds; track id) {
-                <a [href]="cat21OrdReviewBase + '/inscription/' + id" target="_blank" rel="noopener">{{ id }}</a>
+                <a [href]="catTxLink(id)" target="_blank" rel="noopener">{{ id }}</a>
                 @if (!$last) { , }
               }
             </p>

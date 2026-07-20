@@ -51,6 +51,15 @@ export class Mint {
   readonly ordReviewBase = this.config.ordApiUrl;
   readonly cat21OrdReviewBase = this.config.cat21OrdApiUrl;
 
+  /**
+   * Mint transaction of a cat, for the "you are about to spend this" warning.
+   * ord.cat21.space serves JSON only, so a browser link there is refused;
+   * ordpool.space renders the transaction and decodes the CAT-21 marker.
+   */
+  catTxLink(catId: string): string {
+    return this.txLinkBase + catId.replace(/i\d+$/, '');
+  }
+
   /** Auto-scan threshold passed through to the template for the "Scan anyway" label. */
   readonly autoScanThreshold = AUTO_SCAN_MAX_VALUE_SAT;
 
