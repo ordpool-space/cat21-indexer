@@ -1,8 +1,10 @@
 <h1 data-testid="sat-heading">Sat {{ sat() | number }}</h1>
 
-<p class="mb-4">
-  <a href="{{ env.ordpoolExplorer }}/sat/{{ sat() }}" target="_blank" rel="noopener">View on ordpool</a>
-</p>
+<!-- Sat pages live on ord.cat21.space; ordpool.space has no /sat/ route. Hidden until the ord.cat21.space HTML surface is settled, see TODOS.md. -->
+<!-- <p class="mb-4">
+  <a href="{{ env.ordExplorer }}/sat/{{ sat() }}" target="_blank" rel="noopener">View on ord</a>
+</p> -->
+
 
 @if (satResource.value(); as data) {
   <table class="table table-borderless mt-3 mb-4" data-testid="sat-metadata">
