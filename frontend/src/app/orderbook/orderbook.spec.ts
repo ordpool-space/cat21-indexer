@@ -68,6 +68,34 @@ describe('Orderbook — paginated feed loader', () => {
     httpMock.verify();
   });
 
+  // Regression: previously, on bare `/orderbook` (no route params),
+  // Angular's withComponentInputBinding calls the transform with
+  // `undefined`, `numberAttribute(undefined)` returns `NaN`, and the
+  // resource GETs `/api/v1/listings/NaN/NaN` → backend 400 → alert.
+  // The positiveIntAttr transform now falls back to the input's default.
+  it('falls back to defaults (25 / 1) when route params are undefined (bare /orderbook)', async () => {
+    const { httpMock } = await setup({ ipp: undefined as never, page: undefined as never });
+    const req = httpMock.expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/25/1'));
+    req.flush({ total: 0, currentPage: 1, itemsPerPage: 25, items: [] });
+    httpMock.verify();
+  });
+
+  // Router transforms fire on the string values from the URL; simulate a few
+  // of them (empty string, "abc", "0", "-3") — all should collapse to the
+  // input's default rather than propagate garbage into the URL. TestBed is
+  // stateful per-test, so each bad-value case gets its own `it` block.
+  it.each([
+    { bad: '', label: 'empty string' },
+    { bad: 'abc', label: 'non-numeric string' },
+    { bad: '0', label: 'zero' },
+    { bad: '-3', label: 'negative' },
+  ])('falls back to defaults when route params are malformed ($label)', async ({ bad }) => {
+    const { httpMock } = await setup({ ipp: bad as never, page: bad as never });
+    const req = httpMock.expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/25/1'));
+    req.flush({ total: 0, currentPage: 1, itemsPerPage: 25, items: [] });
+    httpMock.verify();
+  });
+
   it('exposes the feed via feedResource.value() once loaded', async () => {
     const { component, httpMock } = await setup();
     const feed = { total: 1, currentPage: 1, itemsPerPage: 25, items: [listing()] };

@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, input, numberAttribute } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -10,6 +10,22 @@ import { buildBuyOfferQueryParams } from 'ordpool-sdk';
 import { environment } from '../../environments/environment';
 import { PersistedCat21Listing } from '../shared/cat21-listing.service';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
+
+/**
+ * Positive-integer `input()` transform with a fallback for the
+ * missing / malformed case. `numberAttribute(undefined)` returns
+ * `NaN`, and Angular's route-binding fires `undefined` on
+ * `/orderbook` (the paramless companion of `/orderbook/:ipp/:page`).
+ * Without a guard the resource then GETs `/api/v1/listings/NaN/NaN`
+ * and the API's ParseIntPipe 400s.
+ */
+const positiveIntAttr =
+  (fallback: number) =>
+  (v: string | number | boolean | undefined | null): number => {
+    if (v === undefined || v === null || v === '') return fallback;
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  };
 
 /**
  * Server-side paginated feed shape returned by
@@ -49,8 +65,8 @@ export class Orderbook {
 
   private readonly baseUrl = `${environment.api}/api/v1/listings`;
 
-  readonly itemsPerPage = input(DEFAULT_ITEMS_PER_PAGE, { transform: numberAttribute });
-  readonly currentPage = input(1, { transform: numberAttribute });
+  readonly itemsPerPage = input(DEFAULT_ITEMS_PER_PAGE, { transform: positiveIntAttr(DEFAULT_ITEMS_PER_PAGE) });
+  readonly currentPage = input(1, { transform: positiveIntAttr(1) });
 
   readonly feedResource = rxResourceFixed({
     params: () => ({
