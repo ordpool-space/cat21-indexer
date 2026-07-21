@@ -91,11 +91,15 @@ test.describe('Sat page', () => {
     await page.goto(`/sat/${GENESIS_SAT}`);
     await expect(page.getByTestId('sat-metadata')).toBeVisible({ timeout: 15_000 });
 
-    // Block link should navigate to /block/:height
+    // Anti-cheating (2026-07-21): don't just read the href string —
+    // clicking + asserting the destination proves the link resolves,
+    // not just that some URL was rendered. The old
+    // `getAttribute('href')` variant would pass on a broken route.
     const blockLink = page.getByTestId('sat-block-link');
     await expect(blockLink).toBeVisible();
-    const blockHref = await blockLink.getAttribute('href');
-    expect(blockHref).toMatch(/\/block\/\d+/);
+    await blockLink.click();
+    await expect(page).toHaveURL(/\/block\/\d+/);
+    await expect(page.getByTestId('block-heading')).toBeVisible({ timeout: 15_000 });
   });
 });
 
