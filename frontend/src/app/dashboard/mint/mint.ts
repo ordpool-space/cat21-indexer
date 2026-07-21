@@ -47,9 +47,8 @@ export class Mint {
   /** Where successfully minted tx ids link out (ordpool owns the tx-detail page). */
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
-  /** Asset-detail link bases sourced from cat21Config so dev / regtest / prod stay aligned with the scanner's own endpoints. */
+  /** Asset-detail link base sourced from cat21Config so dev / regtest / prod stay aligned with the scanner's own endpoints. */
   readonly ordReviewBase = this.config.ordApiUrl;
-  readonly cat21OrdReviewBase = this.config.cat21OrdApiUrl;
 
   /**
    * Sat-page link for the cats on a funding UTXO, shown in the "you are about
