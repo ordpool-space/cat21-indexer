@@ -26,6 +26,17 @@ jobs:
       working-directory: frontend
       run: npm run build
 
+    - name: Stage Cloudflare Pages Functions + routes into build output
+      working-directory: frontend
+      # functions/ and _routes.json must sit at the deploy root so Cloudflare
+      # Pages compiles the Function and scopes it to /cat/* (per _routes.json).
+      # angular-cli-ghpages publishes dist/browser, so stage them there first.
+      run: |
+        cp -R functions dist/browser/functions
+        cp _routes.json dist/browser/_routes.json
+        echo "staged Pages Functions:"; ls -R dist/browser/functions
+        echo "staged _routes.json:"; cat dist/browser/_routes.json
+
     - name: Deploy to ordpool-space/cat21-frontend-build
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
