@@ -442,9 +442,23 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   console.log(`[asset-scanner] cat-bearing outpoint = ${catOutpoint}`);
 
   const page = await context.newPage();
+  // Anti-cheating pattern (2026-07-21 orderbook post-mortem): the
+  // frontend is expected to build ord `/output/<txid>:<vout>` URLs.
+  // If it builds anything malformed (missing colon, NaN vout, wrong
+  // txid length), the loose `url.includes(catOutpoint)` fallback
+  // would silently return "no cat" and the test would pass while
+  // production ships a broken URL. Regex-parse strictly; push any
+  // URL that doesn't match the shape into `badOutputCalls` and
+  // assert the list is empty at the end of the test.
+  const badOutputCalls: string[] = [];
   await page.route('**/output/*', async (route) => {
     const url = route.request().url();
-    const isCatTarget = url.includes(catOutpoint);
+    const m = url.match(/\/output\/([0-9a-f]{64}):(\d+)(?:\?|#|$)/i);
+    if (!m) {
+      badOutputCalls.push(url);
+    }
+    const requestedOutpoint = m ? `${m[1].toLowerCase()}:${m[2]}` : '';
+    const isCatTarget = requestedOutpoint === catOutpoint.toLowerCase();
     const body = isCatTarget
       ? {
           inscriptions: [],
@@ -578,6 +592,13 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
     (v: { txid: string; vout: number }) => `${v.txid}:${v.vout}` === catOutpoint,
   );
   expect(spentCatOutpoint).toBe(true);
+
+  // No malformed /output/ URLs made it to the mock during the whole
+  // scenario. See the anti-cheating comment on the route setup.
+  expect(
+    badOutputCalls,
+    `frontend built malformed /output/ URLs: ${JSON.stringify(badOutputCalls)}`,
+  ).toHaveLength(0);
 });
 
 /**
