@@ -1352,3 +1352,266 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 
   await page.close();
 });
+
+
+// ============================================================
+// Full BID MARKETPLACE round-trip (X.7):
+//
+//   mint fresh cat →
+//   buyer synthesizes keys, funds, builds+signs offer PSBT →
+//   POST /api/v1/bids → backend validates real bytes against real ord →
+//   GET /api/v1/bids/outpoint/:txid/:vout → retrieved bytes byte-equal what
+//     the buyer posted →
+//   seller navigates to /dashboard/trade/accept with the retrieved PSBT +
+//     the cat outpoint pre-filled →
+//   cat21-wallet signs input 0 → cat21.space broadcasts →
+//   on-chain assertions: cat moved to buyer's ordinals address, seller
+//     paid the exact bid amount.
+//
+// This proves the marketplace ISN'T a mock — the backend accepts a real
+// buyer-signed PSBT, indexes it against real ord + electrs, hands it back
+// bytewise, and the seller-side signing+broadcast path settles on-chain.
+// If any component (validator, PSBT round-trip, ord check, accept-page
+// pre-fill) drops or mutates a byte, the seller's signed tx would be
+// malformed and the broadcast would reject.
+// ============================================================
+test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT → seller accepts via UI → cat moves on-chain', async () => {
+  test.setTimeout(360_000);
+  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+
+  // ─── Step 1: Fresh mint so we don't fight the earlier offer test
+  //             for the shared cat UTXO. cat21walletMintAtRate drives
+  //             the mint UI end-to-end and returns the broadcast txid. ───
+  const { broadcastTxid: freshMintTxid } = await cat21walletMintAtRate({
+    rate: 20,
+    scenarioLabel: 'bid-marketplace',
+  });
+  console.log(`[bid-mkt] fresh mint txid = ${freshMintTxid}`);
+
+  // ─── Step 2: Read the mint tx → get seller cat outpoint bytes. ───
+  const mintTxJson = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', freshMintTxid, '2')
+  ) as {
+    vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }>;
+  };
+  const catOut = mintTxJson.vout[0];
+  const sellerCatScriptHex = catOut.scriptPubKey.hex;
+  const sellerCatValue = Math.round(catOut.value * 1e8);
+  expect(sellerCatValue).toBe(546);
+
+  // ─── Step 3: Synthesize buyer via bitcoin-cli's ordpool-e2e wallet
+  //             (separate P2WPKH/P2TR addresses = separate roles). ───
+  const BID_PRICE_SATS = 25000;
+  const BID_FEE_SATS = 2000;
+  const buyerPaymentAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  const buyerReceiveAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
+  const buyerChangeAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  expect(buyerReceiveAddress).toMatch(/^bcrt1p/);
+
+  // Fund the buyer with enough for price + fee + change dust.
+  const buyerFundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
+  await waitForElectrsSync(mineBlocks(1));
+
+  const buyerFundRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', buyerFundTxid, '2')
+  ) as {
+    vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }>;
+  };
+  const buyerVoutIdx = buyerFundRaw.vout.findIndex((v) => v.scriptPubKey.address === buyerPaymentAddress);
+  expect(buyerVoutIdx).toBeGreaterThanOrEqual(0);
+  const buyerVout = buyerFundRaw.vout[buyerVoutIdx];
+  const buyerInputValueSats = Math.round(buyerVout.value * 1e8);
+  console.log(`[bid-mkt] buyer funded UTXO ${buyerFundTxid}:${buyerVoutIdx} → ${buyerInputValueSats} sats`);
+
+  // ─── Step 4: Buyer builds the offer PSBT via SDK. ───
+  const built = sdkCore.buildCat21BuyOfferPsbt({
+    network: sdkCore.Network.Regtest,
+    sellerInput: {
+      txid: freshMintTxid,
+      vout: 0,
+      value: sellerCatValue,
+      scriptPubKey: hexDecode(sellerCatScriptHex),
+    },
+    buyerInputs: [
+      {
+        txid: buyerFundTxid,
+        vout: buyerVoutIdx,
+        value: buyerInputValueSats,
+        scriptPubKey: hexDecode(buyerVout.scriptPubKey.hex),
+      },
+    ],
+    destinations: {
+      buyerReceiveAddress,
+      sellerPaymentAddress: sharedPaymentAddress,
+      buyerChangeAddress,
+    },
+    priceSats: BID_PRICE_SATS,
+    feeSats: BID_FEE_SATS,
+  });
+
+  const unsignedOfferBase64 = b64(built.psbt);
+
+  // ─── Step 5: Buyer signs their inputs via bitcoin-cli
+  //             (finalize=false → input 0 stays unsigned for seller). ───
+  const walletprocessed = JSON.parse(
+    rpc(
+      '-rpcwallet=ordpool-e2e',
+      '-named',
+      'walletprocesspsbt',
+      `psbt=${unsignedOfferBase64}`,
+      'sign=true',
+      'finalize=false',
+    )
+  ) as { psbt: string; complete: boolean };
+  const buyerSignedBase64 = walletprocessed.psbt;
+  console.log(`[bid-mkt] buyer-signed PSBT length = ${buyerSignedBase64.length}`);
+
+  // ─── Step 6: The bid DTO wants (a) the cats bundle at the outpoint,
+  //             (b) the headline cat number. Fetch both from local ord. ───
+  //
+  // On regtest we can't reach ord.cat21.space; the backend's ord client
+  // is configured via ORD_API_URL to point at the local regtest ord.
+  // But WE (the test) need the cats array in the DTO — so we hit the
+  // same ord endpoint as the backend. ORD_API_URL defaults to
+  // `http://localhost:8080` in the regtest setup.
+  const ordApiUrl = process.env.ORD_API_URL ?? 'http://localhost:8080';
+  const ordOutputRes = await fetch(`${ordApiUrl}/output/${freshMintTxid}:0`, {
+    headers: { Accept: 'application/json' },
+  });
+  expect(ordOutputRes.ok, `ord /output must respond OK, got ${ordOutputRes.status}`).toBe(true);
+  const ordOutput = await ordOutputRes.json() as { cats: number[] };
+  expect(Array.isArray(ordOutput.cats)).toBe(true);
+  expect(ordOutput.cats.length).toBeGreaterThanOrEqual(1);
+  const cats = [...new Set(ordOutput.cats)].sort((a, b) => a - b);
+  const headlineCatNumber = cats[0];
+  console.log(`[bid-mkt] cats on UTXO = [${cats.join(',')}], headline = #${headlineCatNumber}`);
+
+  // ─── Step 7: POST /api/v1/bids ───
+  //
+  // Backend is at http://localhost:3333/api/v1/bids in dev / regtest.
+  // Same URL that cat21.space's Angular env points at.
+  const bidsUrl = process.env.CAT21_INDEXER_URL ?? 'http://localhost:3333';
+  const bidBody = {
+    network: 'regtest',
+    catTxid: freshMintTxid,
+    catVout: 0,
+    cats,
+    headlineCatNumber,
+    bidSats: BID_PRICE_SATS,
+    buyerOrdinalsAddress: buyerReceiveAddress,
+    buyerPaymentAddress: buyerPaymentAddress,
+    sellerPaymentAddress: sharedPaymentAddress,
+    psbtBase64: buyerSignedBase64,
+  };
+  const postRes = await fetch(`${bidsUrl}/api/v1/bids`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(bidBody),
+  });
+  const postText = await postRes.text();
+  expect(postRes.status, `POST /api/v1/bids should be 201, got ${postRes.status}: ${postText}`).toBe(201);
+  const persistedBid = JSON.parse(postText) as { id: string; bidSats: number; psbtBase64: string };
+  expect(persistedBid.bidSats).toBe(BID_PRICE_SATS);
+  console.log(`[bid-mkt] backend accepted bid id=${persistedBid.id}`);
+
+  // ─── Step 8: GET the bid back, verify the PSBT is byte-for-byte
+  //             what we posted (no re-encoding, no truncation, no
+  //             signature drop). ───
+  const getRes = await fetch(`${bidsUrl}/api/v1/bids/outpoint/${freshMintTxid}/0`);
+  expect(getRes.status).toBe(200);
+  const bidsList = await getRes.json() as Array<{ psbtBase64: string; bidSats: number; buyerOrdinalsAddress: string }>;
+  expect(bidsList.length).toBeGreaterThanOrEqual(1);
+  const ourBid = bidsList.find((b) => b.buyerOrdinalsAddress === buyerReceiveAddress);
+  expect(ourBid, 'the bid we posted must appear in the outpoint feed').toBeTruthy();
+  expect(ourBid!.psbtBase64, 'GET must return byte-identical PSBT to what was POSTed').toBe(buyerSignedBase64);
+  expect(ourBid!.bidSats).toBe(BID_PRICE_SATS);
+  console.log('[bid-mkt] GET returned byte-identical PSBT');
+
+  // ─── Step 9: Seller opens the accept-offer page with the retrieved
+  //             PSBT + cat outpoint pre-filled — SAME shape the Details
+  //             page's "Accept" button uses via buildAcceptOfferQueryParams. ───
+  const acceptUrl = new URL(`${FRONTEND_URL}/dashboard/trade/accept`);
+  acceptUrl.searchParams.set('offer', ourBid!.psbtBase64);
+  acceptUrl.searchParams.set('catTxid', freshMintTxid);
+  acceptUrl.searchParams.set('catVout', '0');
+
+  const page = await context.newPage();
+  const knownBeforeNavigate = new Set(context.pages());
+  await page.goto(acceptUrl.toString(), { waitUntil: 'domcontentloaded' });
+
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeNavigate,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+  await shot(page, 'bid-mkt-01-accept-loaded');
+
+  // The URL committed the cat outpoint; accept-offer page shows the
+  // "pre-selected from the buyer's link" hint.
+  const catFromUrlHint = page.getByTestId('accept-offer-cat-from-url');
+  await expect(catFromUrlHint).toBeVisible({ timeout: 30_000 });
+  await expect(catFromUrlHint).toContainText(freshMintTxid);
+
+  const acceptBtn = page.getByTestId('accept-offer-sign-cta');
+  await expect(acceptBtn).toBeVisible({ timeout: 30_000 });
+  await expect(acceptBtn).toBeEnabled({ timeout: 30_000 });
+  await shot(page, 'bid-mkt-02-accept-ready');
+
+  // ─── Step 10: Click Accept → cat21-wallet sign popup → sign. ───
+  const knownBeforeSign = new Set(context.pages());
+  await acceptBtn.click();
+  const approvalSign = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await shot(approvalSign, 'bid-mkt-03-sign-approval');
+  await clickApprovalButton(approvalSign);
+  await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+  // ─── Step 11: Success surfaces. Extract the broadcast txid. ───
+  const successCard = page.getByTestId('accept-offer-success');
+  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await shot(page, 'bid-mkt-04-success');
+  const successLink = successCard.locator('a').first();
+  const successHref = await successLink.getAttribute('href');
+  const successTxidMatch = successHref!.match(/\/tx\/([0-9a-f]{64})/);
+  expect(successTxidMatch).not.toBeNull();
+  const settleTxid = successTxidMatch![1];
+  console.log(`[bid-mkt] settlement txid = ${settleTxid}`);
+
+  // ─── Step 12: On-chain verification. Mine + read + assert. ───
+  await waitForElectrsSync(mineBlocks(1));
+  const settleTx = await getTx(settleTxid);
+  expect(settleTx.status.block_hash).toBeTruthy();
+  expect(settleTx.vout.length).toBeGreaterThanOrEqual(2);
+
+  const settleRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', settleTxid, '2')
+  ) as {
+    vout: Array<{ value: number; scriptPubKey: { address?: string } }>;
+  };
+  // Output 0: cat @ buyer's ordinals address, 546 sats postage.
+  expect(Math.round(settleRaw.vout[0].value * 1e8)).toBe(546);
+  expect(settleRaw.vout[0].scriptPubKey.address).toBe(buyerReceiveAddress);
+  // Output 1: seller payment = bidSats + postage (ord-parity, seller
+  // made whole on postage). Address is the seller's paymentAddress
+  // that the buyer baked into the PSBT.
+  expect(Math.round(settleRaw.vout[1].value * 1e8)).toBe(BID_PRICE_SATS + 546);
+  expect(settleRaw.vout[1].scriptPubKey.address).toBe(sharedPaymentAddress);
+  console.log(`[bid-mkt] on-chain: cat @ ${buyerReceiveAddress}, seller paid ${BID_PRICE_SATS + 546} sats @ ${sharedPaymentAddress}`);
+
+  await page.close();
+});
