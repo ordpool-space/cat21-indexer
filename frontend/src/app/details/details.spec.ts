@@ -662,6 +662,32 @@ describe('Details — active bids panel (X.4)', () => {
     const { component } = await setupWithBids([]);
     expect(component.highestBidSats()).toBeNull();
   });
+
+  it('acceptBidQueryParams threads the PSBT + outpoint into the accept-offer link (X.6)', async () => {
+    const bid: PersistedCat21Bid = {
+      id: 'uuid-x',
+      network: 'mainnet',
+      catTxid: REAL_TXID,
+      catVout: 0,
+      cats: [42],
+      headlineCatNumber: 42,
+      bidSats: 21_000,
+      buyerOrdinalsAddress: 'bc1p-buyer',
+      buyerPaymentAddress: 'bc1q-pay',
+      sellerPaymentAddress: 'bc1q-seller-pay',
+      psbtBase64: 'cHNidP8BAP0Y',
+      createdAt: '2026-07-22T10:00:00Z',
+    };
+    const { component } = await setupWithBids([bid]);
+    const params = component.acceptBidQueryParams(bid);
+    // buildAcceptOfferQueryParams should emit the base64 PSBT + catTxid + catVout
+    // as separate string params — the exact key names live in the SDK but the
+    // values must survive.
+    const values = Object.values(params);
+    expect(values).toContain('cHNidP8BAP0Y');
+    expect(values).toContain(REAL_TXID);
+    expect(values).toContain('0');
+  });
 });
 
 // ---------------------------------------------------------------------------

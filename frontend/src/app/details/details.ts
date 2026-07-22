@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { EMPTY } from 'rxjs';
 import {
+  buildAcceptOfferQueryParams,
   buildAskQueryParams,
   buildBuyOfferQueryParams,
   buildTransferQueryParams,
@@ -159,6 +160,23 @@ export class Details {
     // Bids come sorted DESC by price already, but be defensive.
     return Math.max(...bids.map((b) => b.bidSats));
   });
+
+  /**
+   * Query params for the "Accept this bid" link on each bid row.
+   * Pre-fills the accept-offer page with the bid's PSBT + the cat
+   * outpoint so the seller lands on a page with the offer already
+   * parsed and just needs to click Sign.
+   *
+   * Only meaningful when `isOwner()` is true — the accept flow
+   * requires the seller's ordinals key. Non-owners see the Accept
+   * button hidden.
+   */
+  acceptBidQueryParams(bid: PersistedCat21Bid): Record<string, string> {
+    return buildAcceptOfferQueryParams({
+      offerBase64: bid.psbtBase64,
+      catOutpoint: { txid: bid.catTxid, vout: bid.catVout },
+    });
+  }
 
   /**
    * Query params for the "Buy" button on the active-listing badge.

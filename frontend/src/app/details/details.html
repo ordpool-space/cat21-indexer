@@ -157,6 +157,9 @@
               <th scope="col">Price</th>
               <th scope="col">Buyer</th>
               <th scope="col">Posted</th>
+              @if (isOwner()) {
+                <th scope="col"></th>
+              }
             </tr>
           </thead>
           <tbody>
@@ -173,6 +176,17 @@
                     {{ bid.createdAt | date: 'medium' }}
                   </time>
                 </td>
+                @if (isOwner()) {
+                  <td>
+                    <a
+                      class="btn btn-primary btn-sm"
+                      [routerLink]="['/dashboard/trade/accept-offer']"
+                      [queryParams]="acceptBidQueryParams(bid)"
+                      data-testid="cat-bids-row-accept">
+                      Accept
+                    </a>
+                  </td>
+                }
               </tr>
             }
           </tbody>
