@@ -2,30 +2,19 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { base64, hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { and, count, desc, eq } from 'drizzle-orm';
-import { Network } from 'ordpool-sdk/core';
-import { validateCat21BuyOfferPsbt } from 'ordpool-sdk/core';
+import { CAT21_POSTAGE_SATS, Network, toScureNetwork, validateCat21BuyOfferPsbt } from 'ordpool-sdk/core';
 
+import {
+  BackendNetworkString,
+  catsArraysEqual,
+  readBackendNetworkFromEnv,
+  toSdkNetwork,
+} from '../shared/backend-network';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { bids } from '../shared/drizzle/schema/bids';
 import { OrdClientService } from '../sync/ord-client.service';
 import { BidDto, PaginatedBidsDto } from './dto/bid.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
-
-type BackendNetworkString = 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest';
-
-/**
- * Read BACKEND_NETWORK straight from process.env. Same rationale as
- * ListingsService — bypasses the NestJS ConfigService plainToClass
- * chain that mis-resolves in some CI paths.
- */
-function readBackendNetworkFromEnv(): BackendNetworkString {
-  const raw = process.env.BACKEND_NETWORK;
-  const allowed: BackendNetworkString[] = ['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'];
-  if (raw && allowed.includes(raw as BackendNetworkString)) {
-    return raw as BackendNetworkString;
-  }
-  return 'mainnet';
-}
 
 /**
  * Marketplace spam floor. Bids below this are rejected outright — a
@@ -35,46 +24,6 @@ function readBackendNetworkFromEnv(): BackendNetworkString {
  * cost the seller nothing to accept and pollute the display.
  */
 const MARKETPLACE_FLOOR_SATS = 1_000;
-
-/**
- * CAT-21 postage per the ord-parity offer protocol. Every cat-touching
- * output is exactly 546 sats. See `CAT21_POSTAGE_SATS` in ordpool-sdk.
- */
-const CAT21_POSTAGE_SATS = 546;
-
-function toSdkNetwork(name: BackendNetworkString): Network {
-  switch (name) {
-    case 'mainnet': return Network.Mainnet;
-    case 'testnet3': return Network.Testnet3;
-    case 'testnet4': return Network.Testnet4;
-    case 'signet': return Network.Signet;
-    case 'regtest': return Network.Regtest;
-  }
-}
-
-// Regtest uses testnet's key/script params but its own bech32 HRP `bcrt`.
-// @scure/btc-signer only ships NETWORK and TEST_NETWORK (both bech32=`tb`
-// on the test side), so we clone TEST_NETWORK and override the HRP.
-const REGTEST_NETWORK = { ...btc.TEST_NETWORK, bech32: 'bcrt' };
-
-function toScureNetwork(n: Network) {
-  switch (n) {
-    case Network.Mainnet: return btc.NETWORK;
-    case Network.Testnet3:
-    case Network.Testnet4:
-    case Network.Signet:
-      return btc.TEST_NETWORK;
-    case Network.Regtest:
-      return REGTEST_NETWORK;
-  }
-}
-
-function catsArraysEqual(a: number[], b: number[]): boolean {
-  if (a.length !== b.length) return false;
-  const sa = [...a].sort((x, y) => x - y);
-  const sb = [...b].sort((x, y) => x - y);
-  return sa.every((v, i) => v === sb[i]);
-}
 
 /**
  * Decode a scriptPubKey back into a bitcoin address for the given

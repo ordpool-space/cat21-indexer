@@ -1,7 +1,13 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { and, count, desc, eq } from 'drizzle-orm';
-import { Network, verifyListingSignature } from 'ordpool-sdk/core';
+import { verifyListingSignature } from 'ordpool-sdk/core';
 
+import {
+  BackendNetworkString,
+  catsArraysEqual,
+  readBackendNetworkFromEnv,
+  toSdkNetwork,
+} from '../shared/backend-network';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { listings } from '../shared/drizzle/schema/listings';
 import { OrdClientService } from '../sync/ord-client.service';
@@ -17,59 +23,6 @@ import { ListingDto, PaginatedListingsDto } from './dto/listing.dto';
  */
 const ANTI_REPLAY_MAX_AGE_S = 24 * 60 * 60;
 const CLOCK_SKEW_FUTURE_S = 60 * 60;
-
-/**
- * Backend's Bitcoin network — read from env via ConfigModule.
- * Prod defaults to `mainnet`; regtest CI overrides with
- * `BACKEND_NETWORK=regtest`. Injected per-instance rather than a
- * module-level const so tests + regtest can override cleanly.
- */
-type BackendNetworkString = 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest';
-
-/**
- * Map the DTO's serialized network string back to the SDK enum for
- * `verifyListingSignature` (which threads it into the canonical
- * message). Fixed strings for a fixed enum — no dynamic mapping.
- */
-function toSdkNetwork(name: BackendNetworkString): Network {
-  switch (name) {
-    case 'mainnet': return Network.Mainnet;
-    case 'testnet3': return Network.Testnet3;
-    case 'testnet4': return Network.Testnet4;
-    case 'signet': return Network.Signet;
-    case 'regtest': return Network.Regtest;
-  }
-}
-
-/**
- * Compare two `number[]`s as sets. Called with `cats_on_utxo` values
- * that both sides already claim are sorted-ascending-deduped, but a
- * malformed seller submission or an ord response drift could still
- * trip a false positive if we relied on element-wise equality alone.
- */
-function catsArraysEqual(a: number[], b: number[]): boolean {
-  if (a.length !== b.length) return false;
-  const sa = [...a].sort((x, y) => x - y);
-  const sb = [...b].sort((x, y) => x - y);
-  return sa.every((v, i) => v === sb[i]);
-}
-
-/**
- * Read BACKEND_NETWORK straight from process.env (default `mainnet`).
- * NestJS ConfigService goes through a plainToClass/validateSync chain
- * that in one CI run failed to surface the env override to
- * `ConfigService.get()` — root cause unknown, but process.env has no
- * such indirection so it's the safer read. Same pattern the ord
- * client uses for ORD_API_URL further down the module tree.
- */
-function readBackendNetworkFromEnv(): BackendNetworkString {
-  const raw = process.env.BACKEND_NETWORK;
-  const allowed: BackendNetworkString[] = ['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'];
-  if (raw && allowed.includes(raw as BackendNetworkString)) {
-    return raw as BackendNetworkString;
-  }
-  return 'mainnet';
-}
 
 @Injectable()
 export class ListingsService {

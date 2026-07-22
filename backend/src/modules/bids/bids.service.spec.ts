@@ -31,6 +31,8 @@ jest.mock('ordpool-sdk/core', () => ({
     Regtest: 'regtest',
   },
   MAX_ASK_SATS: 21_000_000 * 100_000_000,
+  CAT21_POSTAGE_SATS: 546,
+  toScureNetwork: () => ({ name: 'mock' }),
 }));
 
 jest.mock('@scure/btc-signer', () => ({
