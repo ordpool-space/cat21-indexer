@@ -195,6 +195,29 @@ const server = http.createServer((req, res) => {
     jsonResponse(res, EMPTY_STATUS_BODY);
     return;
   }
+  // Stub ord's `/output/<txid>:<vout>` endpoint. Used by the bid
+  // marketplace regtest test — both the test (Node fetch) and the
+  // cat21-indexer backend (ordClient.getCatsAtOutput) query this to
+  // read the cats bundle on a UTXO. Returns a fixed `cats: [0]` so
+  // the marketplace flow can assert bundle-drift-free bytes without
+  // needing a real ord to walk the chain.
+  //
+  // For real regtest runs we'd want a proper ord instance; this stub
+  // lets the marketplace round-trip prove PSBT-byte fidelity + the
+  // backend validator + the accept UI without adding an ord container
+  // to the CI substrate.
+  const outputMatch = req.method === 'GET' && /^\/output\/([0-9a-f]{64}):(\d+)/i.exec(req.url);
+  if (outputMatch) {
+    jsonResponse(res, JSON.stringify({
+      cats: [0],
+      inscriptions: [],
+      runes: {},
+      sat_ranges: [],
+      value: 546,
+      script_pubkey: '',
+    }));
+    return;
+  }
   const numbersMatch = req.method === 'GET' && CATS_NUMBERS_RE.exec(req.url);
   if (numbersMatch) {
     jsonResponse(res, emptyCatsBody(numbersMatch[1], numbersMatch[2]));

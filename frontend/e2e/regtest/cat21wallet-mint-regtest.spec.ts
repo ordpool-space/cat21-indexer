@@ -1469,12 +1469,15 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   // ─── Step 6: The bid DTO wants (a) the cats bundle at the outpoint,
   //             (b) the headline cat number. Fetch both from local ord. ───
   //
-  // On regtest we can't reach ord.cat21.space; the backend's ord client
-  // is configured via ORD_API_URL to point at the local regtest ord.
-  // But WE (the test) need the cats array in the DTO — so we hit the
-  // same ord endpoint as the backend. ORD_API_URL defaults to
-  // `http://localhost:8080` in the regtest setup.
-  const ordApiUrl = process.env.ORD_API_URL ?? 'http://localhost:8080';
+  // On regtest CI, the SDK's consumer-environment doesn't ship a real
+  // ord instance — the workflow serves a `/output/*` stub via
+  // `fees-electrs-stub.mjs` that returns a fixed `{cats: [0]}` body
+  // for any outpoint. The backend's ord client is pointed at the same
+  // stub via ORD_API_URL, so both this test and the backend's own
+  // validator agree on the bundle. For local dev / a future full-ord
+  // CI variant, ORD_API_URL just needs to point at a real ord — the
+  // test flow is identical.
+  const ordApiUrl = process.env.ORD_API_URL ?? 'http://localhost:8999';
   const ordOutputRes = await fetch(`${ordApiUrl}/output/${freshMintTxid}:0`, {
     headers: { Accept: 'application/json' },
   });
