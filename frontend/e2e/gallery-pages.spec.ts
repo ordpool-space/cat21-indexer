@@ -82,9 +82,11 @@ test.describe('Sat page', () => {
     await expect(page.getByTestId('sat-heading')).toBeVisible();
     await expect(page.getByTestId('sat-metadata')).toBeVisible({ timeout: 15_000 });
 
-    // Verify specific metadata fields
-    await expect(page.getByTestId('sat-name')).toBeVisible();
-    await expect(page.getByTestId('sat-rarity')).toBeVisible();
+    // Specific, immutable values for sat 1924083497071885 (deterministic
+    // from the sat number, so they never change). Asserting exact strings
+    // — not just visibility — proves the fields render real ord data.
+    await expect(page.getByTestId('sat-name')).toHaveText('afjjlghrrbw');
+    await expect(page.getByTestId('sat-block-link')).toHaveText('768,533');
   });
 
   test('should have working cross-links to block and address', async ({ page }) => {

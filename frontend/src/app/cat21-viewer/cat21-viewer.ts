@@ -8,7 +8,7 @@ import { catImageLoader } from '../shared/cat-image-loader';
 import { CatDto } from '../shared/cat21-api';
 import { CapitalizeFirst } from './capitalize-first';
 import { ColorList } from './color-list';
-import { ShortenString } from './shorten-string';
+import { ShortenString } from '../shared/shorten-string';
 
 @Component({
   selector: 'app-cat21-viewer',

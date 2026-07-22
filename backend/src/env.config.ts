@@ -28,6 +28,15 @@ export class EnvironmentVariables {
 
   @IsString()
   ORD_API_URL: string = 'https://ord.cat21.space';
+
+  /**
+   * Esplora-style electrs base URL — used by the bids pruner to check
+   * buyer funding UTXOs for liveness (`/tx/<txid>/outspend/<vout>`).
+   * Prod uses `https://api.ordpool.space/api` (ordpool-backend's
+   * transparent electrs proxy on happysrv). Dev + regtest override.
+   */
+  @IsString()
+  ELECTRS_API_URL: string = 'https://api.ordpool.space/api';
 }
 
 export function validate(config: Record<string, unknown>) {

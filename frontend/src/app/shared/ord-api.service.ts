@@ -30,15 +30,31 @@ export interface OrdAddressResponse {
   sat_balance: number;
 }
 
+// The subset of ord's /sat response we render. cat21.space shows only the
+// cat-lore-relevant fields (which cats live here, who holds it, where it is
+// now, whether the sat is special) — not ord's ordinal-theory position math
+// (decimal/degree/percentile/cycle/epoch/period/offset) or its own sat rarity
+// (which would collide with our cat-rarity score).
 export interface OrdSatResponse {
   address: string | null;
   block: number;
   cat_numbers: number[];
   cats: string[];
+  /** Special properties ord assigns to the sat (e.g. uncommon, palindrome, coin). */
   charms: string[];
+  /** Base-26 sat name. */
   name: string;
-  number: number;
-  rarity: string;
+  /** Current location `txid:vout:offset` — the UTXO holding this sat now, or null if ord has no location for it. */
+  satpoint: string | null;
+}
+
+/**
+ * ord's /sat response from the full ord instance (ordFullExplorer). We
+ * only read `inscriptions` — the regular inscriptions living on the sat,
+ * which the cat-only ord.cat21.space can't report.
+ */
+export interface OrdFullSatResponse {
+  inscriptions: string[];
 }
 
 /**
@@ -122,6 +138,20 @@ export class OrdApiService {
       `${environment.ordExplorer}/sat/${sat}`,
       { headers: { Accept: 'application/json' } },
     );
+  }
+
+  /**
+   * Regular inscriptions living on a sat, from the full ord instance
+   * (ord.cat21.space is cat-only and can't answer this). Returns the
+   * inscription ids; the sat page renders each preview via
+   * `${ordFullExplorer}/preview/<id>` inside a sandboxed iframe.
+   */
+  getSatInscriptions(sat: number): Observable<string[]> {
+    return this.http
+      .get<OrdFullSatResponse>(`${environment.ordFullExplorer}/sat/${sat}`, {
+        headers: { Accept: 'application/json' },
+      })
+      .pipe(map((r) => r.inscriptions ?? []));
   }
 
   /**

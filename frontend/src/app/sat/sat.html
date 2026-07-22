@@ -1,22 +1,18 @@
 <h1 data-testid="sat-heading">Sat {{ sat() | number }}</h1>
 
-<!-- Sat pages live on ord.cat21.space; ordpool.space has no /sat/ route. Hidden until the ord.cat21.space HTML surface is settled, see TODOS.md. -->
-<!-- <p class="mb-4">
-  <a href="{{ env.ordExplorer }}/sat/{{ sat() }}" target="_blank" rel="noopener">View on ord</a>
-</p> -->
-
-
 @if (satResource.value(); as data) {
   <table class="table table-borderless mt-3 mb-4" data-testid="sat-metadata">
     <tbody>
-      <tr><td><strong>Name</strong></td><td data-testid="sat-name">{{ data.name }}</td></tr>
-      <tr><td><strong>Rarity</strong></td><td data-testid="sat-rarity">{{ data.rarity }}</td></tr>
+      <tr><td><strong>Sat name</strong></td><td data-testid="sat-name">{{ data.name }}</td></tr>
       <tr><td><strong>Block</strong></td><td><a [routerLink]="['/block', data.block]" data-testid="sat-block-link">{{ data.block | number }}</a></td></tr>
-      @if (data.address) {
-        <tr><td><strong>Owner</strong></td><td><a [routerLink]="['/address', data.address]" class="text-break" data-testid="sat-owner-link">{{ data.address }}</a></td></tr>
-      }
       @if (data.charms.length > 0) {
-        <tr><td><strong>Charms</strong></td><td data-testid="sat-charms">{{ data.charms.join(', ') }}</td></tr>
+        <tr><td><strong title="Special properties ord assigns to this sat (e.g. uncommon, palindrome, coin)">Charms</strong></td><td data-testid="sat-charms">{{ data.charms.join(', ') }}</td></tr>
+      }
+      @if (data.satpoint) {
+        <tr><td><strong title="Current location of the sat, as txid:vout:offset">Location</strong></td><td><a href="{{ env.ordpoolExplorer }}/tx/{{ satpointTxid() }}" target="_blank" rel="noopener" [title]="data.satpoint" data-testid="sat-satpoint">{{ data.satpoint | shortenString }}</a></td></tr>
+      }
+      @if (data.address) {
+        <tr><td><strong>Owner</strong></td><td><a [routerLink]="['/address', data.address]" [title]="data.address" data-testid="sat-owner-link">{{ data.address | shortenString }}</a></td></tr>
       }
     </tbody>
   </table>
@@ -27,6 +23,26 @@
   <p aria-live="polite" data-testid="sat-loading">Loading sat data...</p>
 } @else if (satResource.error()) {
   <p role="alert" data-testid="sat-error">Failed to load sat data. <a (click)="satResource.reload()" role="button">Retry</a></p>
+}
+
+@if (inscriptionsResource.value()?.length) {
+  <h2>Inscriptions</h2>
+  <div class="inscription-grid" data-testid="sat-inscriptions">
+    @for (id of inscriptionsResource.value(); track id) {
+      <!-- SECURITY LOCK: sandbox="allow-scripts" with NO allow-same-origin.
+           Inscription bytes are untrusted; the sandbox runs their scripts in
+           an opaque origin, and the preview host is cross-origin to
+           cat21.space — neither can reach this page. Never add
+           allow-same-origin here. See shared/safe-resource-url.ts. -->
+      <iframe
+        [src]="previewUrl(id) | safeResourceUrl"
+        sandbox="allow-scripts"
+        scrolling="no"
+        loading="lazy"
+        [title]="id"
+      ></iframe>
+    }
+  </div>
 }
 
 <a routerLink="/" class="btn btn-primary fw-bold mt-4 mb-4">&laquo; Back</a>
