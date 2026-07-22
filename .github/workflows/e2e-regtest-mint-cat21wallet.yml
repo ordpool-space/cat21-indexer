@@ -16,6 +16,9 @@ on:
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - 'frontend/src/**'
+      - 'backend/src/**'
+      - 'backend/package.json'
+      - 'backend/package-lock.json'
       - '.github/workflows/e2e-regtest-mint-cat21wallet.yml'
 
 permissions:
