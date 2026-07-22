@@ -12,8 +12,10 @@ import {
   TxnOutput,
 } from 'ordpool-sdk';
 
+import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { FeesPicker } from '../../../shared/fees-picker/fees-picker';
+import { OrdApiService } from '../../../shared/ord-api.service';
 import { UtxoPicker } from '../../../shared/utxo-picker/utxo-picker';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 
@@ -35,6 +37,8 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
 export class MakeOffer {
   private orchestrator = inject(Cat21CreateOfferOrchestrator);
   private lookup = inject(CatUtxoLookupService);
+  private ordApi = inject(OrdApiService);
+  private bidsService = inject(Cat21BidsService);
 
   // ---------- Deep-link prefill (via router withComponentInputBinding) ----------
   //
@@ -398,6 +402,102 @@ export class MakeOffer {
     this.lookupState.set('idle');
     this.lookupError.set(null);
     this.resolvedSellerAddress.set(null);
+    this.bidPublishState.set('idle');
+    this.bidPublishError.set(null);
+    this.bidPublishedRow.set(null);
+  }
+
+  // ---------- Publish to the CAT-21 Bazaar (X.5) ----------
+  //
+  // Once the offer PSBT is built + buyer-signed, the buyer can EITHER
+  // send it privately to the seller (Copy PSBT / Copy shareable URL)
+  // OR post it to the marketplace so any current owner of the cat's
+  // UTXO can accept + broadcast. Same PSBT bytes, different transport.
+
+  /**
+   * `idle` — offer built, nothing posted yet.
+   * `fetching-bundle` — calling ordApi.getCatsAtOutput before POST.
+   * `posting` — HTTP POST in flight.
+   * `success` — bid persisted on the marketplace.
+   * `error` — see `bidPublishError` for the code + detail.
+   */
+  readonly bidPublishState = signal<'idle' | 'fetching-bundle' | 'posting' | 'success' | 'error'>('idle');
+  readonly bidPublishError = signal<BidError | null>(null);
+  readonly bidPublishedRow = signal<PersistedCat21Bid | null>(null);
+
+  /** Show the "Post to Bazaar" button only when we have an artifact + a target. */
+  readonly canPostToBazaar = computed<boolean>(() => {
+    if (!this.offerArtifact()) return false;
+    const target = this.targetCat();
+    if (!target) return false;
+    if (this.bidPublishState() === 'posting' || this.bidPublishState() === 'fetching-bundle') return false;
+    return true;
+  });
+
+  onPostToBazaarClick(): void {
+    const art = this.offerArtifact();
+    const target = this.targetCat();
+    const wallet = this.connectedWallet();
+    const priceSats = this.priceSats();
+    const sellerPay = this.sellerPaymentAddress();
+    const buyerReceive = this.buyerReceiveAddress();
+    if (!art || !target || !wallet || priceSats === null || !sellerPay || !buyerReceive) {
+      // canPostToBazaar shouldn't have let us get here, but fail
+      // closed if something disappears mid-click.
+      this.bidPublishState.set('error');
+      this.bidPublishError.set({
+        code: 'network-error',
+        detail: 'Missing offer state. Rebuild the offer and try again.',
+      });
+      return;
+    }
+
+    this.bidPublishState.set('fetching-bundle');
+    this.bidPublishError.set(null);
+    this.bidPublishedRow.set(null);
+    this.ordApi.getCatsAtOutput(target.txid, target.vout).subscribe({
+      next: (cats) => {
+        if (!cats.includes(target.catNumber)) {
+          this.bidPublishState.set('error');
+          this.bidPublishError.set({
+            code: 'cats-bundle-drift',
+            detail:
+              `Cat #${target.catNumber} is no longer on this UTXO — ord reports ` +
+              `[${cats.join(',')}]. Rebuild the offer against the current outpoint.`,
+          });
+          return;
+        }
+        const bidArgs: PostBidArgs = {
+          catTxid: target.txid,
+          catVout: target.vout,
+          cats,
+          headlineCatNumber: target.catNumber,
+          bidSats: priceSats,
+          buyerOrdinalsAddress: buyerReceive,
+          buyerPaymentAddress: wallet.paymentAddress,
+          sellerPaymentAddress: sellerPay,
+          psbtBase64: art.base64,
+        };
+        this.bidPublishState.set('posting');
+        this.bidsService.postBid(bidArgs).subscribe({
+          next: (row) => {
+            this.bidPublishedRow.set(row);
+            this.bidPublishState.set('success');
+          },
+          error: (err: BidError) => {
+            this.bidPublishState.set('error');
+            this.bidPublishError.set(err);
+          },
+        });
+      },
+      error: (err) => {
+        this.bidPublishState.set('error');
+        this.bidPublishError.set({
+          code: 'ord-lookup-failed',
+          detail: `Couldn't fetch cats on this UTXO: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      },
+    });
   }
 
   /** FeesPicker's feeRateChange forwarded into the create-offer orchestrator. */

@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
+import { BehaviorSubject, Observable, of, Subject, throwError } from 'rxjs';
 
 import {
   BuyOfferTargetCat,
@@ -19,8 +19,26 @@ import {
 } from 'ordpool-sdk';
 
 import { MakeOffer } from './make-offer';
+import { Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
+import { OrdApiService } from '../../../shared/ord-api.service';
 import { makeWallet, WalletServiceStub } from '../../../testing/wallet.fixtures';
+
+class OrdApiServiceStub {
+  private catsAtOutputImpl: (txid: string, vout: number) => Observable<number[]> = () => of([]);
+  setCatsAtOutput(fn: (txid: string, vout: number) => Observable<number[]>) {
+    this.catsAtOutputImpl = fn;
+  }
+  getCatsAtOutput = (txid: string, vout: number) => this.catsAtOutputImpl(txid, vout);
+  getCurrentOwner = jest.fn();
+  getOutput = jest.fn();
+}
+
+class Cat21BidsServiceStub {
+  postBid = jest.fn((_: PostBidArgs) => of({} as PersistedCat21Bid));
+  getBidsForOutpoint = jest.fn();
+  deleteBid = jest.fn();
+}
 
 // ---------------------------------------------------------------------------
 // Distinct addresses ARE THE POINT of this spec. Splitting them ensures
@@ -133,6 +151,8 @@ describe('MakeOffer regression — sellerPaymentAddress never derived from on-ch
         { provide: UtxoContentScanner, useValue: scanner },
         { provide: WalletService, useValue: walletService },
         { provide: CatUtxoLookupService, useValue: lookup },
+        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
+        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
         {
           provide: cat21Config,
           useValue: {
@@ -233,6 +253,8 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
         { provide: UtxoContentScanner, useValue: scanner },
         { provide: WalletService, useValue: walletService },
         { provide: CatUtxoLookupService, useValue: lookup },
+        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
+        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
         {
           provide: cat21Config,
           useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
@@ -264,6 +286,8 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
         { provide: UtxoContentScanner, useValue: scanner },
         { provide: WalletService, useValue: walletService },
         { provide: CatUtxoLookupService, useValue: lookup },
+        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
+        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
         {
           provide: cat21Config,
           useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
@@ -300,6 +324,8 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
         { provide: UtxoContentScanner, useValue: scanner },
         { provide: WalletService, useValue: walletService },
         { provide: CatUtxoLookupService, useValue: lookup },
+        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
+        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
         {
           provide: cat21Config,
           useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
@@ -333,6 +359,8 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
         { provide: UtxoContentScanner, useValue: scanner },
         { provide: WalletService, useValue: walletService },
         { provide: CatUtxoLookupService, useValue: lookup },
+        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
+        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
         {
           provide: cat21Config,
           useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
@@ -365,6 +393,8 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
         { provide: UtxoContentScanner, useValue: scanner },
         { provide: WalletService, useValue: walletService },
         { provide: CatUtxoLookupService, useValue: lookup },
+        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
+        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
         {
           provide: cat21Config,
           useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
@@ -381,5 +411,173 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.staleOffer()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('MakeOffer — Post to Bazaar (X.5)', () => {
+
+  const CAT_TXID = 'aa'.repeat(32);
+
+  async function setupBazaar(opts: {
+    withOffer?: boolean;
+    catsAtOutput?: (txid: string, vout: number) => Observable<number[]>;
+    onPost?: (args: PostBidArgs) => Observable<PersistedCat21Bid>;
+  } = {}) {
+    const orchestrator = new OrchestratorStub();
+    const scanner = new ScannerStub();
+    const walletService = new WalletServiceStub();
+    const lookup = new LookupStub();
+    const ordApi = new OrdApiServiceStub();
+    const bidsService = new Cat21BidsServiceStub();
+
+    if (opts.catsAtOutput) ordApi.setCatsAtOutput(opts.catsAtOutput);
+    if (opts.onPost) bidsService.postBid = jest.fn(opts.onPost) as never;
+
+    await TestBed.configureTestingModule({
+      imports: [MakeOffer],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
+        { provide: UtxoContentScanner, useValue: scanner },
+        { provide: WalletService, useValue: walletService },
+        { provide: CatUtxoLookupService, useValue: lookup },
+        { provide: OrdApiService, useValue: ordApi },
+        { provide: Cat21BidsService, useValue: bidsService },
+        { provide: cat21Config, useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' } },
+      ],
+    })
+      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(MakeOffer);
+    const component = fixture.componentInstance;
+    // Populate BOTH the walletService subject AND the orchestrator's
+    // connectedWallet signal — MakeOffer's `this.connectedWallet` reads
+    // the orchestrator's signal, not the walletService's subject.
+    walletService.connectedWalletSubject.next(wallet());
+    orchestrator.connectedWallet.set(wallet());
+    fixture.detectChanges();
+
+    if (opts.withOffer !== false) {
+      // Simulate a completed offer flow: seller-payment address set,
+      // price set, buyer-receive address set, artifact populated,
+      // target locked in.
+      orchestrator.setTargetCat(target({ txid: CAT_TXID, vout: 0 }));
+      orchestrator.setSellerPaymentAddress('bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm');
+      orchestrator.setPriceSats(21_000);
+      orchestrator.setBuyerReceiveAddress(WALLET_ORDINALS_ADDRESS);
+      orchestrator.offerArtifact.set({ base64: 'cHNidP8BAP0Y', hex: 'aabb' });
+    }
+
+    return { fixture, component, orchestrator, ordApi, bidsService };
+  }
+
+  it('canPostToBazaar() is false without an offer artifact', async () => {
+    const { component } = await setupBazaar({ withOffer: false });
+    expect(component.canPostToBazaar()).toBe(false);
+  });
+
+  it('canPostToBazaar() is true once the offer artifact + target are set', async () => {
+    const { component } = await setupBazaar({ catsAtOutput: () => of([42]) });
+    expect(component.canPostToBazaar()).toBe(true);
+  });
+
+  it('onPostToBazaarClick fetches cats + calls bidsService.postBid with the assembled args', async () => {
+    const { component, bidsService, ordApi } = await setupBazaar({
+      catsAtOutput: () => of([42]),
+      onPost: () => of({
+        id: 'uuid-x',
+        network: 'mainnet',
+        catTxid: CAT_TXID,
+        catVout: 0,
+        cats: [42],
+        headlineCatNumber: 42,
+        bidSats: 21_000,
+        buyerOrdinalsAddress: WALLET_ORDINALS_ADDRESS,
+        buyerPaymentAddress: WALLET_PAYMENT_ADDRESS,
+        sellerPaymentAddress: 'bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm',
+        psbtBase64: 'cHNidP8BAP0Y',
+        createdAt: '2026-07-22T10:00:00Z',
+      }),
+    });
+    const catsSpy = jest.spyOn(ordApi, 'getCatsAtOutput');
+
+    component.onPostToBazaarClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(catsSpy).toHaveBeenCalledWith(CAT_TXID, 0);
+    expect(bidsService.postBid).toHaveBeenCalledTimes(1);
+    expect((bidsService.postBid as jest.Mock).mock.calls[0]?.[0]).toMatchObject({
+      catTxid: CAT_TXID,
+      catVout: 0,
+      cats: [42],
+      headlineCatNumber: 42,
+      bidSats: 21_000,
+      buyerOrdinalsAddress: WALLET_ORDINALS_ADDRESS,
+      buyerPaymentAddress: WALLET_PAYMENT_ADDRESS,
+      sellerPaymentAddress: 'bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm',
+      psbtBase64: 'cHNidP8BAP0Y',
+    });
+    expect(component.bidPublishState()).toBe('success');
+    expect(component.bidPublishedRow()?.id).toBe('uuid-x');
+  });
+
+  it('surfaces cats-bundle-drift when the target catNumber is not in the fetched bundle', async () => {
+    // ord reports [7, 100] — cat #42 (target headline) has moved off
+    // this UTXO. postBid must NOT be called; UI shows drift error.
+    const { component, bidsService } = await setupBazaar({
+      catsAtOutput: () => of([7, 100]),
+    });
+
+    component.onPostToBazaarClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(bidsService.postBid).not.toHaveBeenCalled();
+    expect(component.bidPublishState()).toBe('error');
+    expect(component.bidPublishError()?.code).toBe('cats-bundle-drift');
+  });
+
+  it('surfaces backend errors from postBid (e.g. cats-bundle-drift server-side) via bidPublishError', async () => {
+    const { component } = await setupBazaar({
+      catsAtOutput: () => of([42]),
+      onPost: () => throwError(() => ({ code: 'cats-bundle-drift', detail: 'live [42, 99]' } as never)),
+    });
+
+    component.onPostToBazaarClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(component.bidPublishState()).toBe('error');
+    expect(component.bidPublishError()?.code).toBe('cats-bundle-drift');
+  });
+
+  it('surfaces ord fetch failures via ord-lookup-failed', async () => {
+    const { component, bidsService } = await setupBazaar({
+      catsAtOutput: () => throwError(() => new Error('boom')),
+    });
+
+    component.onPostToBazaarClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(bidsService.postBid).not.toHaveBeenCalled();
+    expect(component.bidPublishState()).toBe('error');
+    expect(component.bidPublishError()?.code).toBe('ord-lookup-failed');
+  });
+
+  it('onResetClick clears the bid publish state so the same MakeOffer instance can post again', async () => {
+    const { component } = await setupBazaar({
+      catsAtOutput: () => of([42]),
+      onPost: () => of({} as PersistedCat21Bid),
+    });
+    component.onPostToBazaarClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(component.bidPublishState()).toBe('success');
+
+    component.onResetClick();
+    expect(component.bidPublishState()).toBe('idle');
+    expect(component.bidPublishError()).toBeNull();
+    expect(component.bidPublishedRow()).toBeNull();
   });
 });

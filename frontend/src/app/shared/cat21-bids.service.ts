@@ -1,6 +1,8 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable, catchError, of, throwError } from 'rxjs';
+import { Observable, catchError, of, switchMap, throwError } from 'rxjs';
+
+import { WalletService } from 'ordpool-sdk';
 
 import { environment } from '../../environments/environment';
 
@@ -67,11 +69,70 @@ export interface BidError {
  * (all bids on this UTXO, sorted price DESC — the seller's view)
  * and a paginated feed (browse everyone's bids).
  */
+/**
+ * What the buyer's UI hands to `postBid` — the load-bearing values
+ * live in the half-signed PSBT bytes, but the backend also wants
+ * discovery metadata (cats, addresses, price) for indexed lookups.
+ * We ask the caller for both AND cross-check server-side: any lie
+ * about the price gets caught before insert.
+ */
+export interface PostBidArgs {
+  catTxid: string;
+  catVout: number;
+  cats: number[];
+  headlineCatNumber: number;
+  bidSats: number;
+  buyerOrdinalsAddress: string;
+  buyerPaymentAddress: string;
+  sellerPaymentAddress: string;
+  psbtBase64: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class Cat21BidsService {
   private http = inject(HttpClient);
+  private walletService = inject(WalletService);
 
   private readonly baseUrl = `${environment.api}/api/v1/bids`;
+
+  /**
+   * Post a buyer's half-signed PSBT to the marketplace. The PSBT's
+   * own SIGHASH_ALL sigs on inputs 1..N are the auth; no BIP-322
+   * wrap needed. Network comes from the connected wallet.
+   *
+   * Errors bubble up as `BidError` with the backend's specific
+   * failure code (`network-mismatch`, `psbt-price-mismatch`,
+   * `cats-bundle-drift`, `bid-below-marketplace-floor`, …). The UI
+   * maps the code to a human message.
+   */
+  postBid(args: PostBidArgs): Observable<PersistedCat21Bid> {
+    const wallet = this.walletService.connectedWallet$.getValue();
+    if (!wallet) {
+      return throwError(() => ({
+        code: 'wallet-not-connected' as const,
+        detail: 'Connect a wallet before posting a bid.',
+      }));
+    }
+    const network = this.walletService.network;
+    return of({
+      network,
+      catTxid: args.catTxid,
+      catVout: args.catVout,
+      cats: args.cats,
+      headlineCatNumber: args.headlineCatNumber,
+      bidSats: args.bidSats,
+      buyerOrdinalsAddress: args.buyerOrdinalsAddress,
+      buyerPaymentAddress: args.buyerPaymentAddress,
+      sellerPaymentAddress: args.sellerPaymentAddress,
+      psbtBase64: args.psbtBase64,
+    }).pipe(
+      switchMap((body) =>
+        this.http
+          .post<PersistedCat21Bid>(this.baseUrl, body)
+          .pipe(catchError((err) => throwError(() => this.mapHttpError(err)))),
+      ),
+    );
+  }
 
   /**
    * All active bids on a specific UTXO, sorted `bidSats` DESC then

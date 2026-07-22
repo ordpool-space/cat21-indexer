@@ -97,6 +97,48 @@
         </button>
       </details>
 
+      <!-- Post to the CAT-21 Bazaar (X.5).
+           Same PSBT bytes, different transport. Instead of DMing the
+           seller, publish to the marketplace so ANY current owner of
+           the cat UTXO can accept + broadcast. The seller can outbid
+           between now and accept (FOMO).  -->
+      <div class="make-offer-bazaar mt-4">
+        <hr>
+        <h3 class="h6">Or post it to the Bazaar</h3>
+        <p class="text-muted small">
+          Every open bid on this cat is visible to the current owner
+          and to anyone else the cat has already changed hands to. If
+          someone else outbids you, you can post a higher price. If the
+          current owner clicks Accept, they countersign and broadcast.
+        </p>
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="!canPostToBazaar()"
+          (click)="onPostToBazaarClick()"
+          data-testid="make-offer-post-bazaar-cta">
+          @switch (bidPublishState()) {
+            @case ('idle') { Post to the Bazaar }
+            @case ('fetching-bundle') { Checking the cat's current bundle… }
+            @case ('posting') { Posting… }
+            @case ('success') { ✓ Posted to the Bazaar }
+            @case ('error') { Retry }
+          }
+        </button>
+        @if (bidPublishState() === 'success' && bidPublishedRow(); as row) {
+          <div class="alert alert-success mt-2" role="status" data-testid="make-offer-post-bazaar-success">
+            Your bid is live on the Bazaar for <strong>cat #{{ row.headlineCatNumber }}</strong>
+            at <strong>{{ row.bidSats.toLocaleString() }} sats</strong>.
+          </div>
+        }
+        @if (bidPublishState() === 'error' && bidPublishError(); as err) {
+          <div class="alert alert-danger mt-2" role="alert" data-testid="make-offer-post-bazaar-error">
+            <strong>Couldn't post to the Bazaar.</strong>
+            <div class="small">{{ err.detail || err.code }}</div>
+          </div>
+        }
+      </div>
+
       <button
         type="button"
         class="btn btn-outline-primary mt-3"
