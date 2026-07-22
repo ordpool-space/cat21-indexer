@@ -1,5 +1,6 @@
 import { plainToClass, Transform } from 'class-transformer';
 import {
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -37,6 +38,20 @@ export class EnvironmentVariables {
    */
   @IsString()
   ELECTRS_API_URL: string = 'https://api.ordpool.space/api';
+
+  /**
+   * Bitcoin network this deployment targets. Prod defaults to
+   * mainnet. Regtest CI overrides via `BACKEND_NETWORK=regtest` so
+   * signed listings + posted bids with `network: 'regtest'` pass the
+   * DTO's `network-mismatch` gate.
+   *
+   * The listings + bids services read this to decide which DTO
+   * `network` value to accept. Any other network value is rejected
+   * up-front with code `network-mismatch`.
+   */
+  @IsString()
+  @IsIn(['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'])
+  BACKEND_NETWORK: 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest' = 'mainnet';
 }
 
 export function validate(config: Record<string, unknown>) {

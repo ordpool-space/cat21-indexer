@@ -198,7 +198,7 @@ describe('BidsService.create — pre-checks (cheap fails first)', () => {
   });
 
   it('rejects network-mismatch when DTO network is not the backend deployment', async () => {
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto({ network: 'testnet3' }))).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'network-mismatch' }),
     });
@@ -207,7 +207,7 @@ describe('BidsService.create — pre-checks (cheap fails first)', () => {
   });
 
   it('rejects headline-not-in-bundle when headlineCatNumber is missing from cats', async () => {
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto({ headlineCatNumber: 999, cats: [42, 100] }))).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'headline-not-in-bundle' }),
     });
@@ -215,7 +215,7 @@ describe('BidsService.create — pre-checks (cheap fails first)', () => {
   });
 
   it('rejects bid-below-marketplace-floor for bidSats below the spam gate', async () => {
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto({ bidSats: 500 }))).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'bid-below-marketplace-floor' }),
     });
@@ -237,7 +237,7 @@ describe('BidsService.create — PSBT decode + shape', () => {
   });
 
   it('rejects psbt-malformed when base64 decode fails', async () => {
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto({ psbtBase64: '@@@invalid base64@@@' }))).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-malformed' }),
     });
@@ -245,7 +245,7 @@ describe('BidsService.create — PSBT decode + shape', () => {
 
   it('rejects psbt-malformed when scure Transaction.fromPSBT throws', async () => {
     mockFromPSBT.mockImplementation(() => { throw new Error('bad PSBT magic'); });
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-malformed' }),
     });
@@ -253,7 +253,7 @@ describe('BidsService.create — PSBT decode + shape', () => {
 
   it('rejects psbt-shape-invalid when PSBT has only 1 input (no buyer funding)', async () => {
     buildPsbtMock({ inputsLength: 1 });
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-shape-invalid' }),
     });
@@ -261,7 +261,7 @@ describe('BidsService.create — PSBT decode + shape', () => {
 
   it('rejects psbt-shape-invalid when PSBT has 4 outputs (over the 3 max)', async () => {
     buildPsbtMock({ outputsLength: 4 });
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-shape-invalid' }),
     });
@@ -269,7 +269,7 @@ describe('BidsService.create — PSBT decode + shape', () => {
 
   it('rejects psbt-input0-mismatch when PSBT input 0 outpoint disagrees with DTO', async () => {
     buildPsbtMock({ input0Txid: OTHER_TXID });
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-input0-mismatch' }),
     });
@@ -277,7 +277,7 @@ describe('BidsService.create — PSBT decode + shape', () => {
 
   it('rejects psbt-shape-invalid when PSBT output 0 is not exactly 546 sats (cat postage)', async () => {
     buildPsbtMock({ out0Amount: 1000 });
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-shape-invalid' }),
     });
@@ -295,7 +295,7 @@ describe('BidsService.create — PSBT decode + shape', () => {
         ? { script: new Uint8Array([1]), amount: BigInt(CAT21_POSTAGE_SATS) }
         : { script: new Uint8Array([2]), amount: BigInt(21_000 + CAT21_POSTAGE_SATS) },
     });
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-output0-mismatch' }),
     });
@@ -304,7 +304,7 @@ describe('BidsService.create — PSBT decode + shape', () => {
   it('rejects psbt-price-mismatch when output 1 amount ≠ bidSats + postage', async () => {
     // PSBT claims 10_000 + postage, but DTO claims 21_000 bidSats.
     buildPsbtMock({ out1Amount: 10_000 + CAT21_POSTAGE_SATS });
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-price-mismatch' }),
     });
@@ -327,35 +327,35 @@ describe('BidsService.create — SDK validator + ord', () => {
 
   it('surfaces SDK rejections as psbt-* codes', async () => {
     mockValidate.mockReturnValue({ ok: false, reason: 'sighash-not-all', detail: 'buyer input 1 is SIGHASH_NONE' });
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'psbt-sighash-not-all' }),
     });
   });
 
   it('rejects ord-lookup-failed when the /output call throws', async () => {
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock({ throwOnCatsAtOutput: true }) as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock({ throwOnCatsAtOutput: true }) as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'ord-lookup-failed' }),
     });
   });
 
   it('rejects cat-not-found when /output returns null', async () => {
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock({ catsAtOutput: null }) as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock({ catsAtOutput: null }) as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'cat-not-found' }),
     });
   });
 
   it('rejects cat-not-found when /output returns empty cats', async () => {
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock({ catsAtOutput: [] }) as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock({ catsAtOutput: [] }) as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'cat-not-found' }),
     });
   });
 
   it('rejects cats-bundle-drift when the live bundle differs from the signed one', async () => {
-    const service = new BidsService(createDrizzleMock() as never, createOrdMock({ catsAtOutput: [42, 99] }) as never);
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock({ catsAtOutput: [42, 99] }) as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto({ cats: [42] }))).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'cats-bundle-drift' }),
     });
@@ -378,7 +378,7 @@ describe('BidsService.create — happy path + upsert', () => {
 
   it('inserts on ok + on-chain match and reads back the DTO', async () => {
     const drizzle = createDrizzleMock({ limit: jest.fn().mockResolvedValue([persistedRow()]) });
-    const service = new BidsService(drizzle as never, createOrdMock() as never);
+    const service = new BidsService(drizzle as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     const result = await service.create(validDto());
     expect(result).toMatchObject({
       network: 'mainnet',
@@ -402,6 +402,7 @@ describe('BidsService.create — happy path + upsert', () => {
     const service = new BidsService(
       drizzle as never,
       createOrdMock({ catsAtOutput: [0, 42, 100] }) as never,
+      { get: () => "mainnet" } as never,
     );
     const result = await service.create(validDto({ cats: [0, 42, 100], headlineCatNumber: 0 }));
     expect(result.cats).toEqual([0, 42, 100]);
@@ -409,7 +410,7 @@ describe('BidsService.create — happy path + upsert', () => {
 
   it('throws persist-race when readback returns nothing (concurrent prune)', async () => {
     const drizzle = createDrizzleMock({ limit: jest.fn().mockResolvedValue([]) });
-    const service = new BidsService(drizzle as never, createOrdMock() as never);
+    const service = new BidsService(drizzle as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'persist-race' }),
     });
@@ -424,7 +425,7 @@ describe('BidsService.findByOutpoint (seller view — bids on my cat)', () => {
       persistedRow({ id: 'b', bidSats: 21_000, buyerOrdinalsAddress: 'bc1p-b' }),
     ];
     const drizzle = createDrizzleMock({ orderBy: jest.fn().mockResolvedValue(rows) });
-    const service = new BidsService(drizzle as never, createOrdMock() as never);
+    const service = new BidsService(drizzle as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     const result = await service.findByOutpoint('mainnet', REAL_TXID, 0);
     expect(result).toHaveLength(2);
     expect(result[0].bidSats).toBe(30_000);
@@ -433,14 +434,14 @@ describe('BidsService.findByOutpoint (seller view — bids on my cat)', () => {
 
   it('returns empty array when no bids exist on the UTXO', async () => {
     const drizzle = createDrizzleMock({ orderBy: jest.fn().mockResolvedValue([]) });
-    const service = new BidsService(drizzle as never, createOrdMock() as never);
+    const service = new BidsService(drizzle as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     expect(await service.findByOutpoint('mainnet', OTHER_TXID, 0)).toEqual([]);
   });
 });
 
 describe('BidsService.findPaginated — bounds', () => {
 
-  const service = () => new BidsService(createDrizzleMock() as never, createOrdMock() as never);
+  const service = () => new BidsService(createDrizzleMock() as never, createOrdMock() as never, { get: () => "mainnet" } as never);
 
   it('rejects itemsPerPage=0', async () => {
     await expect(service().findPaginated(0, 1)).rejects.toBeInstanceOf(BadRequestException);
@@ -462,7 +463,7 @@ describe('BidsService.deleteByOutpointAndBuyer', () => {
     const drizzle = createDrizzleMock({
       delete: jest.fn().mockReturnValue({ where }),
     });
-    const service = new BidsService(drizzle as never, createOrdMock() as never);
+    const service = new BidsService(drizzle as never, createOrdMock() as never, { get: () => "mainnet" } as never);
     await service.deleteByOutpointAndBuyer('mainnet', REAL_TXID, 0, BUYER_ORD_ADDR);
     expect(drizzle.db.delete).toHaveBeenCalled();
     expect(where).toHaveBeenCalled();

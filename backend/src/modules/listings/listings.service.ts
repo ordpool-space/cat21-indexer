@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { and, count, desc, eq } from 'drizzle-orm';
 import { Network, verifyListingSignature } from 'ordpool-sdk/core';
 
@@ -19,20 +20,19 @@ const ANTI_REPLAY_MAX_AGE_S = 24 * 60 * 60;
 const CLOCK_SKEW_FUTURE_S = 60 * 60;
 
 /**
- * Backend's Bitcoin network — mainnet in production. Read from env
- * via ConfigModule if we ever want a testnet deployment; for now the
- * infra is mainnet-only and hardcoding here catches misconfigured
- * DTOs (a seller sends `network=testnet3` to the mainnet backend
- * expecting anything to happen with it).
+ * Backend's Bitcoin network — read from env via ConfigModule.
+ * Prod defaults to `mainnet`; regtest CI overrides with
+ * `BACKEND_NETWORK=regtest`. Injected per-instance rather than a
+ * module-level const so tests + regtest can override cleanly.
  */
-const BACKEND_NETWORK = 'mainnet';
+type BackendNetworkString = 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest';
 
 /**
  * Map the DTO's serialized network string back to the SDK enum for
  * `verifyListingSignature` (which threads it into the canonical
  * message). Fixed strings for a fixed enum — no dynamic mapping.
  */
-function toSdkNetwork(name: 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest'): Network {
+function toSdkNetwork(name: BackendNetworkString): Network {
   switch (name) {
     case 'mainnet': return Network.Mainnet;
     case 'testnet3': return Network.Testnet3;
@@ -58,11 +58,15 @@ function catsArraysEqual(a: number[], b: number[]): boolean {
 @Injectable()
 export class ListingsService {
   private readonly logger = new Logger(ListingsService.name);
+  private readonly backendNetwork: BackendNetworkString;
 
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly ordClient: OrdClientService,
-  ) {}
+    configService: ConfigService,
+  ) {
+    this.backendNetwork = configService.get<BackendNetworkString>('BACKEND_NETWORK', 'mainnet');
+  }
 
   /**
    * Create (or overwrite) the active listing for a cat UTXO.
@@ -88,10 +92,10 @@ export class ListingsService {
   async create(dto: CreateListingDto): Promise<ListingDto> {
     // (1) Network — cheap fail-fast. Also blocks a seller who typo'd
     //     `network=testnet3` from submitting to the mainnet backend.
-    if (dto.network !== BACKEND_NETWORK) {
+    if (dto.network !== this.backendNetwork) {
       throw new BadRequestException({
         code: 'network-mismatch',
-        detail: `Listing signed for network=${dto.network}; this backend serves ${BACKEND_NETWORK}.`,
+        detail: `Listing signed for network=${dto.network}; this backend serves ${this.backendNetwork}.`,
       });
     }
 

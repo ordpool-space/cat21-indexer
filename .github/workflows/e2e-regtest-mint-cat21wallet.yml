@@ -202,6 +202,41 @@ jobs:
             sleep 1
           done
 
+      # Bring up the cat21-indexer backend on port 9998 (the same port
+      # the built frontend's api URL redirect points at). BACKEND_NETWORK
+      # is regtest so bids POSTed with `network: 'regtest'` pass the
+      # network-mismatch gate. DATABASE_URL points at the MariaDB the
+      # consumer-environment already provisioned; ORD_API_URL points at
+      # the regtest ord instance ranger-served on 9999.
+      - name: Install indexer backend deps + build
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Bring up cat21-indexer backend on :9998 (regtest)
+        working-directory: backend
+        env:
+          PORT: '9998'
+          HOST: 127.0.0.1
+          NODE_ENV: development
+          DATABASE_URL: mysql://cat21:cat21@127.0.0.1:3306/cat21
+          ORD_API_URL: http://localhost:9999
+          ELECTRS_API_URL: http://localhost:8999
+          BACKEND_NETWORK: regtest
+        run: |
+          nohup node dist/main.js > indexer-backend.log 2>&1 &
+          echo $! > indexer-backend.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:9998/api/health >/dev/null 2>&1; then
+              echo "indexer backend up"; break
+            fi
+            if [ "$i" = "60" ]; then
+              echo "indexer backend never came up"; tail -100 indexer-backend.log || true; exit 1
+            fi
+            sleep 1
+          done
+
       - name: Install Playwright in the frontend tree
         working-directory: frontend
         run: npx playwright install --with-deps chromium
@@ -218,6 +253,11 @@ jobs:
         env:
           CAT21WALLET_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/cat21wallet
           FRONTEND_URL: http://localhost:4221
+          # cat21-indexer backend hosts the bids marketplace API. The
+          # frontend build sed-swaps `backend2.cat21.space` → this URL,
+          # and the bid-marketplace regtest test POSTs directly to it.
+          CAT21_INDEXER_URL: http://localhost:9998
+          ORD_API_URL: http://localhost:9999
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
             npx playwright test e2e/regtest/cat21wallet-mint-regtest.spec.ts \
@@ -243,6 +283,9 @@ jobs:
           docker compose \
             -f frontend/node_modules/ordpool-sdk/e2e/docker-compose.consumer-environment.yml \
             down -v || true
+          if [ -f backend/indexer-backend.pid ]; then
+            kill "$(cat backend/indexer-backend.pid)" 2>/dev/null || true
+          fi
           if [ -f fees-stub.pid ]; then
             kill "$(cat fees-stub.pid)" 2>/dev/null || true
           fi

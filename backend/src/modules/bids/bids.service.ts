@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { base64, hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { and, count, desc, eq } from 'drizzle-orm';
@@ -11,12 +12,7 @@ import { OrdClientService } from '../sync/ord-client.service';
 import { BidDto, PaginatedBidsDto } from './dto/bid.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
 
-/**
- * Backend's Bitcoin network — mainnet in production. Same posture as
- * the listings service. A bid signed for a different network is
- * rejected via `network-mismatch`.
- */
-const BACKEND_NETWORK = 'mainnet';
+type BackendNetworkString = 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest';
 
 /**
  * Marketplace spam floor. Bids below this are rejected outright — a
@@ -33,7 +29,7 @@ const MARKETPLACE_FLOOR_SATS = 1_000;
  */
 const CAT21_POSTAGE_SATS = 546;
 
-function toSdkNetwork(name: 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest'): Network {
+function toSdkNetwork(name: BackendNetworkString): Network {
   switch (name) {
     case 'mainnet': return Network.Mainnet;
     case 'testnet3': return Network.Testnet3;
@@ -78,11 +74,15 @@ function scriptToAddress(script: Uint8Array, network: Network): string | null {
 @Injectable()
 export class BidsService {
   private readonly logger = new Logger(BidsService.name);
+  private readonly backendNetwork: BackendNetworkString;
 
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly ordClient: OrdClientService,
-  ) {}
+    configService: ConfigService,
+  ) {
+    this.backendNetwork = configService.get<BackendNetworkString>('this.backendNetwork', 'mainnet');
+  }
 
   /**
    * Post (or overwrite) a buyer's bid on a cat UTXO.
@@ -101,10 +101,10 @@ export class BidsService {
    */
   async create(dto: CreateBidDto): Promise<BidDto> {
     // (1) Network fail-fast.
-    if (dto.network !== BACKEND_NETWORK) {
+    if (dto.network !== this.backendNetwork) {
       throw new BadRequestException({
         code: 'network-mismatch',
-        detail: `Bid targets network=${dto.network}; this backend serves ${BACKEND_NETWORK}.`,
+        detail: `Bid targets network=${dto.network}; this backend serves ${this.backendNetwork}.`,
       });
     }
 
