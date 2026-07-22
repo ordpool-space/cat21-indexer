@@ -75,6 +75,11 @@
       <div class="alert alert-primary" role="status" data-testid="cat-active-listing-badge">
         <strong>Listed for {{ listing.askSats.toLocaleString() }} sats</strong>
         on the CAT-21 orderbook.
+        @if (listing.cats && listing.cats.length > 1) {
+          <span class="cat-bundle-note" data-testid="cat-active-listing-bundle">
+            (bundle of {{ listing.cats.length }} cats: #{{ listing.cats.join(', #') }})
+          </span>
+        }
         @switch (buyButtonState()) {
           @case ('enabled') {
             <a
@@ -126,6 +131,52 @@
             </button>
           }
         }
+      </div>
+    }
+    @if (hasBids()) {
+      <!-- Active bids panel — every open buyer offer on this cat's
+           current UTXO, sorted by price DESC. Each row's PSBT is
+           broadcastable as-is once the current owner signs input 0.
+           The pruner drops entries whose cat UTXO has moved OR whose
+           buyer funding UTXOs have been spent elsewhere, so anything
+           visible here is provably still spendable at read time. -->
+      <div class="cat-bids-panel" data-testid="cat-bids-panel">
+        <h3 class="cat-bids-heading">
+          {{ activeBids().length }}
+          @if (activeBids().length === 1) { bid } @else { bids }
+          on this cat
+          @if (highestBidSats() !== null) {
+            <span class="cat-bids-highest">
+              (highest {{ highestBidSats()!.toLocaleString() }} sats)
+            </span>
+          }
+        </h3>
+        <table class="table table-sm cat-bids-table" data-testid="cat-bids-table">
+          <thead>
+            <tr>
+              <th scope="col">Price</th>
+              <th scope="col">Buyer</th>
+              <th scope="col">Posted</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (bid of activeBids(); track bid.id) {
+              <tr data-testid="cat-bids-row">
+                <td data-testid="cat-bids-row-price">
+                  {{ bid.bidSats.toLocaleString() }} sats
+                </td>
+                <td data-testid="cat-bids-row-buyer" class="cat-bids-buyer-cell">
+                  <code>{{ bid.buyerOrdinalsAddress.slice(0, 6) }}…{{ bid.buyerOrdinalsAddress.slice(-6) }}</code>
+                </td>
+                <td data-testid="cat-bids-row-created">
+                  <time [attr.datetime]="bid.createdAt">
+                    {{ bid.createdAt | date: 'medium' }}
+                  </time>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
       </div>
     }
     @if (isStaleOffer()) {

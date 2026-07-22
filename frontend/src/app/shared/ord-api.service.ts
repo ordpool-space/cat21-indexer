@@ -179,4 +179,32 @@ export class OrdApiService {
       { headers: { Accept: 'application/json' } },
     );
   }
+
+  /**
+   * Return the sorted-ascending, deduped list of cat numbers riding
+   * on a given UTXO. Wraps `getOutput` and normalises the ord
+   * response's `cats` array (which we type as `string[]` for the
+   * make-offer flow, but the values are numeric — ord returns cat
+   * numbers as JSON numbers).
+   *
+   * Load-bearing for the v3 listings + bids flow: the seller signs
+   * against this exact array, and the backend re-verifies against
+   * its own live ord query. If the two drift, the backend rejects
+   * with `cats-bundle-drift`.
+   *
+   * Returns `[]` for a UTXO with no cats (e.g. a plain BTC output
+   * queried by mistake). Any HTTP error propagates — callers wrap
+   * with `catchError` if they want a null fallback.
+   */
+  getCatsAtOutput(txid: string, vout: number): Observable<number[]> {
+    return this.getOutput(`${txid}:${vout}`).pipe(
+      map((out) => {
+        const raw = (out?.cats ?? []) as unknown[];
+        const nums = raw
+          .map((c) => (typeof c === 'number' ? c : Number(c)))
+          .filter((c) => Number.isInteger(c) && c >= 0);
+        return Array.from(new Set(nums)).sort((a, b) => a - b);
+      }),
+    );
+  }
 }

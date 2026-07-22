@@ -15,6 +15,7 @@ const PAY_ADDR = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx';
 const listing = (over: Partial<PersistedCat21Listing> = {}): PersistedCat21Listing => ({
   id: 'uuid-1',
   catNumber: 42,
+  cats: [42],
   network: Network.Mainnet,
   askSats: 21_000,
   payTo: PAY_ADDR as never,

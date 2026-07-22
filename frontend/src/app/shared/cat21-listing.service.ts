@@ -40,6 +40,8 @@ export type CreateListingErrorCode =
   | 'signature-too-old'
   | 'signature-in-future'
   | 'network-mismatch'
+  | 'headline-not-in-bundle'
+  | 'cats-bundle-drift'
   | 'ord-lookup-failed'
   | 'cat-not-found'
   | 'not-current-owner'
@@ -67,6 +69,14 @@ export interface PublishListingArgs {
   /** Cat's current on-chain outpoint (from `CatUtxoLookupService`). */
   catTxid: string;
   catVout: number;
+  /**
+   * Every cat currently riding on the UTXO (`OrdApiService.getCatsAtOutput`).
+   * The seller signs the full bundle so the buyer sees exactly what
+   * they're paying for — a PSBT spends the whole UTXO, so a lower-
+   * numbered bundle-mate would come with the sale even if not
+   * headlined. Backend cross-checks against ord and rejects on drift.
+   */
+  cats: number[];
 }
 
 /**
@@ -117,6 +127,7 @@ export class Cat21ListingService {
     // from the wallet's ordinalsAddress.
     const fields: ListingMessageFields = {
       catNumber: args.catNumber,
+      cats: args.cats,
       network,
       askSats: args.askSats,
       payTo: toPaymentAddress(wallet.paymentAddress),

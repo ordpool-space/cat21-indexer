@@ -50,3 +50,33 @@
     min-width: 8rem;
   }
 }
+
+.cat-bundle-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.cat-bids-panel {
+  max-width: 600px;
+  margin: 1rem auto 0;
+
+  .cat-bids-heading {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .cat-bids-highest {
+    font-weight: normal;
+    opacity: 0.8;
+  }
+
+  .cat-bids-table {
+    margin-bottom: 0;
+  }
+
+  .cat-bids-buyer-cell code {
+    font-size: 0.85rem;
+  }
+}

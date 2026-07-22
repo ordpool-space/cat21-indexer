@@ -55,6 +55,7 @@ async function setup(): Promise<{
 
 const publishArgs = () => ({
   catNumber: 42,
+  cats: [42],
   askSats: 21_000,
   catTxid: 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df',
   catVout: 0,
@@ -84,8 +85,9 @@ describe('Cat21ListingService.publishListing', () => {
     expect(walletService.signMessage).toHaveBeenCalledTimes(1);
     const signArgs = walletService.signMessage.mock.calls[0]?.[0] as { address: string; message: string };
     expect(signArgs.address).toBe(WALLET_ORDINALS);
-    expect(signArgs.message.startsWith('cat21-ask:v2\n')).toBe(true);
+    expect(signArgs.message.startsWith('cat21-ask:v3\n')).toBe(true);
     expect(signArgs.message).toContain('network=mainnet');
+    expect(signArgs.message).toContain('cats=42');
     // payTo in the message MUST be the wallet's payment address — never ordinals.
     expect(signArgs.message).toContain(`payTo=${WALLET_PAYMENT}`);
     expect(signArgs.message).not.toContain(`payTo=${WALLET_ORDINALS}`);

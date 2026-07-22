@@ -8,6 +8,7 @@ import { BuyOfferTargetCat, WalletInfo, WalletService } from 'ordpool-sdk';
 
 import { Details } from './details';
 import { ApiService } from '../shared/cat21-api';
+import { Cat21BidsService, PersistedCat21Bid } from '../shared/cat21-bids.service';
 import { Cat21ListingService } from '../shared/cat21-listing.service';
 import { CatUtxoLookupService } from '../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../shared/ord-api.service';
@@ -32,10 +33,24 @@ class ApiServiceStub {
 
 class OrdApiServiceStub {
   private ownerImpl: (n: number) => Observable<string | null> = () => EMPTY;
+  private catsAtOutputImpl: (txid: string, vout: number) => Observable<number[]> = () => of([]);
   setOwner(fn: (n: number) => Observable<string | null>) {
     this.ownerImpl = fn;
   }
+  setCatsAtOutput(fn: (txid: string, vout: number) => Observable<number[]>) {
+    this.catsAtOutputImpl = fn;
+  }
   getCurrentOwner = (n: number) => this.ownerImpl(n);
+  getCatsAtOutput = (txid: string, vout: number) => this.catsAtOutputImpl(txid, vout);
+}
+
+class BidsServiceStub {
+  private bidsImpl: (txid: string, vout: number) => Observable<PersistedCat21Bid[]> = () => of([]);
+  setBids(fn: (txid: string, vout: number) => Observable<PersistedCat21Bid[]>) {
+    this.bidsImpl = fn;
+  }
+  getBidsForOutpoint = (txid: string, vout: number) => this.bidsImpl(txid, vout);
+  deleteBid = jest.fn();
 }
 
 // Minimal target shape — details.ts only reads txid + vout off `.target`.
@@ -66,14 +81,19 @@ async function setup(opts: {
   catVout?: string;
   owner?: (n: number) => Observable<string | null>;
   currentTarget?: (n: number) => Observable<{ target: BuyOfferTargetCat; sellerAddress: string } | null>;
+  bids?: (txid: string, vout: number) => Observable<PersistedCat21Bid[]>;
+  catsAtOutput?: (txid: string, vout: number) => Observable<number[]>;
 } = {}) {
   const walletService = new WalletServiceStub();
   const api = new ApiServiceStub();
   const ordApi = new OrdApiServiceStub();
   const lookup = new LookupStub();
   const listingService = new ListingServiceStub();
+  const bidsService = new BidsServiceStub();
   if (opts.owner) ordApi.setOwner(opts.owner);
   if (opts.currentTarget) lookup.setTarget(opts.currentTarget);
+  if (opts.bids) bidsService.setBids(opts.bids);
+  if (opts.catsAtOutput) ordApi.setCatsAtOutput(opts.catsAtOutput);
 
   await TestBed.configureTestingModule({
     imports: [Details],
@@ -85,6 +105,7 @@ async function setup(opts: {
       { provide: OrdApiService, useValue: ordApi },
       { provide: CatUtxoLookupService, useValue: lookup },
       { provide: Cat21ListingService, useValue: listingService },
+      { provide: Cat21BidsService, useValue: bidsService },
     ],
   })
     .overrideComponent(Details, { set: { template: '', imports: [] } })
@@ -98,7 +119,7 @@ async function setup(opts: {
   if (opts.catVout !== undefined) fixture.componentRef.setInput('catVout', opts.catVout);
   fixture.detectChanges();
 
-  return { fixture, component: fixture.componentInstance, walletService, ordApi, api, lookup, listingService };
+  return { fixture, component: fixture.componentInstance, walletService, ordApi, api, lookup, listingService, bidsService };
 }
 
 describe('Details — sell permalink (`generatedPermalink`)', () => {
@@ -419,9 +440,10 @@ describe('Details — orderbook publish flow (sell modal checkbox → sign → P
     expect(component.publishToOrderbook()).toBe(true);
   });
 
-  it('Copy click with checkbox ON invokes listingService.publishListing with the ask + current outpoint', async () => {
+  it('Copy click with checkbox ON invokes listingService.publishListing with the ask + current outpoint + cats bundle', async () => {
     const { component, walletService, listingService } = await setup({
       currentTarget: () => of(targetAt(TXID, 0)),
+      catsAtOutput: () => of([42]),
     });
     walletService.connectedWalletSubject.next(wallet());
     for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -430,9 +452,11 @@ describe('Details — orderbook publish flow (sell modal checkbox → sign → P
     listingService.publishListing.mockReturnValue(of({ id: 'x' } as never));
 
     component.onCopyPermalinkClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
     expect(listingService.publishListing).toHaveBeenCalledTimes(1);
     expect(listingService.publishListing.mock.calls[0]?.[0]).toEqual({
       catNumber: 42,
+      cats: [42],
       askSats: 21_000,
       catTxid: TXID,
       catVout: 0,
@@ -456,6 +480,7 @@ describe('Details — orderbook publish flow (sell modal checkbox → sign → P
   it('publishListing success → orderbookState becomes "success", no error', async () => {
     const { component, walletService, listingService } = await setup({
       currentTarget: () => of(targetAt(TXID, 0)),
+      catsAtOutput: () => of([42]),
     });
     walletService.connectedWalletSubject.next(wallet());
     for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -463,7 +488,8 @@ describe('Details — orderbook publish flow (sell modal checkbox → sign → P
     listingService.publishListing.mockReturnValue(of({ id: 'x' } as never));
 
     component.onCopyPermalinkClick();
-    // Sync subscribe — of() is synchronous.
+    // Sync subscribe — of() is synchronous through the ord + service chain.
+    for (let i = 0; i < 5; i++) await Promise.resolve();
     expect(component.orderbookState()).toBe('success');
     expect(component.orderbookError()).toBeNull();
   });
@@ -471,6 +497,7 @@ describe('Details — orderbook publish flow (sell modal checkbox → sign → P
   it('publishListing error → orderbookState becomes "error", orderbookError carries {code, detail}', async () => {
     const { component, walletService, listingService } = await setup({
       currentTarget: () => of(targetAt(TXID, 0)),
+      catsAtOutput: () => of([42]),
     });
     walletService.connectedWalletSubject.next(wallet());
     for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -480,6 +507,7 @@ describe('Details — orderbook publish flow (sell modal checkbox → sign → P
     );
 
     component.onCopyPermalinkClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
     expect(component.orderbookState()).toBe('error');
     expect(component.orderbookError()).toEqual({ code: 'not-current-owner', detail: 'not owner' });
   });
@@ -564,5 +592,132 @@ describe('Details — active orderbook listing badge', () => {
   it('listingBuyQueryParams returns empty object when no active listing', async () => {
     const { component } = await setup();
     expect(component.listingBuyQueryParams()).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('Details — active bids panel (X.4)', () => {
+
+  const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';
+
+  const bidRow = (over: Partial<PersistedCat21Bid> = {}): PersistedCat21Bid => ({
+    id: 'uuid-1',
+    network: 'mainnet',
+    catTxid: REAL_TXID,
+    catVout: 0,
+    cats: [42],
+    headlineCatNumber: 42,
+    bidSats: 21_000,
+    buyerOrdinalsAddress: 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9',
+    buyerPaymentAddress: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx',
+    sellerPaymentAddress: 'bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm',
+    psbtBase64: 'cHNidP8B...',
+    createdAt: '2026-07-22T10:00:00.000Z',
+    ...over,
+  });
+
+  const setupWithBids = async (bids: PersistedCat21Bid[]) => {
+    const s = await setup({
+      catNumber: 42,
+      currentTarget: () => of(targetAt(REAL_TXID, 0)),
+      bids: () => of(bids),
+    });
+    // rxResourceFixed values update asynchronously — wait a few
+    // microtask ticks + one detectChanges cycle for the resource
+    // params observer to pick up the resolved currentTarget.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    s.fixture.detectChanges();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    return s;
+  };
+
+  it('hasBids() is false + activeBids() empty when the outpoint has no bids', async () => {
+    const { component } = await setupWithBids([]);
+    expect(component.hasBids()).toBe(false);
+    expect(component.activeBids()).toEqual([]);
+  });
+
+  it('activeBids() reflects the backend response ordering', async () => {
+    // Backend returns DESC by price; we trust that ordering.
+    const { component } = await setupWithBids([
+      bidRow({ id: 'a', bidSats: 30_000, buyerOrdinalsAddress: 'bc1p-a' }),
+      bidRow({ id: 'b', bidSats: 21_000, buyerOrdinalsAddress: 'bc1p-b' }),
+      bidRow({ id: 'c', bidSats: 15_000, buyerOrdinalsAddress: 'bc1p-c' }),
+    ]);
+    expect(component.hasBids()).toBe(true);
+    expect(component.activeBids().map((b) => b.bidSats)).toEqual([30_000, 21_000, 15_000]);
+  });
+
+  it('highestBidSats() surfaces max(bidSats) — the FOMO number', async () => {
+    const { component } = await setupWithBids([
+      bidRow({ id: 'a', bidSats: 30_000, buyerOrdinalsAddress: 'bc1p-a' }),
+      bidRow({ id: 'b', bidSats: 100_000, buyerOrdinalsAddress: 'bc1p-b' }),
+      bidRow({ id: 'c', bidSats: 15_000, buyerOrdinalsAddress: 'bc1p-c' }),
+    ]);
+    expect(component.highestBidSats()).toBe(100_000);
+  });
+
+  it('highestBidSats() is null when no bids', async () => {
+    const { component } = await setupWithBids([]);
+    expect(component.highestBidSats()).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('Details — publishListing threads the cats bundle from ord (v3 flow)', () => {
+
+  const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';
+
+  it('fetches getCatsAtOutput + calls publishListing with the cats array', async () => {
+    const { component, listingService, ordApi } = await setup({
+      catNumber: 42,
+      currentTarget: () => of(targetAt(REAL_TXID, 0)),
+      catsAtOutput: () => of([0, 42, 100]),
+    });
+    // Wait for currentTargetResource to resolve.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    const spy = jest.spyOn(listingService, 'publishListing').mockReturnValue(of({} as never));
+    const catsSpy = jest.spyOn(ordApi, 'getCatsAtOutput');
+
+    component.onAskInputChange('21000');
+    component.publishToOrderbook.set(true);
+    component.onCopyPermalinkClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(catsSpy).toHaveBeenCalledWith(REAL_TXID, 0);
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catNumber: 42,
+        cats: [0, 42, 100],
+        catTxid: REAL_TXID,
+        catVout: 0,
+        askSats: 21_000,
+      }),
+    );
+  });
+
+  it('surfaces cats-bundle-drift when the current cat isn\'t in the fetched bundle', async () => {
+    // ord reports cats [7, 100] — cat #42 (the headline) is no longer
+    // on this UTXO. Surface as `cats-bundle-drift` (same code the
+    // backend uses) and DO NOT call publishListing.
+    const { component, listingService } = await setup({
+      catNumber: 42,
+      currentTarget: () => of(targetAt(REAL_TXID, 0)),
+      catsAtOutput: () => of([7, 100]),
+    });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    const spy = jest.spyOn(listingService, 'publishListing');
+
+    component.onAskInputChange('21000');
+    component.publishToOrderbook.set(true);
+    component.onCopyPermalinkClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(component.orderbookState()).toBe('error');
+    expect(component.orderbookError()?.code).toBe('cats-bundle-drift');
   });
 });

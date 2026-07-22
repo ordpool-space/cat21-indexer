@@ -1,3 +1,4 @@
+import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, numberAttribute, signal, TemplateRef, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
@@ -13,6 +14,7 @@ import {
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
 import { ApiService } from '../shared/cat21-api';
+import { Cat21BidsService, PersistedCat21Bid } from '../shared/cat21-bids.service';
 import { Cat21ListingService, CreateListingError, PersistedCat21Listing } from '../shared/cat21-listing.service';
 import { CatUtxoLookupService } from '../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../shared/ord-api.service';
@@ -51,7 +53,7 @@ type ActionButtonState = 'enabled' | 'connect' | 'not-owner' | 'owns-it' | 'free
   selector: 'app-details',
   templateUrl: './details.html',
   styleUrl: './details.scss',
-  imports: [RouterLink, Cat21Viewer],
+  imports: [DatePipe, RouterLink, Cat21Viewer],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:keydown.ArrowLeft)': 'navigateNewer()',
@@ -66,6 +68,7 @@ export class Details {
   private modalService = inject(NgbModal);
   private catUtxoLookup = inject(CatUtxoLookupService);
   private listingService = inject(Cat21ListingService);
+  private bidsService = inject(Cat21BidsService);
 
   readonly catNumber = input(0, { transform: numberAttribute });
 
@@ -127,6 +130,35 @@ export class Details {
   });
 
   readonly activeListing = computed<PersistedCat21Listing | null>(() => this.listingResource.value() ?? null);
+
+  /**
+   * All active bids on the cat's CURRENT UTXO. Only fetched once the
+   * current outpoint has resolved (bids are keyed on outpoint, not
+   * cat number — a bid on cat #42 lives on whichever UTXO cat #42
+   * lives on RIGHT NOW). Returns [] when the outpoint hasn't
+   * resolved yet, when no bids exist, or on error (fail-quiet so a
+   * bids-service outage doesn't break the details page).
+   */
+  bidsResource = rxResourceFixed({
+    params: () => {
+      const target = this.currentTargetResource.value()?.target;
+      if (!target) return null as unknown as { txid: string; vout: number };
+      return { txid: target.txid, vout: target.vout };
+    },
+    stream: ({ params }) => {
+      if (!params) return EMPTY;
+      return this.bidsService.getBidsForOutpoint(params.txid, params.vout);
+    },
+  });
+
+  readonly activeBids = computed<PersistedCat21Bid[]>(() => this.bidsResource.value() ?? []);
+  readonly hasBids = computed<boolean>(() => this.activeBids().length > 0);
+  readonly highestBidSats = computed<number | null>(() => {
+    const bids = this.activeBids();
+    if (bids.length === 0) return null;
+    // Bids come sorted DESC by price already, but be defensive.
+    return Math.max(...bids.map((b) => b.bidSats));
+  });
 
   /**
    * Query params for the "Buy" button on the active-listing badge.
@@ -433,22 +465,48 @@ export class Details {
     }
     this.orderbookState.set('signing');
     this.orderbookError.set(null);
-    this.listingService
-      .publishListing({
-        catNumber: this.catNumber(),
-        askSats,
-        catTxid: target.txid,
-        catVout: target.vout,
-      })
-      .subscribe({
-        next: () => {
-          this.orderbookState.set('success');
-        },
-        error: (err: CreateListingError) => {
+    // Fetch the live cats-on-utxo snapshot before signing so the
+    // seller commits to the whole bundle (v3 message shape). If the
+    // /output call fails, surface as `ord-lookup-failed` — same code
+    // the backend uses for its own drift check.
+    this.ordApi.getCatsAtOutput(target.txid, target.vout).subscribe({
+      next: (cats) => {
+        if (!cats.includes(this.catNumber())) {
           this.orderbookState.set('error');
-          this.orderbookError.set(err);
-        },
-      });
+          this.orderbookError.set({
+            code: 'cats-bundle-drift',
+            detail:
+              `Cat #${this.catNumber()} is no longer on this UTXO — ord reports ` +
+              `[${cats.join(',')}]. The cat may have moved; refresh and re-list.`,
+          });
+          return;
+        }
+        this.listingService
+          .publishListing({
+            catNumber: this.catNumber(),
+            cats,
+            askSats,
+            catTxid: target.txid,
+            catVout: target.vout,
+          })
+          .subscribe({
+            next: () => {
+              this.orderbookState.set('success');
+            },
+            error: (err: CreateListingError) => {
+              this.orderbookState.set('error');
+              this.orderbookError.set(err);
+            },
+          });
+      },
+      error: (err) => {
+        this.orderbookState.set('error');
+        this.orderbookError.set({
+          code: 'ord-lookup-failed',
+          detail: `Couldn't fetch cats on this UTXO: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      },
+    });
     // Transition signing → posting happens implicitly when signMessage
     // resolves and the POST fires. We could poll for that, but the
     // signMessage RPC is opaque; the UI shows "signing…" until the
