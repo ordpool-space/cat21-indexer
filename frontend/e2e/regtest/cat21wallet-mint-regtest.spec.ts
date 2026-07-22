@@ -1405,7 +1405,12 @@ test('bid marketplace round-trip: buyer POSTs â†’ GET returns byte-equal PSBT â†
   const BID_FEE_SATS = 2000;
   const buyerPaymentAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
   const buyerReceiveAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
-  const buyerChangeAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  // Change re-uses the payment address so the DTO's `buyerPaymentAddress`
+  // matches PSBT output 2. A real wallet would use a fresh internal
+  // address and add a separate DTO field; for this round-trip the shape
+  // the marketplace ships today is one buyer address for both funding
+  // and change.
+  const buyerChangeAddress = buyerPaymentAddress;
   expect(buyerReceiveAddress).toMatch(/^bcrt1p/);
 
   // Fund the buyer with enough for price + fee + change dust.
