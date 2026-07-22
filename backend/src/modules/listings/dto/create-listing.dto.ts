@@ -1,5 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsIn,
   IsInt,
   IsString,
@@ -21,13 +24,33 @@ import { MAX_ASK_SATS } from 'ordpool-sdk/core';
  */
 export class CreateListingDto {
   @ApiProperty({
-    description: 'Cat number the listing covers. 0 = Genesis Cat.',
+    description:
+      'Headline cat number for display. Must be a member of `cats` (the SDK enforces this at ' +
+      'sign time; the backend re-verifies). 0 = Genesis Cat.',
     example: 42,
     minimum: 0,
   })
   @IsInt()
   @Min(0)
   catNumber!: number;
+
+  @ApiProperty({
+    description:
+      'Every cat currently riding on the UTXO the listing pins (`catTxid:catVout`). ' +
+      'Sorted ascending, deduped. The seller signs this exact array so the buyer sees the ' +
+      "full bundle they're paying for — a PSBT spends the whole UTXO, not individual sats. " +
+      "Backend cross-checks this against ord's `/output/<outpoint>` at insert time and " +
+      'rejects on drift with code `cats-bundle-drift`.',
+    example: [42],
+    type: [Number],
+    minItems: 1,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  cats!: number[];
 
   @ApiProperty({
     description:

@@ -13,13 +13,22 @@ export class ListingDto {
   })
   id!: string;
 
-  @ApiProperty({ description: 'Cat number the listing covers.', example: 42 })
+  @ApiProperty({ description: 'Headline cat number (member of `cats`).', example: 42 })
   catNumber!: number;
+
+  @ApiProperty({
+    description:
+      'Every cat currently on the UTXO the listing pins. Sorted ascending. Load-bearing: ' +
+      'buyer pays for the whole bundle.',
+    example: [42],
+    type: [Number],
+  })
+  cats!: number[];
 
   @ApiProperty({
     description: 'Bitcoin network the seller signed against.',
     example: 'mainnet',
-    enum: ['mainnet', 'testnet3', 'testnet4', 'regtest'],
+    enum: ['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'],
   })
   network!: string;
 

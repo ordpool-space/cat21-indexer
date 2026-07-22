@@ -40,6 +40,23 @@ export interface CatCurrentLocation {
   ordinalsAddress: string;
 }
 
+/**
+ * Response shape for ord's `/output/<outpoint>` endpoint. Only the
+ * fields the listings/bids modules care about are typed here — ord
+ * returns more (`sat_ranges`, `value`, `script_pubkey`, …) that
+ * we don't need.
+ *
+ * `cats` is the load-bearing field for v3 listings: a UTXO can carry
+ * multiple cats via consolidation of previously-minted 546-sat cat
+ * UTXOs. The seller signs a snapshot of this array; if it drifts
+ * between sign-time and accept-time, the listing is stale.
+ */
+export interface OrdOutputDetail {
+  cats: number[];
+  inscriptions: string[];
+  runes: Record<string, unknown>;
+}
+
 @Injectable()
 export class OrdClientService {
   private readonly baseUrl: string;
@@ -89,6 +106,30 @@ export class OrdClientService {
       vout: parsed.vout,
       ordinalsAddress: insc.address,
     };
+  }
+
+  /**
+   * Fetch every cat riding on a given UTXO, sorted ascending. Used
+   * by the listings module to (a) compare against the seller-signed
+   * bundle at insert time and (b) let the pruner detect bundle
+   * drift (a cat was consolidated onto or off the UTXO after the
+   * listing was signed).
+   *
+   * Returns null when ord returns 404 for the outpoint (UTXO
+   * unknown / already spent). An empty array `[]` means the UTXO
+   * exists but carries no cats — a legit outcome for regular
+   * (non-cat) UTXOs that a scanner might accidentally query.
+   */
+  async getCatsAtOutput(txid: string, vout: number): Promise<number[] | null> {
+    const out = await this.fetchJson<OrdOutputDetail>(
+      `${this.baseUrl}/output/${txid}:${vout}`,
+      true,
+    );
+    if (!out) return null;
+    if (!Array.isArray(out.cats)) return [];
+    const sorted = Array.from(new Set(out.cats.filter((c) => Number.isInteger(c) && c >= 0)))
+      .sort((a, b) => a - b);
+    return sorted;
   }
 
   private async fetchJson<T>(url: string, allow404: true): Promise<T | null>;

@@ -68,6 +68,7 @@ describe('ListingsController — error responses carry Cache-Control: no-store (
   // we mock the service anyway.
   const validDtoBody = () => ({
     catNumber: 42,
+    cats: [42],
     network: 'mainnet',
     askSats: 21_000,
     payTo: 'bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm',
@@ -104,7 +105,7 @@ describe('ListingsController — error responses carry Cache-Control: no-store (
 
   it('429 from ThrottlerGuard (6th request within window) carries no-store', async () => {
     // First 5 all "succeed" (service returns a stub), 6th trips the limit.
-    mockCreate.mockResolvedValue({ id: 'x', catNumber: 42, network: 'mainnet', askSats: 21_000, payTo: '', catTxid: '', catVout: 0, ordinalsAddress: '', signedAt: 0, signature: '', createdAt: '' });
+    mockCreate.mockResolvedValue({ id: 'x', catNumber: 42, cats: [42], network: 'mainnet', askSats: 21_000, payTo: '', catTxid: '', catVout: 0, ordinalsAddress: '', signedAt: 0, signature: '', createdAt: '' });
 
     for (let i = 0; i < 5; i++) {
       const ok = await app.inject({ method: 'POST', url: '/api/v1/listings', payload: validDtoBody() });

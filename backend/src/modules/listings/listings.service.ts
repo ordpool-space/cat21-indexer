@@ -42,6 +42,19 @@ function toSdkNetwork(name: 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 're
   }
 }
 
+/**
+ * Compare two `number[]`s as sets. Called with `cats_on_utxo` values
+ * that both sides already claim are sorted-ascending-deduped, but a
+ * malformed seller submission or an ord response drift could still
+ * trip a false positive if we relied on element-wise equality alone.
+ */
+function catsArraysEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort((x, y) => x - y);
+  const sb = [...b].sort((x, y) => x - y);
+  return sa.every((v, i) => v === sb[i]);
+}
+
 @Injectable()
 export class ListingsService {
   private readonly logger = new Logger(ListingsService.name);
@@ -52,16 +65,22 @@ export class ListingsService {
   ) {}
 
   /**
-   * Create (or overwrite) the active listing for a cat.
+   * Create (or overwrite) the active listing for a cat UTXO.
    *
    * Check order — CHEAP checks before expensive ones so a spammer
    * can't burn CPU by flooding malformed payloads:
    *
    *   1. Network match (constant equality, sub-µs).
    *   2. Anti-replay window (arithmetic).
-   *   3. BIP-322 signature verify (schnorr, ~ms).
-   *   4. On-chain cross-check via ord (network, tens of ms).
-   *   5. Upsert.
+   *   3. Headline-membership (`catNumber` ∈ `cats`).
+   *   4. BIP-322 signature verify (schnorr, ~ms).
+   *   5. On-chain cross-check via ord — TWO lookups:
+   *        a. `/output/<outpoint>` returns the live `cats` array.
+   *           If it drifts from what the seller signed, reject.
+   *        b. `/cat/N` + `/inscription/id` for the headline cat's
+   *           current owning address (proves the seller controls
+   *           the UTXO).
+   *   6. Upsert.
    *
    * Any step that fails throws `BadRequestException` with a code the
    * frontend surfaces to the seller. No partial writes.
@@ -91,12 +110,23 @@ export class ListingsService {
       });
     }
 
-    // (3) BIP-322 signature verify — schnorr, ~ms. The SDK's verify
+    // (3) Headline membership — the SDK enforces this pre-sign, but
+    //     defence in depth: a client bypassing the SDK could hand us
+    //     a headline outside the bundle to hide a lower-numbered cat.
+    if (!dto.cats.includes(dto.catNumber)) {
+      throw new BadRequestException({
+        code: 'headline-not-in-bundle',
+        detail: `catNumber ${dto.catNumber} is not a member of cats [${dto.cats.join(',')}]`,
+      });
+    }
+
+    // (4) BIP-322 signature verify — schnorr, ~ms. The SDK's verify
     //     rebuilds the canonical message from the fields; no separate
     //     builder call here.
     const verifyResult = verifyListingSignature({
       fields: {
         catNumber: dto.catNumber,
+        cats: dto.cats,
         network: toSdkNetwork(dto.network),
         askSats: dto.askSats,
         payTo: dto.payTo as never,
@@ -114,7 +144,41 @@ export class ListingsService {
       });
     }
 
-    // (4) On-chain cross-check via ord.
+    // (5a) On-chain: fetch the live cats bundle on the UTXO.
+    let liveCats: number[] | null;
+    try {
+      liveCats = await this.ordClient.getCatsAtOutput(dto.catTxid, dto.catVout);
+    } catch (err) {
+      this.logger.warn(
+        `ord /output lookup failed for ${dto.catTxid}:${dto.catVout}: ${err instanceof Error ? err.message : err}`,
+      );
+      throw new BadRequestException({
+        code: 'ord-lookup-failed',
+        detail: 'On-chain cats-bundle check could not complete. Try again in a moment.',
+      });
+    }
+    if (liveCats === null || liveCats.length === 0) {
+      throw new BadRequestException({
+        code: 'cat-not-found',
+        detail:
+          `UTXO ${dto.catTxid}:${dto.catVout} carries no cats on ord (already spent, ` +
+          `unknown, or never held a cat). If the cat just moved, re-sign against the ` +
+          `new outpoint.`,
+      });
+    }
+    if (!catsArraysEqual(liveCats, dto.cats)) {
+      throw new BadRequestException({
+        code: 'cats-bundle-drift',
+        detail:
+          `You signed for cats=[${dto.cats.join(',')}] but the UTXO now carries ` +
+          `[${liveCats.join(',')}]. Re-sign against the current bundle.`,
+      });
+    }
+
+    // (5b) On-chain: cross-check that the seller actually controls
+    //      the UTXO. The headline cat's current owner is the whole
+    //      UTXO's owner (all cats on one UTXO share one spending
+    //      key).
     let current;
     try {
       current = await this.ordClient.getCatCurrentLocation(dto.catNumber);
@@ -149,10 +213,12 @@ export class ListingsService {
       });
     }
 
-    // (5) Upsert. cat_number is unique — a re-listing at a new price
+    // (6) Upsert. UTXO uniqueness — a re-listing at a new price
     //     replaces the old row atomically.
+    const catsSorted = [...new Set(dto.cats)].sort((a, b) => a - b);
     const row = {
       catNumber: dto.catNumber,
+      cats: catsSorted,
       network: dto.network,
       askSats: dto.askSats,
       payTo: dto.payTo,
@@ -164,14 +230,26 @@ export class ListingsService {
     };
     await this.drizzle.db
       .insert(listings)
-      .values(row)
+      .values({
+        catNumber: row.catNumber,
+        catsOnUtxo: row.cats,
+        headlineCatNumber: row.catNumber,
+        network: row.network,
+        askSats: row.askSats,
+        payTo: row.payTo,
+        catTxid: row.catTxid,
+        catVout: row.catVout,
+        ordinalsAddress: row.ordinalsAddress,
+        signedAt: row.signedAt,
+        signature: row.signature,
+      })
       .onDuplicateKeyUpdate({
         set: {
-          network: row.network,
+          catNumber: row.catNumber,
+          catsOnUtxo: row.cats,
+          headlineCatNumber: row.catNumber,
           askSats: row.askSats,
           payTo: row.payTo,
-          catTxid: row.catTxid,
-          catVout: row.catVout,
           ordinalsAddress: row.ordinalsAddress,
           signedAt: row.signedAt,
           signature: row.signature,
@@ -180,11 +258,11 @@ export class ListingsService {
 
     // Read back — MySQL/mysql2 doesn't return the inserted row on
     // ON DUPLICATE KEY UPDATE, and we need `id` + `createdAt` for the
-    // response.
-    const persisted = await this.findByCatNumber(dto.catNumber);
+    // response. Query by the new uniqueness key (network + outpoint).
+    const persisted = await this.findByOutpoint(dto.network, dto.catTxid, dto.catVout);
     if (!persisted) {
       // Would only happen under concurrent-delete with a pruner run —
-      // return 500-ish to force the client to retry.
+      // return 400-ish to force the client to retry.
       throw new BadRequestException({
         code: 'persist-race',
         detail: 'Listing was accepted but disappeared before read-back. Retry.',
@@ -194,14 +272,41 @@ export class ListingsService {
   }
 
   /**
-   * Return the active listing for a specific cat, or null if none.
-   * "Active" = present in the table — the pruner removes stale ones.
+   * Return the active listing for a specific cat. Under v3 the same
+   * cat can appear as headline OR as a bundle member — a lookup by
+   * cat number resolves the FIRST listing where the cat is on the
+   * UTXO. Used by the frontend's per-cat details badge.
    */
   async findByCatNumber(catNumber: number): Promise<ListingDto | null> {
+    // Fast path: headline match. Vast majority of the time, a lookup
+    // for cat #42 wants the listing where 42 IS the headline. If a
+    // seller listed 42 as a bundle-mate of a lower cat, the headline
+    // lookup won't find it — the frontend can call findByOutpoint
+    // once it has the outpoint from ord.
     const rows = await this.drizzle.db
       .select()
       .from(listings)
       .where(eq(listings.catNumber, catNumber))
+      .limit(1);
+    if (rows.length === 0) return null;
+    return this.rowToDto(rows[0]);
+  }
+
+  /**
+   * Look up the listing at a specific UTXO (network + outpoint).
+   * The v3 uniqueness key. Used post-insert for read-back.
+   */
+  async findByOutpoint(network: string, catTxid: string, catVout: number): Promise<ListingDto | null> {
+    const rows = await this.drizzle.db
+      .select()
+      .from(listings)
+      .where(
+        and(
+          eq(listings.network, network),
+          eq(listings.catTxid, catTxid),
+          eq(listings.catVout, catVout),
+        ),
+      )
       .limit(1);
     if (rows.length === 0) return null;
     return this.rowToDto(rows[0]);
@@ -240,8 +345,8 @@ export class ListingsService {
   /**
    * Remove a listing by cat number (server-side; no signature
    * required). Used by an eventual seller-side cancel flow. The
-   * pruner uses `deleteById` instead to avoid the read-then-delete
-   * race that would kill a freshly-upserted row.
+   * pruner uses `deleteByIdIfUnchanged` instead to avoid the
+   * read-then-delete race that would kill a freshly-upserted row.
    */
   async deleteByCatNumber(catNumber: number): Promise<void> {
     await this.drizzle.db.delete(listings).where(eq(listings.catNumber, catNumber));
@@ -269,6 +374,7 @@ export class ListingsService {
     return {
       id: row.id,
       catNumber: row.catNumber,
+      cats: row.catsOnUtxo,
       network: row.network,
       askSats: row.askSats,
       payTo: row.payTo,

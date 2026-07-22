@@ -85,6 +85,20 @@
       "when": 1784505700000,
       "tag": "0011_add_listings_network",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1784678400000,
+      "tag": "0012_listings_v3_cats_bundle",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1784678500000,
+      "tag": "0013_add_bids_table",
+      "breakpoints": true
     }
   ]
 }

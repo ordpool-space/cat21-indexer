@@ -5,6 +5,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { validate } from './env.config';
 import { DrizzleModule } from './modules/shared/drizzle/drizzle.module';
+import { BidsModule } from './modules/bids/bids.module';
 import { CatsModule } from './modules/cats/cats.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { SyncModule } from './modules/sync/sync.module';
@@ -23,6 +24,7 @@ import { SyncModule } from './modules/sync/sync.module';
     CatsModule,
     SyncModule,
     ListingsModule,
+    BidsModule,
   ],
   controllers: [AppController],
 })
