@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { base64, hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { and, count, desc, eq } from 'drizzle-orm';
@@ -13,6 +12,20 @@ import { BidDto, PaginatedBidsDto } from './dto/bid.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
 
 type BackendNetworkString = 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest';
+
+/**
+ * Read BACKEND_NETWORK straight from process.env. Same rationale as
+ * ListingsService — bypasses the NestJS ConfigService plainToClass
+ * chain that mis-resolves in some CI paths.
+ */
+function readBackendNetworkFromEnv(): BackendNetworkString {
+  const raw = process.env.BACKEND_NETWORK;
+  const allowed: BackendNetworkString[] = ['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'];
+  if (raw && allowed.includes(raw as BackendNetworkString)) {
+    return raw as BackendNetworkString;
+  }
+  return 'mainnet';
+}
 
 /**
  * Marketplace spam floor. Bids below this are rejected outright — a
@@ -74,14 +87,13 @@ function scriptToAddress(script: Uint8Array, network: Network): string | null {
 @Injectable()
 export class BidsService {
   private readonly logger = new Logger(BidsService.name);
-  private readonly backendNetwork: BackendNetworkString;
+  private readonly backendNetwork: BackendNetworkString = readBackendNetworkFromEnv();
 
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly ordClient: OrdClientService,
-    configService: ConfigService,
   ) {
-    this.backendNetwork = configService.get<BackendNetworkString>('this.backendNetwork', 'mainnet');
+    this.logger.log(`BidsService: BACKEND_NETWORK = ${this.backendNetwork}`);
   }
 
   /**

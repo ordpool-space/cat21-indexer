@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { and, count, desc, eq } from 'drizzle-orm';
 import { Network, verifyListingSignature } from 'ordpool-sdk/core';
 
@@ -55,17 +54,33 @@ function catsArraysEqual(a: number[], b: number[]): boolean {
   return sa.every((v, i) => v === sb[i]);
 }
 
+/**
+ * Read BACKEND_NETWORK straight from process.env (default `mainnet`).
+ * NestJS ConfigService goes through a plainToClass/validateSync chain
+ * that in one CI run failed to surface the env override to
+ * `ConfigService.get()` — root cause unknown, but process.env has no
+ * such indirection so it's the safer read. Same pattern the ord
+ * client uses for ORD_API_URL further down the module tree.
+ */
+function readBackendNetworkFromEnv(): BackendNetworkString {
+  const raw = process.env.BACKEND_NETWORK;
+  const allowed: BackendNetworkString[] = ['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'];
+  if (raw && allowed.includes(raw as BackendNetworkString)) {
+    return raw as BackendNetworkString;
+  }
+  return 'mainnet';
+}
+
 @Injectable()
 export class ListingsService {
   private readonly logger = new Logger(ListingsService.name);
-  private readonly backendNetwork: BackendNetworkString;
+  private readonly backendNetwork: BackendNetworkString = readBackendNetworkFromEnv();
 
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly ordClient: OrdClientService,
-    configService: ConfigService,
   ) {
-    this.backendNetwork = configService.get<BackendNetworkString>('BACKEND_NETWORK', 'mainnet');
+    this.logger.log(`ListingsService: BACKEND_NETWORK = ${this.backendNetwork}`);
   }
 
   /**
