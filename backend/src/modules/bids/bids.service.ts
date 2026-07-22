@@ -102,6 +102,10 @@ export class BidsService {
     this.logger.log(`BidsService: BACKEND_NETWORK = ${this.backendNetwork}`);
   }
 
+  get network(): BackendNetworkString {
+    return this.backendNetwork;
+  }
+
   /**
    * Post (or overwrite) a buyer's bid on a cat UTXO.
    *

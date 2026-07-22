@@ -104,7 +104,7 @@ export class BidsController {
     @Param('catVout', ParseIntPipe) catVout: number,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<BidDto[]> {
-    const rows = await this.bids.findByOutpoint('mainnet', catTxid, catVout);
+    const rows = await this.bids.findByOutpoint(this.bids.network, catTxid, catVout);
     reply.header('Cache-Control', SINGLE_BID_CACHE_CONTROL);
     return rows;
   }
@@ -146,7 +146,7 @@ export class BidsController {
     @Query('buyer') buyerOrdinalsAddress: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    await this.bids.deleteByOutpointAndBuyer('mainnet', catTxid, catVout, buyerOrdinalsAddress);
+    await this.bids.deleteByOutpointAndBuyer(this.bids.network, catTxid, catVout, buyerOrdinalsAddress);
     reply.header('Cache-Control', NO_STORE);
   }
 }
