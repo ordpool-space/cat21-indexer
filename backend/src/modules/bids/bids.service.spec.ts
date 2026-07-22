@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { BidsService } from './bids.service';
+import { BidsService, scriptToAddress } from './bids.service';
 
 // ---------------------------------------------------------------------------
 // This spec exercises the service's flow-control layer. The heavy lifts are

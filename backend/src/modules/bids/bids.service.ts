@@ -52,14 +52,20 @@ function toSdkNetwork(name: BackendNetworkString): Network {
   }
 }
 
+// Regtest uses testnet's key/script params but its own bech32 HRP `bcrt`.
+// @scure/btc-signer only ships NETWORK and TEST_NETWORK (both bech32=`tb`
+// on the test side), so we clone TEST_NETWORK and override the HRP.
+const REGTEST_NETWORK = { ...btc.TEST_NETWORK, bech32: 'bcrt' };
+
 function toScureNetwork(n: Network) {
   switch (n) {
     case Network.Mainnet: return btc.NETWORK;
     case Network.Testnet3:
     case Network.Testnet4:
     case Network.Signet:
-    case Network.Regtest:
       return btc.TEST_NETWORK;
+    case Network.Regtest:
+      return REGTEST_NETWORK;
   }
 }
 
@@ -75,7 +81,7 @@ function catsArraysEqual(a: number[], b: number[]): boolean {
  * network. Wraps scure's OutScript.decode + Address.encode. Returns
  * null on scripts we can't render (OP_RETURN, non-standard scripts).
  */
-function scriptToAddress(script: Uint8Array, network: Network): string | null {
+export function scriptToAddress(script: Uint8Array, network: Network): string | null {
   try {
     const decoded = btc.OutScript.decode(script);
     return btc.Address(toScureNetwork(network)).encode(decoded);
