@@ -5,6 +5,7 @@
 </p>
 
 @if (blockResource.value(); as data) {
+  <h2>Cats</h2>
   <app-cat-gallery [catNumbers]="catNumbers()" emptyMessage="No cats minted in this block." />
 
   @if (currentPage() > 0 || hasMore()) {
