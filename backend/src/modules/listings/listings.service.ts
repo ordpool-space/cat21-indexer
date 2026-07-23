@@ -2,9 +2,9 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { and, count, desc, eq } from 'drizzle-orm';
 import { verifyListingSignature } from 'ordpool-sdk/core';
 
+import { catsArraysEqual } from '../shared/array-utils';
 import {
   BackendNetworkString,
-  catsArraysEqual,
   readBackendNetworkFromEnv,
   toSdkNetwork,
 } from '../shared/backend-network';

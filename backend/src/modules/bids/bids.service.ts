@@ -4,9 +4,9 @@ import * as btc from '@scure/btc-signer';
 import { and, count, desc, eq } from 'drizzle-orm';
 import { CAT21_POSTAGE_SATS, Network, toScureNetwork, validateCat21BuyOfferPsbt } from 'ordpool-sdk/core';
 
+import { catsArraysEqual } from '../shared/array-utils';
 import {
   BackendNetworkString,
-  catsArraysEqual,
   readBackendNetworkFromEnv,
   toSdkNetwork,
 } from '../shared/backend-network';
