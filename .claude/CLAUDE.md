@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**E2E work:** general Playwright rules (data-testid first, click instead of `goto`, wait on states, ordpool-specific regtest / wallet-load) live at workspace root: [`~/Work/ordpool/E2E_BEST_PRACTICES.md`](../../E2E_BEST_PRACTICES.md). Read it before touching any spec.
+
 ## Overview
 
 Two independent projects (native CLIs):
