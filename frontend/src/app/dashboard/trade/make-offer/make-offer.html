@@ -322,6 +322,7 @@
       class="btn btn-primary mt-3"
       data-testid="make-offer-cta"
       [disabled]="!canCreateOffer() || state() === 'signing'"
+      [attr.aria-busy]="state() === 'signing'"
       (click)="onCreateOfferClick()">
       @if (state() === 'signing') {
         Signing offer…

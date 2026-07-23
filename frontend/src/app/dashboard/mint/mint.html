@@ -147,8 +147,8 @@
     }
 
     @if (viableRows().length > 0) {
-      <details class="mint-expert" [open]="pickerOpenByDefault()">
-        <summary>Choose a different funding source</summary>
+      <details class="mint-expert" [open]="pickerOpenByDefault()" data-testid="mint-expert">
+        <summary data-testid="mint-expert-summary">Choose a different funding source</summary>
         <p class="mint-expert-intro">
           We auto-pick the best source we can find. If you want to use a
           specific one — for example to spend a particular UTXO — pick
@@ -161,7 +161,9 @@
             <li class="mint-utxo-row"
                 [class.mint-utxo-row-selected]="row === selectedRow()"
                 [class.mint-utxo-row-assets]="row.bucket === 'assets'"
-                [class.mint-utxo-row-clean]="row.bucket === 'clean'">
+                [class.mint-utxo-row-clean]="row.bucket === 'clean'"
+                [attr.data-testid]="'mint-utxo-row-' + row.bucket"
+                [attr.data-outpoint]="row.utxo.txid + ':' + row.utxo.vout">
               @if (row.bucket === 'assets') {
                 <button type="button" class="mint-utxo-pick mint-utxo-pick-override" (click)="selectUtxo(row)">
                   @if (row === selectedRow()) { ✓ Selected } @else { Use anyway }

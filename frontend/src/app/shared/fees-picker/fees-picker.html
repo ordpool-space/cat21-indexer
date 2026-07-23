@@ -1,4 +1,4 @@
-<div class="fees-picker">
+<div class="fees-picker" data-testid="fees-picker">
   <div class="tier-row">
     @for (t of tiers; track t.key) {
       <button
@@ -7,6 +7,8 @@
         [class.tier-btn-active]="activeTier() === t.key"
         [disabled]="!fees()"
         (click)="pickTier(t)"
+        [attr.data-testid]="'fees-picker-tier-' + t.key"
+        [attr.data-active]="activeTier() === t.key"
       >
         <span class="tier-label">{{ t.label }}</span>
         <span class="tier-rate">{{ fees() ? (fees()![t.payloadKey] | number:'1.0-2') : '…' }} sat/vB</span>
@@ -24,6 +26,7 @@
       [ngModel]="manualInput()"
       (ngModelChange)="onManualInputChange($event)"
       [attr.aria-label]="'Fee rate in sat/vB'"
+      data-testid="fees-picker-manual-input"
     >
     <span class="manual-unit">sat/vB</span>
   </label>

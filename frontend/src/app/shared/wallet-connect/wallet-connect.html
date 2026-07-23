@@ -49,6 +49,7 @@
     type="button"
     class="wallet-button wallet-button-connected"
     [class.wallet-button-network-mismatch]="networkMismatch()"
+    data-testid="wallet-connected-btn"
     [ngbPopover]="popContent"
     [popoverTitle]="popTitle"
     [autoClose]="'outside'"
@@ -77,12 +78,14 @@
     }
     <div class="addr-row">
       <div class="addr-label">Ordinals (where your cats live)</div>
-      <code class="addr-value" [title]="wallet.ordinalsAddress">{{ shortAddress(wallet.ordinalsAddress) }}</code>
+      <code class="addr-value" [title]="wallet.ordinalsAddress" data-testid="wallet-ordinals-address">{{ shortAddress(wallet.ordinalsAddress) }}</code>
+      <span class="visually-hidden" data-testid="wallet-ordinals-address-full">{{ wallet.ordinalsAddress }}</span>
       <button type="button" class="copy-btn" (click)="copyToClipboard(wallet.ordinalsAddress)" title="Copy">copy</button>
     </div>
     <div class="addr-row">
       <div class="addr-label">Payment</div>
-      <code class="addr-value" [title]="wallet.paymentAddress">{{ shortAddress(wallet.paymentAddress) }}</code>
+      <code class="addr-value" [title]="wallet.paymentAddress" data-testid="wallet-payment-address">{{ shortAddress(wallet.paymentAddress) }}</code>
+      <span class="visually-hidden" data-testid="wallet-payment-address-full">{{ wallet.paymentAddress }}</span>
       <button type="button" class="copy-btn" (click)="copyToClipboard(wallet.paymentAddress)" title="Copy">copy</button>
     </div>
     <app-pending-cats [addresses]="[wallet.ordinalsAddress, wallet.paymentAddress]" />
@@ -90,7 +93,7 @@
     <button type="button" class="disconnect-btn" (click)="disconnect(walletPopover)">Disconnect</button>
   </ng-template>
 } @else {
-  <button type="button" class="wallet-button wallet-button-connect" (click)="open()">
+  <button type="button" class="wallet-button wallet-button-connect" (click)="open()" data-testid="wallet-connect-btn">
     Connect wallet
   </button>
 }

@@ -27,7 +27,14 @@ export default defineConfig({
   // is the right primitive; transient browser flakes get investigated
   // and fixed rather than papered over with a retry.
   retries: 0,
-  timeout: 480_000,
+  // Default budget for a regtest-touching test: chain mine + electrs sync
+  // + wallet approval popup + mint/broadcast is ~3-6 min end-to-end. 7 min
+  // gives ~1 min of headroom for CI flakiness. Individual quick tests
+  // (route assertions, non-broadcast flows) tighten via
+  // `test('name', { timeout: N }, ...)` in the spec declaration —
+  // scattered `test.setTimeout(...)` calls inside test bodies are the
+  // pattern E2E_BEST_PRACTICES.md rule 10 rules out.
+  timeout: 420_000,
   expect: {
     timeout: 30_000,
   },

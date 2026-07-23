@@ -12,6 +12,7 @@ import {
   getTx,
 } from './sdk-lib/regtest-helpers';
 import { waitForApprovalPopup } from './sdk-lib/approval-popup';
+import { installContextErrorGuard } from './lib/browser-error-guard';
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint via CAT-21 wallet.
@@ -43,6 +44,34 @@ import { waitForApprovalPopup } from './sdk-lib/approval-popup';
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
 const MINT_PATH = '/dashboard/mint';
 
+/**
+ * Note on `.catch(() => undefined | null)` usage below:
+ *
+ * E2E_BEST_PRACTICES.md rule 8 bans SILENT ASSERTION FAILURES like
+ * `.textContent().catch(() => '')` on a stable test-id — that shape
+ * would return the sentinel string and hide a stale-testid regression.
+ *
+ * The catches in this spec are structurally different:
+ *
+ *   1. **Optional wallet-approval popups.** Some wallet approvals only
+ *      fire on cold starts, or after a page reload, or per-wallet.
+ *      `waitForApprovalPopup(...).catch(() => null)` + `if (popup)` is
+ *      the intended shape — "if the wallet asked to reapprove, click
+ *      through; otherwise proceed". Not an assertion, not silent.
+ *
+ *   2. **Failure-path diagnostics.** When a test's happy path throws,
+ *      the `catch (err)` block collects `getByTestId(...).textContent()
+ *      .catch(() => null)` / `.getAttribute(...).catch(() => null)`
+ *      to log debug state BEFORE `throw err`. Masking these secondary
+ *      accessors with `catch` prevents them from replacing the
+ *      original failure with a rendering-race noise-error.
+ *
+ *   3. **Cleanup in `finally`.** `page.close().catch(() => undefined)`
+ *      / `fetch('/admin/fees/reset').catch(() => undefined)` at the
+ *      end of a test can't be allowed to blow up and hide the actual
+ *      assertion outcome.
+ */
+
 const TEST_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const TEST_PASSWORD = 'correct-horse-battery-staple-Tr0ub4dor-9876';
 
@@ -53,6 +82,7 @@ const RESULTS_DIR = path.resolve(__dirname, '../../test-results');
 
 let context: BrowserContext;
 let extensionId: string;
+let browserErrorGuard: ReturnType<typeof installContextErrorGuard>;
 
 // Shared state across `test()` blocks. Also persisted to a tempfile so
 // that if Playwright restarts the worker (e.g. after a browser-close
@@ -152,6 +182,21 @@ test.beforeAll(async () => {
     viewport: { width: 1280, height: 900 },
   });
 
+  // Auto-fail any test whose page emits an uncaught JS exception or
+  // console.error. Hooks every page the context spawns via context.on
+  // ('page'), so tests don't repeat the wiring at each newPage() site.
+  // Ignores narrow, must-be-audited noise: browser-side network errors
+  // to the mocked electrs endpoints during pre-serve wait windows.
+  browserErrorGuard = installContextErrorGuard(context, {
+    ignore: [
+      // The frontend loads before the electrs stub is fully ready in
+      // some race windows; the transient fetch errors are recovered
+      // by the SDK's retry helpers and don't reflect a real bug.
+      /ERR_CONNECTION_REFUSED/,
+      /Failed to load resource/,
+    ],
+  });
+
   let [worker] = context.serviceWorkers();
   if (!worker) {
     worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
@@ -164,18 +209,24 @@ test.beforeAll(async () => {
   await primer.close();
 });
 
+test.beforeEach(() => {
+  browserErrorGuard?.resetPerTest();
+});
+
+test.afterEach(() => {
+  browserErrorGuard?.assertClean();
+});
+
 test.afterAll(async () => {
   await context?.close();
 });
 
-test('cat21-wallet appears in the picker and the connect approval round-trips', async () => {
-  test.setTimeout(180_000);
-
+test('cat21-wallet appears in the picker and the connect approval round-trips', { timeout: 180_000 }, async () => {
   const page = await context.newPage();
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
   await shot(page, '01-page-loaded');
 
-  const cta = page.locator('[data-testid="mint-cta"]');
+  const cta = page.getByTestId('mint-cta');
   await expect(cta).toBeVisible({ timeout: 30_000 });
 
   // CRITICAL ordering — snapshot existing pages BEFORE the connect
@@ -185,7 +236,7 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   // synchronously the same way.
   const knownPagesBeforeConnect = new Set(context.pages());
 
-  await page.locator('button.wallet-button-connect').first().click();
+  await page.getByTestId('wallet-connect-btn').first().click();
 
   // Picker modal — CAT-21 wallet sits in the "installed" section at
   // the top of the modal. The wallet card isn't a `<button>` element
@@ -233,7 +284,7 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   // address inside a `<code>` — it must now start with `bcrt1q…`
   // instead of `bc1q…`. Pinning this surfaces a connector
   // regression immediately.
-  const noUtxos = page.locator('[data-testid="mint-no-utxos"]');
+  const noUtxos = page.getByTestId('mint-no-utxos');
   await expect(noUtxos).toBeVisible({ timeout: 60_000 });
   const paymentCode = noUtxos.locator('code').first();
   await expect(paymentCode).toBeVisible({ timeout: 30_000 });
@@ -278,12 +329,12 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   await shot(page, '05-after-fund-reload');
 
   // Wait for found-funds, set fee, click Mint.
-  const foundFunds = page.locator('[data-testid="mint-found-funds"]');
+  const foundFunds = page.getByTestId('mint-found-funds');
   await expect(foundFunds).toBeVisible({ timeout: 90_000 });
-  const manualInput = page.locator('.fees-picker .manual-input');
+  const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
-  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  const mintBtn = page.getByTestId('mint-btn');
   await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
   await shot(page, '06-ready-to-mint');
 
@@ -304,7 +355,7 @@ test('cat21-wallet appears in the picker and the connect approval round-trips', 
   await clickApprovalButton(approvalSign);
   await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
-  const successCard = page.locator('[data-testid="mint-success"]');
+  const successCard = page.getByTestId('mint-success');
   await expect(successCard).toBeVisible({ timeout: 90_000 });
   await shot(page, '08-success');
   const successHref = await successCard.locator('a').first().getAttribute('href');
@@ -376,17 +427,17 @@ async function cat21walletMintAtRate(opts: {
     }
 
     if (opts.mockFeesAsHigh) {
-      const buttons = page.locator('.fees-picker .tier-btn');
+      const buttons = page.locator('[data-testid^="fees-picker-tier-"]');
       await expect(buttons).toHaveCount(4, { timeout: 30_000 });
       await expect(buttons.nth(0)).toContainText('100', { timeout: 10_000 });
     }
 
-    const manualInput = page.locator('.fees-picker .manual-input');
+    const manualInput = page.getByTestId('fees-picker-manual-input');
     await manualInput.fill(String(opts.rate));
     await manualInput.press('Tab');
-    const foundFunds = page.locator('[data-testid="mint-found-funds"]');
+    const foundFunds = page.getByTestId('mint-found-funds');
     await expect(foundFunds).toBeVisible({ timeout: 90_000 });
-    const mintBtn = page.locator('[data-testid="mint-btn"]');
+    const mintBtn = page.getByTestId('mint-btn');
     await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
 
     const knownSign = new Set(context.pages());
@@ -405,7 +456,7 @@ async function cat21walletMintAtRate(opts: {
     await clickApprovalButton(sign);
     await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
-    const successCard = page.locator('[data-testid="mint-success"]');
+    const successCard = page.getByTestId('mint-success');
     await expect(successCard).toBeVisible({ timeout: 90_000 });
     const successHref = await successCard.locator('a').first().getAttribute('href');
     const broadcastTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
@@ -432,7 +483,6 @@ async function cat21walletMintAtRate(opts: {
 }
 
 test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on CAT-21 wallet', async () => {
-  test.setTimeout(420_000);
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const SMALL_FUND_SATS = 15_000;
@@ -492,20 +542,20 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
   }
 
   // Expand picker if not auto-open.
-  const pickerSummary = page.locator('details.mint-expert > summary').first();
+  const pickerSummary = page.getByTestId('mint-expert-summary').first();
   await expect(pickerSummary).toBeVisible({ timeout: 60_000 });
-  if ((await page.locator('details.mint-expert[open]').count()) === 0) {
+  if ((await page.locator('details[data-testid="mint-expert"][open]').count()) === 0) {
     await pickerSummary.click();
   }
 
   // Asset row + override.
-  const assetRow = page.locator('li.mint-utxo-row-assets').filter({ hasText: catOutpoint }).first();
+  const assetRow = page.getByTestId('mint-utxo-row-assets').filter({ hasText: catOutpoint }).first();
   await expect(assetRow).toBeVisible({ timeout: 45_000 });
   const overrideBtn = assetRow.locator('.mint-utxo-pick-override');
   await expect(overrideBtn).toBeVisible();
   await overrideBtn.click();
 
-  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  const mintBtn = page.getByTestId('mint-btn');
   await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
   const knownSign = new Set(context.pages());
   await mintBtn.click();
@@ -523,7 +573,7 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
   await clickApprovalButton(sign);
   await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
-  const successCard = page.locator('[data-testid="mint-success"]');
+  const successCard = page.getByTestId('mint-success');
   await expect(successCard).toBeVisible({ timeout: 90_000 });
   const successHref = await successCard.locator('a').first().getAttribute('href');
   const broadcastTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
@@ -548,19 +598,16 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
 });
 
 test('manual override: typing 100 mints a "purple cat" via CAT-21 wallet', async () => {
-  test.setTimeout(420_000);
   const { rate } = await cat21walletMintAtRate({ rate: 100, scenarioLabel: 'purple' });
   expect(Math.abs(rate - 100)).toBeLessThan(1);
 });
 
 test('manual override: typing 1 while the picker suggests 100 — low rate wins on CAT-21 wallet', async () => {
-  test.setTimeout(420_000);
   const { rate } = await cat21walletMintAtRate({ rate: 1, scenarioLabel: 'hot-mempool', mockFeesAsHigh: true });
   expect(Math.abs(rate - 1)).toBeLessThan(1);
 });
 
-test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
-  test.setTimeout(180_000);
+test('sign-popup cancel keeps state coherent on CAT-21 wallet', { timeout: 180_000 }, async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
   rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
@@ -580,10 +627,10 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
     await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
   }
 
-  const manualInput = page.locator('.fees-picker .manual-input');
+  const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
-  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  const mintBtn = page.getByTestId('mint-btn');
   await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
 
   const knownSign = new Set(context.pages());
@@ -611,11 +658,10 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
   // fire async. Bounded 2s pause is a documented last-resort per
   // ~/Work/ordpool/E2E_BEST_PRACTICES.md §8.
   await page.waitForTimeout(2_000);
-  await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
+  await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });
 
-test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake success)', async () => {
-  test.setTimeout(240_000);
+test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake success)', { timeout: 240_000 }, async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
   rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
@@ -647,10 +693,10 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
     await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
   }
 
-  const manualInput = page.locator('.fees-picker .manual-input');
+  const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
-  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  const mintBtn = page.getByTestId('mint-btn');
   await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
 
   const knownSign = new Set(context.pages());
@@ -669,9 +715,9 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
   await clickApprovalButton(sign);
   await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
-  const errorAlert = page.locator('[data-testid="mint-error"]');
+  const errorAlert = page.getByTestId('mint-error');
   await expect(errorAlert).toBeVisible({ timeout: 60_000 });
-  await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
+  await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });
 
 
@@ -706,15 +752,16 @@ async function ensureSellerOrdinalsAddress(): Promise<string> {
   if (sellerOrdinalsAddress) return sellerOrdinalsAddress;
   const page = await context.newPage();
   await page.goto(FRONTEND_URL, { waitUntil: 'domcontentloaded' });
-  const walletBtn = page.locator('button.wallet-button-connected');
+  const walletBtn = page.getByTestId('wallet-connected-btn');
   await expect(walletBtn).toBeVisible({ timeout: 30_000 });
   await walletBtn.click();
-  // The popover renders two `code.addr-value` elements — ordinals first,
-  // then payment. The full address lives on the `title` attribute
-  // (the visible text is truncated).
-  const ordinalsCode = page.locator('code.addr-value').first();
-  await expect(ordinalsCode).toBeVisible({ timeout: 10_000 });
-  const addr = (await ordinalsCode.getAttribute('title'))?.trim();
+  // The popover renders a hidden span with the full address (the visible
+  // <code> is truncated for humans; the testid split from
+  // E2E_BEST_PRACTICES.md rule 12 lands the untruncated value on a
+  // visually-hidden sibling for E2E consumption).
+  const ordinalsCode = page.getByTestId('wallet-ordinals-address-full');
+  await expect(ordinalsCode).toBeAttached({ timeout: 10_000 });
+  const addr = (await ordinalsCode.textContent())?.trim();
   if (!addr) throw new Error('could not extract connected wallet ordinals address from popover');
   sellerOrdinalsAddress = addr;
   console.log(`[cat21wallet] connected wallet ordinals address = ${addr}`);
@@ -799,8 +846,7 @@ async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress
   });
 }
 
-test('/cat/N: three action buttons + Sell modal generates the shareable permalink', async () => {
-  test.setTimeout(120_000);
+test('/cat/N: three action buttons + Sell modal generates the shareable permalink', { timeout: 120_000 }, async () => {
   const owner = await ensureSellerOrdinalsAddress();
   const N = CAT_NUMBER_FOR_UI_TEST;
   const page = await context.newPage();
@@ -845,7 +891,6 @@ test('/cat/N: three action buttons + Sell modal generates the shareable permalin
 });
 
 test('/cat/N?ask=X: owner-variant ask banner is visible on the seller\'s own link', async () => {
-  test.setTimeout(60_000);
   const owner = await ensureSellerOrdinalsAddress();
   const N = CAT_NUMBER_FOR_UI_TEST;
   const page = await context.newPage();
@@ -859,8 +904,7 @@ test('/cat/N?ask=X: owner-variant ask banner is visible on the seller\'s own lin
   await page.close();
 });
 
-test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask" banner surfaces prefill intent', async () => {
-  test.setTimeout(60_000);
+test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask" banner surfaces prefill intent', { timeout: 60_000 }, async () => {
   const N = CAT_NUMBER_FOR_UI_TEST;
   const page = await context.newPage();
 
@@ -880,8 +924,7 @@ test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask
   await page.close();
 });
 
-test('/dashboard/transfer?catNumber=X: page loads and the connected-wallet heading is visible', async () => {
-  test.setTimeout(60_000);
+test('/dashboard/transfer?catNumber=X: page loads and the connected-wallet heading is visible', { timeout: 60_000 }, async () => {
   const N = CAT_NUMBER_FOR_UI_TEST;
   const page = await context.newPage();
 
@@ -945,8 +988,7 @@ function hexDecode(hexStr: string): Uint8Array {
   return out;
 }
 
-test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves on-chain', async () => {
-  test.setTimeout(240_000);
+test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves on-chain', { timeout: 240_000 }, async () => {
   if (!sharedMintTxid) throw new Error('mint test must have set sharedMintTxid');
   if (!sharedPaymentAddress) throw new Error('mint test must have set sharedPaymentAddress');
 
@@ -1152,8 +1194,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 // working through ord.
 // ============================================================
 
-test('full transfer round-trip: fresh mint → transfer via URL → cat moves on-chain', async () => {
-  test.setTimeout(240_000);
+test('full transfer round-trip: fresh mint → transfer via URL → cat moves on-chain', { timeout: 240_000 }, async () => {
   if (!sharedPaymentAddress) throw new Error('mint test must have set sharedPaymentAddress');
 
   // ─── Mint a fresh cat via the existing helper ───
@@ -1194,10 +1235,6 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
       // eslint-disable-next-line no-console
       console.log(`[browser-${msg.type()}] ${text}`);
     }
-  });
-  page.on('pageerror', (err) => {
-    // eslint-disable-next-line no-console
-    console.log('[browser-pageerror]', err.message, err.stack);
   });
   const knownBeforeNavigate = new Set(context.pages());
   await page.goto(transferUrl.toString(), { waitUntil: 'domcontentloaded' });
@@ -1247,7 +1284,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   // validator (transfer.ts previously hard-coded Network.Mainnet).
   await expect(page.getByTestId('transfer-recipient-invalid')).toHaveCount(0);
 
-  const manualInput = page.locator('.fees-picker .manual-input');
+  const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
 
@@ -1379,8 +1416,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 // pre-fill) drops or mutates a byte, the seller's signed tx would be
 // malformed and the broadcast would reject.
 // ============================================================
-test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT → seller accepts via UI → cat moves on-chain', async () => {
-  test.setTimeout(360_000);
+test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT → seller accepts via UI → cat moves on-chain', { timeout: 360_000 }, async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   // ─── Step 1: Fresh mint so we don't fight the earlier offer test

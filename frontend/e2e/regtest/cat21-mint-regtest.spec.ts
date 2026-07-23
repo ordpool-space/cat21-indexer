@@ -126,8 +126,6 @@ test.afterAll(async () => {
 });
 
 test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse', async () => {
-  test.setTimeout(420_000);
-
   // ─── 1. Unlock the vault ──────────────────────────────────────
   const primer = await context.newPage();
   await primer.setViewportSize({ width: 400, height: 800 });
@@ -163,7 +161,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // cat21.space renders the connect CTA card with data-testid="mint-cta"
   // when no wallet is connected. The card embeds <app-wallet-connect>
   // which renders a "Connect" button that opens an ngb-modal picker.
-  const cta = page.locator('[data-testid="mint-cta"]');
+  const cta = page.getByTestId('mint-cta');
   await expect(cta).toBeVisible({ timeout: 30_000 });
 
   // CRITICAL ordering: snapshot existing pages BEFORE we kick off the
@@ -179,7 +177,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // The wallet-connect trigger inside the CTA reads "Connect wallet".
   // It's `.wallet-button-connect` so we pin by class to dodge anything
   // else that might match "connect" on the page.
-  await page.locator('button.wallet-button-connect').first().click();
+  await page.getByTestId('wallet-connect-btn').first().click();
 
   // The modal lists supported wallets — click Xverse.
   await page.getByRole('button', { name: /^xverse$/i }).first()
@@ -209,7 +207,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // renders the empty-state with data-testid="mint-no-utxos" and a
   // `<code>{{ connectedWallet()!.paymentAddress }}</code>` we can
   // pluck the bcrt1q address from verbatim.
-  const noUtxos = page.locator('[data-testid="mint-no-utxos"]');
+  const noUtxos = page.getByTestId('mint-no-utxos');
   await expect(noUtxos).toBeVisible({ timeout: 60_000 });
   const paymentCode = noUtxos.locator('code').first();
   await expect(paymentCode).toBeVisible({ timeout: 30_000 });
@@ -265,11 +263,11 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // empty-state vanishes and the summary panel + happy-path banner
   // (data-testid="mint-found-funds") render. The mint button gates
   // on `canMint()`; once funded + auto-picked, it enables.
-  const foundFunds = page.locator('[data-testid="mint-found-funds"]');
+  const foundFunds = page.getByTestId('mint-found-funds');
   await expect(foundFunds).toBeVisible({ timeout: 90_000 });
   await shot(page, '05-found-funds');
 
-  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  const mintBtn = page.getByTestId('mint-btn');
   await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
 
   // ─── 5b. Sub-floor input is silently ignored ──────────────────
@@ -289,7 +287,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const baseFee = Number(baseFeeStr.replace(/[^\d]/g, ''));
   expect(baseFee).toBeGreaterThan(0);
 
-  const manualFeeInput = page.locator('.fees-picker .manual-input');
+  const manualFeeInput = page.getByTestId('fees-picker-manual-input');
   await manualFeeInput.fill('0');
   await manualFeeInput.press('Tab');
   await expect(mintBtn).toBeEnabled({ timeout: 5_000 });
@@ -352,13 +350,13 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   }
 
   // ─── 7. Wait for success card + extract broadcast txid ────────
-  const successCard = page.locator('[data-testid="mint-success"]');
+  const successCard = page.getByTestId('mint-success');
   await expect(successCard).toBeVisible({ timeout: 90_000 });
   // Rule §6: complement the positive success card with the ARIA-
   // state proof that the mint button dropped out of its `minting`
   // phase — catches the "success rendered but orchestrator stuck"
   // regression.
-  await expect(page.locator('[data-testid="mint-btn"]')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.getByTestId('mint-btn')).toHaveAttribute('aria-busy', 'false');
   await shot(page, '07-success');
 
   const successLink = successCard.locator('a').first();
@@ -422,8 +420,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
  *      `.mint-utxo-pick-override` styling — a deliberate friction
  *      step so the user can't single-click into a cat-burning mint.
  */
-test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning', async () => {
-  test.setTimeout(180_000);
+test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning', { timeout: 180_000 }, async () => {
   if (!sharedPaymentAddress) {
     throw new Error('first test must have set sharedPaymentAddress');
   }
@@ -510,18 +507,18 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   }
 
   // Expand the funding-source picker.
-  const pickerSummary = page.locator('details.mint-expert > summary').first();
+  const pickerSummary = page.getByTestId('mint-expert-summary').first();
   await expect(pickerSummary).toBeVisible({ timeout: 60_000 });
   // If pickerOpenByDefault() returned true the details is already open;
   // clicking would collapse it. Toggle only if needed.
-  const expanded = await page.locator('details.mint-expert[open]').count();
+  const expanded = await page.locator('details[data-testid="mint-expert"][open]').count();
   if (expanded === 0) {
     await pickerSummary.click();
   }
   await shot(page, 'as-02-picker-open');
 
   // Assert the cat-mocked row carries the assets styling.
-  const assetRow = page.locator('li.mint-utxo-row-assets').filter({ hasText: catOutpoint }).first();
+  const assetRow = page.getByTestId('mint-utxo-row-assets').filter({ hasText: catOutpoint }).first();
   await expect(assetRow).toBeVisible({ timeout: 45_000 });
   await shot(page, 'as-03-asset-row-visible');
 
@@ -538,7 +535,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   // Clicking it should select the row and surface the top-level
   // `data-testid="asset-found-warning"` summary alert.
   await overrideBtn.click();
-  const warning = page.locator('[data-testid="asset-found-warning"]');
+  const warning = page.getByTestId('asset-found-warning');
   await expect(warning).toBeVisible({ timeout: 10_000 });
   await shot(page, 'as-04-warning-after-select');
 
@@ -551,7 +548,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   //      (verified by the on-chain `vin` lookup) — i.e. "I know
   //      what I'm doing, mint anyway" actually reaches the chain
   //      and the previous cat sat is symbolically burned.
-  const burnMintBtn = page.locator('[data-testid="mint-btn"]');
+  const burnMintBtn = page.getByTestId('mint-btn');
   await expect(burnMintBtn).toBeEnabled({ timeout: 30_000 });
   const knownBeforeBurnSign = new Set(context.pages());
   await burnMintBtn.click();
@@ -588,7 +585,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
     ]).catch(() => undefined);
     if (burnSign.isClosed()) break;
   }
-  const burnSuccessCard = page.locator('[data-testid="mint-success"]');
+  const burnSuccessCard = page.getByTestId('mint-success');
   await expect(burnSuccessCard).toBeVisible({ timeout: 90_000 });
   const burnHref = await burnSuccessCard.locator('a').first().getAttribute('href');
   const burnTxidMatch = burnHref!.match(/\/tx\/([0-9a-f]{64})/);
@@ -636,9 +633,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
  *      tier is "active" (none, since 7 isn't a tier rate) — this is
  *      the user-overrides-tier path.
  */
-test('fee picker: tier clicks update the manual input + active state', async () => {
-  test.setTimeout(120_000);
-
+test('fee picker: tier clicks update the manual input + active state', { timeout: 120_000 }, async () => {
   const page = await context.newPage();
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
   await shot(page, 'fp-01-loaded');
@@ -657,7 +652,7 @@ test('fee picker: tier clicks update the manual input + active state', async () 
   }
 
   // Wait for the picker to come out of its disabled-while-loading state.
-  const buttons = page.locator('.fees-picker .tier-btn');
+  const buttons = page.locator('[data-testid^="fees-picker-tier-"]');
   await expect(buttons).toHaveCount(4, { timeout: 30_000 });
   await expect(buttons.first()).toBeEnabled({ timeout: 30_000 });
   await shot(page, 'fp-02-picker-ready');
@@ -670,7 +665,7 @@ test('fee picker: tier clicks update the manual input + active state', async () 
   await expect(buttons.nth(2)).toContainText('Hour');
   await expect(buttons.nth(3)).toContainText('Economy');
 
-  const manualInput = page.locator('.fees-picker .manual-input');
+  const manualInput = page.getByTestId('fees-picker-manual-input');
 
   // Click Fastest → input "5" + active class on the Fastest button.
   await buttons.nth(0).click();
@@ -818,7 +813,7 @@ async function mintAtRateAndVerify(opts: {
   // ─── Wait for picker, sanity-pin that the tiles reflect the
   // expected scenario context (verifies the mock landed, where
   // applicable). ──────────────────────────────────────────────
-  const tiles = page.locator('.fees-picker .tier-btn');
+  const tiles = page.locator('[data-testid^="fees-picker-tier-"]');
   await expect(tiles).toHaveCount(4, { timeout: 30_000 });
   await expect(tiles.first()).toBeEnabled({ timeout: 30_000 });
   if (opts.mockFeesAsHigh) {
@@ -826,15 +821,15 @@ async function mintAtRateAndVerify(opts: {
   }
 
   // ─── Override with the user's typed rate ─────────────────────
-  const manualInput = page.locator('.fees-picker .manual-input');
+  const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill(String(opts.rate));
   await manualInput.press('Tab');
   await shot(page, `mr-${opts.scenarioLabel}-02-rate-typed`);
 
   // ─── Wait for found-funds + Mint button ──────────────────────
-  const foundFunds = page.locator('[data-testid="mint-found-funds"]');
+  const foundFunds = page.getByTestId('mint-found-funds');
   await expect(foundFunds).toBeVisible({ timeout: 90_000 });
-  const mintBtn = page.locator('[data-testid="mint-btn"]');
+  const mintBtn = page.getByTestId('mint-btn');
   await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
   await shot(page, `mr-${opts.scenarioLabel}-03-ready`);
 
@@ -878,7 +873,7 @@ async function mintAtRateAndVerify(opts: {
   }
 
   // ─── Wait for success card + broadcast txid ──────────────────
-  const successCard = page.locator('[data-testid="mint-success"]');
+  const successCard = page.getByTestId('mint-success');
   await expect(successCard).toBeVisible({ timeout: 90_000 });
   await shot(page, `mr-${opts.scenarioLabel}-05-success`);
   const successHref = await successCard.locator('a').first().getAttribute('href');
@@ -911,7 +906,6 @@ async function mintAtRateAndVerify(opts: {
 }
 
 test('manual override: typing 100 mints a "purple cat" — high rate ends up on-chain', async () => {
-  test.setTimeout(420_000);
   const { rate } = await mintAtRateAndVerify({ rate: 100, scenarioLabel: 'purple' });
   // ±1 sat/vB tolerance — the orchestrator pads the change-fold
   // boundary by up to 1 vB worth of fee. Anything more would be a
@@ -921,7 +915,6 @@ test('manual override: typing 100 mints a "purple cat" — high rate ends up on-
 });
 
 test('manual override: typing 1 while the picker suggests 100 (mempool hot) — low rate ends up on-chain', async () => {
-  test.setTimeout(420_000);
   const { rate } = await mintAtRateAndVerify({ rate: 1, scenarioLabel: 'hot-mempool', mockFeesAsHigh: true });
   expect(Math.abs(rate - 1)).toBeLessThan(1);
 });
@@ -931,8 +924,7 @@ test('manual override: typing 1 while the picker suggests 100 (mempool hot) — 
  * The orchestrator's mint() must reject cleanly, the success card
  * must NOT render, and no on-chain tx must be broadcast.
  */
-test('sign-popup cancel keeps state coherent', async () => {
-  test.setTimeout(180_000);
+test('sign-popup cancel keeps state coherent', { timeout: 180_000 }, async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const FUND_BTC = 0.0003;
@@ -942,8 +934,8 @@ test('sign-popup cancel keeps state coherent', async () => {
   const page = await context.newPage();
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
 
-  const mintBtn = page.locator('[data-testid="mint-btn"]');
-  const manualInput = page.locator('.fees-picker .manual-input');
+  const mintBtn = page.getByTestId('mint-btn');
+  const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
   await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
@@ -973,7 +965,7 @@ test('sign-popup cancel keeps state coherent', async () => {
   // ~/Work/ordpool/E2E_BEST_PRACTICES.md §8.
   await page.waitForTimeout(2_000);
   await shot(page, 'cancel-03-after-close');
-  await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
+  await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });
 
 /**
@@ -984,8 +976,7 @@ test('sign-popup cancel keeps state coherent', async () => {
  * surface as a `[data-testid="mint-error"]` alert, NOT as a fake
  * `mint-success`.
  */
-test('broadcast failure surfaces as an error, not a fake success', async () => {
-  test.setTimeout(240_000);
+test('broadcast failure surfaces as an error, not a fake success', { timeout: 240_000 }, async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const FUND_BTC = 0.0003;
@@ -1007,8 +998,8 @@ test('broadcast failure surfaces as an error, not a fake success', async () => {
   });
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
 
-  const mintBtn = page.locator('[data-testid="mint-btn"]');
-  const manualInput = page.locator('.fees-picker .manual-input');
+  const mintBtn = page.getByTestId('mint-btn');
+  const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
   await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
@@ -1049,8 +1040,8 @@ test('broadcast failure surfaces as an error, not a fake success', async () => {
     if (bcastSign.isClosed()) break;
   }
 
-  const errorAlert = page.locator('[data-testid="mint-error"]');
+  const errorAlert = page.getByTestId('mint-error');
   await expect(errorAlert).toBeVisible({ timeout: 60_000 });
   await shot(page, 'bcast-fail-01-error-alert');
-  await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
+  await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });

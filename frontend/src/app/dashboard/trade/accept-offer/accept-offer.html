@@ -140,6 +140,7 @@
       class="btn btn-primary mt-3"
       data-testid="accept-offer-sign-cta"
       [disabled]="!canAccept() || state() === 'accepting'"
+      [attr.aria-busy]="state() === 'accepting'"
       (click)="onAcceptClick()">
       @if (state() === 'accepting') {
         Signing and broadcasting…
