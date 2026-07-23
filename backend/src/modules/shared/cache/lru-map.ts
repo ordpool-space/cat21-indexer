@@ -34,6 +34,13 @@ export class LruMap<K, V> {
 
   set(key: K, value: V): void {
     if (this.map.has(key)) {
+      // Replace-in-place: fire onEvict for the OLD value so wrapper-
+      // registered secondary indexes (e.g. CacheService.txHashToNumber)
+      // drop the stale mapping before the new value overwrites it.
+      const oldValue = this.map.get(key)!;
+      if (this.onEvict) {
+        this.onEvict(key, oldValue);
+      }
       this.map.delete(key);
     } else {
       this.evictIfFull();
@@ -46,6 +53,12 @@ export class LruMap<K, V> {
   }
 
   delete(key: K): boolean {
+    // Fire onEvict on explicit delete too, so secondary indexes stay
+    // consistent regardless of which removal path callers reach for.
+    const value = this.map.get(key);
+    if (value !== undefined && this.onEvict) {
+      this.onEvict(key, value);
+    }
     return this.map.delete(key);
   }
 

@@ -364,12 +364,15 @@ describe('CacheService', () => {
     });
 
     it('updates index when same cat number is re-cached with different txHash', () => {
-      // (Defensive test: same catNumber SHOULD always have same txHash in practice,
-      // but we test what happens if it changes.)
+      // Same catNumber SHOULD always have the same txHash in practice, but a
+      // re-index / reorg-driven refresh could change it. The old txHash must
+      // be dropped from the secondary index — otherwise GET /api/cat/tx/<old>
+      // would still resolve to catNumber=500 and return the NEW cat's DTO,
+      // wrongly attributing tx-updated to tx-original.
       cache.setCachedCat(makeCatDto(500, 'tx-original'));
       cache.setCachedCat(makeCatDto(500, 'tx-updated'));
       expect(cache.getCachedCatNumberByTxHash('tx-updated')).toBe(500);
-      // The original txHash entry is still there (orphan) but getCachedCat returns the latest.
+      expect(cache.getCachedCatNumberByTxHash('tx-original')).toBeUndefined();
       expect(cache.getCachedCat(500)?.txHash).toBe('tx-updated');
     });
 

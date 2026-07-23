@@ -51,6 +51,30 @@ describe('LruMap', () => {
     expect(evicted).toEqual([['a', 1]]);
   });
 
+  it('fires onEvict on replace-in-place so secondary indexes drop the old value', () => {
+    const evicted: [string, number][] = [];
+    const map = new LruMap<string, number>(2, {
+      onEvict: (k, v) => evicted.push([k, v]),
+    });
+    map.set('a', 1);
+    map.set('a', 2); // replace-in-place; old value must fire onEvict
+    expect(evicted).toEqual([['a', 1]]);
+    expect(map.get('a')).toBe(2);
+  });
+
+  it('fires onEvict on explicit delete', () => {
+    const evicted: [string, number][] = [];
+    const map = new LruMap<string, number>(3, {
+      onEvict: (k, v) => evicted.push([k, v]),
+    });
+    map.set('a', 1);
+    map.set('b', 2);
+    expect(map.delete('a')).toBe(true);
+    expect(evicted).toEqual([['a', 1]]);
+    expect(map.delete('missing')).toBe(false);
+    expect(evicted).toEqual([['a', 1]]);
+  });
+
   it('should resize and evict when shrinking', () => {
     const map = new LruMap<string, number>(5);
     map.set('a', 1);

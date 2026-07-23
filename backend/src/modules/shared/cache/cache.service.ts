@@ -142,11 +142,8 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    * pressure, which never happens for pinned cats (#0 etc.).
    */
   invalidateCat(catNumber: number): void {
-    const cached = this.catsByNumber.get(catNumber);
-    if (cached) {
-      this.txHashToNumber.delete(cached.txHash);
-      this.catsByNumber.delete(catNumber);
-    }
+    // LruMap.delete fires onEvict, which drops the txHashToNumber entry.
+    this.catsByNumber.delete(catNumber);
   }
 
   // --- Pagination (computed from formula, zero storage) ---
