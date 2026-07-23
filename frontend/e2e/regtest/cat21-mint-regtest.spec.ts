@@ -953,6 +953,10 @@ test('sign-popup cancel keeps state coherent', async () => {
     .click({ force: true });
   await cancelPopup.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
 
+  // Absence-of-event assertion: there is no positive signal for "no
+  // success will EVER appear" — the orchestrator's late success would
+  // fire async. Bounded 2s pause is a documented last-resort per
+  // ~/Work/ordpool/E2E_BEST_PRACTICES.md §8.
   await page.waitForTimeout(2_000);
   await shot(page, 'cancel-03-after-close');
   await expect(page.locator('[data-testid="mint-success"]')).toHaveCount(0);
