@@ -8,13 +8,13 @@
   <div class="card-grid" data-testid="dashboard-cards">
     @for (card of cards; track card.title) {
       @if (card.status === 'active' && !card.external) {
-        <a [routerLink]="card.link" class="tool-card tool-card-active">
+        <a [routerLink]="card.link" class="tool-card tool-card-active" [attr.data-testid]="'dashboard-card-' + card.testId">
           <h2 class="tool-title">{{ card.title }}</h2>
           <p class="tool-desc">{{ card.description }}</p>
           <span class="tool-cta">Open →</span>
         </a>
       } @else if (card.status === 'active' && card.external) {
-        <a [href]="card.link" target="_blank" rel="noopener" class="tool-card tool-card-active">
+        <a [href]="card.link" target="_blank" rel="noopener" class="tool-card tool-card-active" [attr.data-testid]="'dashboard-card-' + card.testId">
           <h2 class="tool-title">{{ card.title }}</h2>
           <p class="tool-desc">{{ card.description }}</p>
           <span class="tool-cta">Open ↗</span>

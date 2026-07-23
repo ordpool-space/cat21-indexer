@@ -1,10 +1,10 @@
 <nav class="header-nav">
-  <a routerLink="/search" routerLinkActive="nav-link-active" class="nav-link">Search</a>
-  <a routerLink="/orderbook" routerLinkActive="nav-link-active" class="nav-link">Orderbook</a>
+  <a routerLink="/search" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-search">Search</a>
+  <a routerLink="/orderbook" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-orderbook">Orderbook</a>
   @if (connectedWallet()) {
-    <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link">Dashboard</a>
+    <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-dashboard">Dashboard</a>
   }
-  <a routerLink="/about" routerLinkActive="nav-link-active" class="nav-link">About</a>
+  <a routerLink="/about" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-about">About</a>
   <app-wallet-connect />
 </nav>
 

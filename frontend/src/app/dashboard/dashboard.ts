@@ -12,6 +12,8 @@ interface DashboardCard {
   link: string;
   external?: boolean;
   status: 'active' | 'soon';
+  /** kebab-case discriminator used to build the E2E data-testid. */
+  testId: string;
 }
 
 /**
@@ -48,24 +50,28 @@ export class Dashboard {
       description: 'See the cats your wallet currently holds, with rarity and traits.',
       link: '/dashboard/cats',
       status: 'active',
+      testId: 'my-cats',
     },
     {
       title: 'Mint a cat',
       description: 'Lock a new cat to a Bitcoin sat. Image generated deterministically once the tx confirms.',
       link: '/dashboard/mint',
       status: 'active',
+      testId: 'mint',
     },
     {
       title: 'Transfer a cat',
       description: 'Send one of your cats to another address. nLockTime=21 preserved through the transfer, so the cat mints a fresh block-21 marker on arrival.',
       link: '/dashboard/transfer',
       status: 'active',
+      testId: 'transfer',
     },
     {
       title: 'Trade a cat',
       description: 'Sniping-proof PSBT offers, ord-style. Buyer builds + signs, seller countersigns input 0, tx broadcasts, cat + payment settle in one block.',
       link: '/dashboard/trade',
       status: 'active',
+      testId: 'trade',
     },
   ];
 }
