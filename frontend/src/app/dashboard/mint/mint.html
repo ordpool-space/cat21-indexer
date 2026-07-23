@@ -206,6 +206,7 @@
         type="button"
         class="mint-btn"
         [disabled]="!canMint() || state() === 'minting'"
+        [attr.aria-busy]="state() === 'minting'"
         (click)="mint()"
         data-testid="mint-btn"
       >

@@ -14,6 +14,7 @@ import {
   getTx,
 } from './sdk-lib/regtest-helpers';
 import { waitForApprovalPopup } from './sdk-lib/approval-popup';
+import { installBrowserErrorGuard } from './console-guard';
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint
@@ -152,6 +153,10 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
 
   // ─── 2. Open /dashboard/mint, click Connect, approve in Xverse ─
   const page = await context.newPage();
+  // Rule §11: any unfiltered browser console.error / pageerror during
+  // the mint arc fails the test. Assertion runs at test end after
+  // positive assertions land.
+  const errorGuard = installBrowserErrorGuard(page);
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
   await shot(page, '02-page-loaded');
 
@@ -349,6 +354,11 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // ─── 7. Wait for success card + extract broadcast txid ────────
   const successCard = page.locator('[data-testid="mint-success"]');
   await expect(successCard).toBeVisible({ timeout: 90_000 });
+  // Rule §6: complement the positive success card with the ARIA-
+  // state proof that the mint button dropped out of its `minting`
+  // phase — catches the "success rendered but orchestrator stuck"
+  // regression.
+  await expect(page.locator('[data-testid="mint-btn"]')).toHaveAttribute('aria-busy', 'false');
   await shot(page, '07-success');
 
   const successLink = successCard.locator('a').first();
@@ -385,6 +395,10 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // sat of the first output.
   expect(esploraTx.vout.length).toBeGreaterThanOrEqual(1);
   expect(esploraTx.vout[0].value).toBe(546);
+
+  // Rule §11: after the full mint arc is proven, fail if any
+  // unfiltered browser console.error / pageerror surfaced.
+  errorGuard.assertNone();
 });
 
 /**
