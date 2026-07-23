@@ -189,15 +189,21 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
 
   await expect(cta).toBeHidden({ timeout: 30_000 });
 
-  // Path-1 proof: payment address is REGTEST bcrt1q. CAT-21 wallet's
-  // getAddresses honors the `network` param (SDK connector maps
-  // Network.Regtest → 'devnet'). The empty-state hint renders the
-  // connected payment address inside a `<code>`.
-  const noUtxos = page.getByTestId('mint-no-utxos');
-  await expect(noUtxos).toBeVisible({ timeout: 60_000 });
-  const paymentCode = noUtxos.locator('code').first();
-  await expect(paymentCode).toBeVisible({ timeout: 30_000 });
-  const paymentAddr = (await paymentCode.textContent())!.trim();
+  // Path-1 proof: payment address is REGTEST bcrt1q. Extract from the
+  // wallet-connect popover in the header, NOT from mint-no-utxos. On
+  // beforeAll re-runs (Playwright restarts the worker after certain
+  // test failures), the same mnemonic derives the same address; if a
+  // previous test already funded it, mint-found-funds shows instead
+  // of mint-no-utxos and the payment-code element isn't there. The
+  // header popover is stable regardless of mint-page state.
+  //
+  // CAT-21 wallet's getAddresses honors the `network` param (SDK
+  // connector maps Network.Regtest → 'devnet'), so the returned
+  // paymentAddr must start with bcrt1q.
+  await page.getByTestId('wallet-connected-btn').click();
+  const paymentAddrEl = page.getByTestId('wallet-payment-address-full');
+  await expect(paymentAddrEl).toBeAttached({ timeout: 15_000 });
+  const paymentAddr = (await paymentAddrEl.textContent())!.trim();
   expect(paymentAddr).toMatch(/^bcrt1q/);
   return { paymentAddress: paymentAddr };
 }
@@ -394,7 +400,14 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
 
   const confirmedTip = mineBlocks(1);
   await waitForElectrsSync(confirmedTip);
-  const esploraTx = await getTx(broadcastTxid);
+  // Electrs indexes the block header before the per-tx status
+  // sometimes; poll /tx/<txid> until status.block_hash is populated.
+  let esploraTx = await getTx(broadcastTxid);
+  const blockHashDeadline = Date.now() + 30_000;
+  while (!esploraTx.status.block_hash && Date.now() < blockHashDeadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    esploraTx = await getTx(broadcastTxid);
+  }
   expect(esploraTx.locktime).toBe(21);
   expect(esploraTx.status.block_hash).toBeTruthy();
   expect(esploraTx.vout.length).toBeGreaterThanOrEqual(1);
