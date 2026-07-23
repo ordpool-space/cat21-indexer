@@ -11,6 +11,12 @@ import type { Page } from '@playwright/test';
  */
 const IGNORED_CONSOLE: RegExp[] = [
   /Failed to load resource:.*(404|net::ERR_)/,
+  // SDK diagnostics that use console.error for visibility, not for
+  // signalling a bug (e.g. `[sdk:inscribe] connectedWallet$ emit`).
+  /^\[sdk:/,
+  // CORS blocks on side-inscription placeholder assets iframes try
+  // to load on regtest (null-origin iframe, /assets not shipped).
+  /has been blocked by CORS policy/,
 ];
 
 export interface BrowserErrorGuard {
