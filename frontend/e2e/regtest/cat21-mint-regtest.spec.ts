@@ -352,11 +352,13 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // ─── 7. Wait for success card + extract broadcast txid ────────
   const successCard = page.getByTestId('mint-success');
   await expect(successCard).toBeVisible({ timeout: 90_000 });
-  // Rule §6: complement the positive success card with the ARIA-
-  // state proof that the mint button dropped out of its `minting`
-  // phase — catches the "success rendered but orchestrator stuck"
-  // regression.
-  await expect(page.getByTestId('mint-btn')).toHaveAttribute('aria-busy', 'false');
+  // Rule §6: complement the positive success card with a DOM-state
+  // proof that the mint button dropped out of the `minting`/`ready`
+  // phase. On cat21.space the template gates mint-btn on `@if
+  // (state() !== 'success')`, so the button UNMOUNTS on success —
+  // count === 0 is the semantic equivalent of `aria-busy='false'`
+  // for a template that removes the element entirely.
+  await expect(page.getByTestId('mint-btn')).toHaveCount(0);
   await shot(page, '07-success');
 
   const successLink = successCard.locator('a').first();
