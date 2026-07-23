@@ -75,6 +75,22 @@ async function shot(p: Page, name: string): Promise<void> {
   }).catch(() => undefined);
 }
 
+/**
+ * Navigate to /dashboard/mint by clicking through the header nav (rule 4
+ * of E2E_BEST_PRACTICES.md). Assumes the wallet is already connected;
+ * test 1 does the first-time connect via a direct goto to /dashboard/mint
+ * (its `mint-cta` element IS the connect entry — the "single entry" the
+ * rule permits per test). Every subsequent test uses this helper.
+ */
+async function navigateViaHeaderToMint(page: Page): Promise<void> {
+  await page.goto(FRONTEND_URL, { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('wallet-connected-btn').waitFor({ state: 'visible', timeout: 30_000 });
+  await page.getByTestId('nav-dashboard').click();
+  await page.waitForURL('**/dashboard');
+  await page.getByTestId('dashboard-card-mint').click();
+  await page.waitForURL('**/dashboard/mint');
+}
+
 test.beforeAll(async () => {
   if (!fs.existsSync(path.join(EXT_PATH, 'manifest.json'))) {
     throw new Error(
@@ -490,7 +506,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
     });
   });
 
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
   await shot(page, 'as-01-page-loaded');
 
   // Auto-reconnect from localStorage. Approve a permission-renewal
@@ -637,7 +653,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
  */
 test('fee picker: tier clicks update the manual input + active state', { timeout: 120_000 }, async () => {
   const page = await context.newPage();
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
   await shot(page, 'fp-01-loaded');
 
   const known = new Set(context.pages());
@@ -797,7 +813,7 @@ async function mintAtRateAndVerify(opts: {
   await waitForElectrsSync(tip);
 
   // ─── Open page, auto-reconnect ───────────────────────────────
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
   const known = new Set(context.pages());
   const reapprove = await waitForApprovalPopup({
     context,
@@ -934,7 +950,7 @@ test('sign-popup cancel keeps state coherent', { timeout: 180_000 }, async () =>
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
 
   const mintBtn = page.getByTestId('mint-btn');
   const manualInput = page.getByTestId('fees-picker-manual-input');
@@ -998,7 +1014,7 @@ test('broadcast failure surfaces as an error, not a fake success', { timeout: 24
     }
     await route.continue();
   });
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
 
   const mintBtn = page.getByTestId('mint-btn');
   const manualInput = page.getByTestId('fees-picker-manual-input');

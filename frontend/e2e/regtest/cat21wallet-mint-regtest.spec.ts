@@ -124,6 +124,85 @@ async function shot(p: Page, name: string): Promise<void> {
 }
 
 /**
+ * Navigate to /dashboard/mint by clicking through the header nav (rule 4
+ * of E2E_BEST_PRACTICES.md). Assumes the wallet is already connected —
+ * the header only renders `nav-dashboard` for connected wallets. Every
+ * test uses this helper; the connect flow itself lives in `beforeAll`.
+ */
+async function navigateViaHeaderToMint(page: Page): Promise<void> {
+  await page.goto(FRONTEND_URL, { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('wallet-connected-btn').waitFor({ state: 'visible', timeout: 30_000 });
+  await page.getByTestId('nav-dashboard').click();
+  await page.waitForURL('**/dashboard');
+  await page.getByTestId('dashboard-card-mint').click();
+  await page.waitForURL('**/dashboard/mint');
+}
+
+/**
+ * First-time connect flow: goto the mint page while disconnected, click
+ * the `mint-cta` connect card, pick CAT-21 wallet in the modal, approve
+ * the get-addresses popup, extract the payment address. Returns the
+ * bcrt1q… regtest payment address; the persistent context carries the
+ * connect state to every subsequent test's page.
+ *
+ * Hoisted out of test 1 into `beforeAll` per rule 1 — the previous
+ * pattern (test 1 sets `sharedPaymentAddress`, tests 2-N `if
+ * (!sharedPaymentAddress) throw 'first test must have set X'`) made
+ * every downstream test order-coupled on test 1's success. beforeAll
+ * runs before ANY test regardless of Playwright shard/retry order, so
+ * shared state is now structurally guaranteed.
+ */
+async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddress: string }> {
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  const cta = page.getByTestId('mint-cta');
+  await expect(cta).toBeVisible({ timeout: 30_000 });
+
+  // Snapshot existing pages BEFORE the connect click. The Xverse spec
+  // hit this race three times before the fix — CAT-21 wallet's approval
+  // popup spawns synchronously the same way.
+  const knownPagesBeforeConnect = new Set(context.pages());
+  await page.getByTestId('wallet-connect-btn').first().click();
+
+  // Picker modal — CAT-21 wallet sits in the "installed" section. The
+  // card isn't a `<button>` element (clickable container), so
+  // `getByRole('button', …)` doesn't find it. Match by visible text.
+  const cat21Picker = page.getByText(/CAT-21\s+wallet/i).first();
+  await expect(cat21Picker).toBeVisible({ timeout: 20_000 });
+  await cat21Picker.click({ timeout: 20_000 });
+
+  const approvalConnect = await waitForApprovalPopup({
+    context,
+    knownPages: knownPagesBeforeConnect,
+    timeoutMs: 60_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByTestId('get-addresses-approve-button')
+        .waitFor({ state: 'visible', timeout: 60_000 });
+      return true;
+    },
+  });
+  await approvalConnect.getByTestId('get-addresses-approve-button').click();
+  // DO NOT explicitly `.close()` — cat21-wallet's userApprovesGetAddresses
+  // runs a ~400 ms animation BEFORE sending addresses back. Manual close
+  // cuts the dispatch (run 27502018547 trace.zip showed click→close = 44 ms).
+  await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+
+  await expect(cta).toBeHidden({ timeout: 30_000 });
+
+  // Path-1 proof: payment address is REGTEST bcrt1q. CAT-21 wallet's
+  // getAddresses honors the `network` param (SDK connector maps
+  // Network.Regtest → 'devnet'). The empty-state hint renders the
+  // connected payment address inside a `<code>`.
+  const noUtxos = page.getByTestId('mint-no-utxos');
+  await expect(noUtxos).toBeVisible({ timeout: 60_000 });
+  const paymentCode = noUtxos.locator('code').first();
+  await expect(paymentCode).toBeVisible({ timeout: 30_000 });
+  const paymentAddr = (await paymentCode.textContent())!.trim();
+  expect(paymentAddr).toMatch(/^bcrt1q/);
+  return { paymentAddress: paymentAddr };
+}
+
+/**
  * Approval-popup Sign/Confirm/Approve click.
  *
  * `{ noWaitAfter: true }` — cat21-wallet self-closes its sign-psbt
@@ -207,6 +286,16 @@ test.beforeAll(async () => {
   await onboardCat21Wallet(primer);
   await shot(primer, '00-onboarded');
   await primer.close();
+
+  // Connect the wallet ONCE for the whole suite (rule 1). Every test
+  // reads sharedPaymentAddress from module scope; no ordering coupling
+  // on "the first test connects".
+  const connectPage = await context.newPage();
+  const { paymentAddress } = await connectCat21WalletViaMintPage(connectPage);
+  sharedPaymentAddress = paymentAddress;
+  saveShared({ paymentAddress });
+  await shot(connectPage, '00b-wallet-connected');
+  await connectPage.close();
 });
 
 test.beforeEach(() => {
@@ -221,78 +310,14 @@ test.afterAll(async () => {
   await context?.close();
 });
 
-test('cat21-wallet appears in the picker and the connect approval round-trips', { timeout: 180_000 }, async () => {
+test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', { timeout: 180_000 }, async () => {
+  // Connect flow already ran in beforeAll; sharedPaymentAddress is set.
+  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  const paymentAddr = sharedPaymentAddress;
+
   const page = await context.newPage();
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
   await shot(page, '01-page-loaded');
-
-  const cta = page.getByTestId('mint-cta');
-  await expect(cta).toBeVisible({ timeout: 30_000 });
-
-  // CRITICAL ordering — snapshot existing pages BEFORE the connect
-  // click. The Xverse spec hit this race three times before the fix
-  // (see `e2e(regtest mint): fix the test-1 connect-popup race`
-  // commit on cat21-indexer). CAT-21 wallet's approval popup spawns
-  // synchronously the same way.
-  const knownPagesBeforeConnect = new Set(context.pages());
-
-  await page.getByTestId('wallet-connect-btn').first().click();
-
-  // Picker modal — CAT-21 wallet sits in the "installed" section at
-  // the top of the modal. The wallet card isn't a `<button>` element
-  // — it's a clickable container — so `getByRole('button', …)`
-  // doesn't find it. Match the visible label text instead. The
-  // label wraps across two lines in the modal layout ("Cat21" and
-  // "Wallet" on separate lines), so use a regex with `\s+` which
-  // covers the whitespace between them.
-  // The picker renders the wallet name inline with its description
-  // on a single line ("CAT-21 wallet Our own — hot wallet…"), so a
-  // `$`-anchored regex misses. Match by substring.
-  const cat21Picker = page.getByText(/CAT-21\s+wallet/i).first();
-  await expect(cat21Picker).toBeVisible({ timeout: 20_000 });
-  await cat21Picker.click({ timeout: 20_000 });
-  await shot(page, '02-picker-clicked');
-
-  const approvalConnect = await waitForApprovalPopup({
-    context,
-    knownPages: knownPagesBeforeConnect,
-    timeoutMs: 60_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByTestId('get-addresses-approve-button')
-        .waitFor({ state: 'visible', timeout: 60_000 });
-      return true;
-    },
-  });
-  await shot(approvalConnect, '03-connect-approval');
-  await approvalConnect.getByTestId('get-addresses-approve-button').click();
-  // DO NOT explicitly `.close()` the popup — cat21-wallet's
-  // `userApprovesGetAddresses` runs a ~400 ms animation BEFORE
-  // sending the addresses back. Manual close cuts the dispatch
-  // (run 27502018547 trace.zip showed click→close = 44 ms gap).
-  await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-
-  // The connect CTA card disappears once `connectedWallet` populates.
-  await expect(cta).toBeHidden({ timeout: 30_000 });
-  await shot(page, '04-connected');
-
-  // ─── Path-1 proof: payment address is REGTEST bcrt1q ──────────
-  // CAT-21 wallet's `getAddresses` now honors the `network` param
-  // (SDK connector change at commit 8d91a5c maps Network.Regtest →
-  // 'devnet' and forwards it to the wallet). The empty-state hint
-  // (`[data-testid="mint-no-utxos"]`) renders the connected payment
-  // address inside a `<code>` — it must now start with `bcrt1q…`
-  // instead of `bc1q…`. Pinning this surfaces a connector
-  // regression immediately.
-  const noUtxos = page.getByTestId('mint-no-utxos');
-  await expect(noUtxos).toBeVisible({ timeout: 60_000 });
-  const paymentCode = noUtxos.locator('code').first();
-  await expect(paymentCode).toBeVisible({ timeout: 30_000 });
-  const paymentAddr = (await paymentCode.textContent())!.trim();
-  console.log(`[cat21wallet] regtest payment address = ${paymentAddr}`);
-  expect(paymentAddr).toMatch(/^bcrt1q/);
-  sharedPaymentAddress = paymentAddr;
-  saveShared({ paymentAddress: paymentAddr });
 
   // ─── Full mint round-trip ─────────────────────────────────────
   // Same flow as ordpool's, with cat21-indexer's data-testid
@@ -395,7 +420,7 @@ async function cat21walletMintAtRate(opts: {
   scenarioLabel: string;
   mockFeesAsHigh?: boolean;
 }): Promise<{ broadcastTxid: string; fee: number; vsize: number; rate: number }> {
-  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
 
   if (opts.mockFeesAsHigh) {
     const res = await fetch('http://localhost:8999/admin/fees', {
@@ -412,7 +437,7 @@ async function cat21walletMintAtRate(opts: {
     await waitForElectrsSync(mineBlocks(1));
 
     const page = await context.newPage();
-    await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+    await navigateViaHeaderToMint(page);
     const known = new Set(context.pages());
     const reapprove = await waitForApprovalPopup({
       context,
@@ -483,7 +508,7 @@ async function cat21walletMintAtRate(opts: {
 }
 
 test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on CAT-21 wallet', async () => {
-  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
 
   const SMALL_FUND_SATS = 15_000;
   const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.00015').trim();
@@ -527,7 +552,7 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
       ),
     });
   });
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
   const known = new Set(context.pages());
   const reapprove = await waitForApprovalPopup({
     context,
@@ -608,12 +633,12 @@ test('manual override: typing 1 while the picker suggests 100 — low rate wins 
 });
 
 test('sign-popup cancel keeps state coherent on CAT-21 wallet', { timeout: 180_000 }, async () => {
-  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
   rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
   const known = new Set(context.pages());
   const reapprove = await waitForApprovalPopup({
     context,
@@ -662,7 +687,7 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', { timeout: 180_0
 });
 
 test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake success)', { timeout: 240_000 }, async () => {
-  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
   rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
 
@@ -679,7 +704,7 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
     }
     await route.continue();
   });
-  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  await navigateViaHeaderToMint(page);
   const known = new Set(context.pages());
   const reapprove = await waitForApprovalPopup({
     context,
@@ -990,7 +1015,7 @@ function hexDecode(hexStr: string): Uint8Array {
 
 test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves on-chain', { timeout: 240_000 }, async () => {
   if (!sharedMintTxid) throw new Error('mint test must have set sharedMintTxid');
-  if (!sharedPaymentAddress) throw new Error('mint test must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
 
   // ─── Read the mint tx to get the exact seller cat outpoint ───
   const mintTxJson = JSON.parse(
@@ -1195,7 +1220,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 // ============================================================
 
 test('full transfer round-trip: fresh mint → transfer via URL → cat moves on-chain', { timeout: 240_000 }, async () => {
-  if (!sharedPaymentAddress) throw new Error('mint test must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
 
   // ─── Mint a fresh cat via the existing helper ───
   const fresh = await cat21walletMintAtRate({
@@ -1417,7 +1442,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 // malformed and the broadcast would reject.
 // ============================================================
 test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT → seller accepts via UI → cat moves on-chain', { timeout: 360_000 }, async () => {
-  if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
 
   // ─── Step 1: Fresh mint so we don't fight the earlier offer test
   //             for the shared cat UTXO. cat21walletMintAtRate drives
