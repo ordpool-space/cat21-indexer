@@ -161,9 +161,11 @@ describe('SyncService', () => {
 
   // --- Error handling & recovery ---
 
-  it('should handle partial batch failures gracefully (some cats fail)', async () => {
+  it('stops at the first gap and refuses to insert past it (contiguity invariant)', async () => {
     const { service, ordClient, insertMock } = createMocks(-1, 2);
 
+    // Cat 0: ok. Cat 1: rejected (ord transient failure). Cat 2:
+    // would be ok, but the tick stops at #1 rather than skip past it.
     ordClient.getCat
       .mockResolvedValueOnce(makeCat(0))
       .mockRejectedValueOnce(new Error('timeout'))
@@ -171,10 +173,49 @@ describe('SyncService', () => {
 
     await service.sync();
 
-    // Should still insert the 2 cats that succeeded
-    expect(insertMock).toHaveBeenCalled();
+    // Only cat 0 gets inserted — the contiguous prefix before the gap.
+    expect(insertMock).toHaveBeenCalledTimes(1);
     const insertedValues = insertMock.mock.results[0].value.ignore.mock.results[0].value.values.mock.calls[0][0];
-    expect(insertedValues).toHaveLength(2);
+    expect(insertedValues).toHaveLength(1);
+    expect(insertedValues[0].catNumber).toBe(0);
+  });
+
+  it('does not advance localMax past a gap (next tick retries from the missing cat)', async () => {
+    const { service, ordClient, insertMock, cache } = createMocks(-1, 5);
+
+    // First tick: 0 ok, 1 ok, 2 null (ord returns null), 3+4 would be ok.
+    ordClient.getCat
+      .mockResolvedValueOnce(makeCat(0))
+      .mockResolvedValueOnce(makeCat(1))
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(makeCat(3))
+      .mockResolvedValueOnce(makeCat(4));
+
+    await service.sync();
+
+    // Only 0 and 1 get inserted; cache should reflect localMax = 1.
+    const inserted = insertMock.mock.results[0].value.ignore.mock.results[0].value.values.mock.calls[0][0];
+    expect(inserted).toHaveLength(2);
+    expect(inserted.map((r: { catNumber: number }) => r.catNumber)).toEqual([0, 1]);
+    expect(cache.onNewCatsSynced).toHaveBeenCalledWith(1);
+    expect(cache.onNewCatsSynced).not.toHaveBeenCalledWith(2);
+    expect(cache.onNewCatsSynced).not.toHaveBeenCalledWith(5);
+
+    // Second tick: ord recovers, all 3 remaining cats return.
+    // Sync should NOT re-fetch 0 or 1 (localMax is at 1); it should
+    // start from 2 (the gap we stopped at).
+    ordClient.getCat.mockReset();
+    ordClient.getCat
+      .mockResolvedValueOnce(makeCat(2))
+      .mockResolvedValueOnce(makeCat(3))
+      .mockResolvedValueOnce(makeCat(4));
+
+    await service.sync();
+    expect(ordClient.getCat).toHaveBeenCalledWith(2);
+    expect(ordClient.getCat).toHaveBeenCalledWith(3);
+    expect(ordClient.getCat).toHaveBeenCalledWith(4);
+    expect(ordClient.getCat).not.toHaveBeenCalledWith(0);
+    expect(ordClient.getCat).not.toHaveBeenCalledWith(1);
   });
 
   it('should break when entire batch fails (all cats return null or error)', async () => {

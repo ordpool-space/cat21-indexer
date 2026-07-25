@@ -143,6 +143,14 @@ export class SyncService implements OnModuleInit {
 
       let nextCatNumber = this.localMax + 1;
       let insertedCount = 0;
+      // Set to the cat number ord failed on (rejected promise OR null
+      // response). CAT-21 numbering is contiguous — no gaps by protocol —
+      // so a null under the tip means ord is briefly out of sync (a fresh
+      // mint whose /cat/<n> detail is 404-ing while /cats already returned
+      // the id) or ord itself is broken. Either way, advancing past it
+      // would permanently hide the cat because the next tick starts from
+      // localMax+1. Stop the tick, log loudly, wait for ord to catch up.
+      let firstMissing: number | null = null;
 
       while (nextCatNumber <= remoteMax) {
         // Fetch a batch of cats in parallel
@@ -152,10 +160,28 @@ export class SyncService implements OnModuleInit {
         const settled = await Promise.allSettled(
           numbers.map((n) => this.ordClient.getCat(n)),
         );
-        const details = settled
-          .filter((r): r is PromiseFulfilledResult<OrdCatDetail | null> => r.status === 'fulfilled')
-          .map((r) => r.value)
-          .filter((d): d is OrdCatDetail => d !== null);
+
+        // Walk the batch in order. Take the contiguous prefix of
+        // successful lookups; the first null / rejected result stops
+        // the tick.
+        const details: OrdCatDetail[] = [];
+        for (let i = 0; i < settled.length; i++) {
+          const r = settled[i];
+          const detail = r.status === 'fulfilled' ? r.value : null;
+          if (detail === null) {
+            firstMissing = numbers[i];
+            const reason = r.status === 'rejected'
+              ? (r.reason instanceof Error ? r.reason.message : String(r.reason))
+              : 'null (ord 404)';
+            this.logger.error(
+              `sync: ord could not resolve cat #${firstMissing} (${reason}). ` +
+              `CAT-21 numbering is contiguous — refusing to advance past this gap. ` +
+              `Will retry next tick; if this persists, check ord health.`,
+            );
+            break;
+          }
+          details.push(detail);
+        }
 
         if (details.length === 0) break;
 
@@ -225,15 +251,28 @@ export class SyncService implements OnModuleInit {
         this.cache.onNewCatsSynced(batchMax);
 
         insertedCount += details.length;
-        nextCatNumber += numbers.length;
+        // Advance ONLY by the number of contiguous successes — NOT by
+        // numbers.length. If firstMissing tripped mid-batch, we've
+        // only processed details.length cats and must not claim to
+        // have synced past the gap.
+        nextCatNumber += details.length;
 
         if (insertedCount % 100 < BATCH_SIZE) {
           this.logger.log(`Synced ${insertedCount}/${totalToSync} cats (up to #${nextCatNumber - 1})`);
         }
+
+        // Stop the tick at the first gap; next tick retries from
+        // nextCatNumber (= firstMissing).
+        if (firstMissing !== null) break;
       }
 
-      this.localMax = remoteMax;
-      this.cache.onNewCatsSynced(remoteMax);
+      // Pin localMax to the last cat we ACTUALLY synced, not to
+      // remoteMax. If a gap tripped mid-tick, remoteMax is past the
+      // gap; pinning to it would advance past the missing cat and
+      // permanently hide it. `nextCatNumber - 1` is either remoteMax
+      // (no gaps, full sync) or firstMissing - 1 (gap tripped).
+      this.localMax = nextCatNumber - 1;
+      this.cache.onNewCatsSynced(this.localMax);
 
       // Refresh Proof of Cat Work from DB (authoritative)
       const [sumResult] = await this.drizzle.db
@@ -241,7 +280,14 @@ export class SyncService implements OnModuleInit {
         .from(cats);
       this.cache.setProofOfCatWork(Number(sumResult.proofOfCatWork ?? 0));
 
-      this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
+      if (firstMissing !== null) {
+        this.logger.warn(
+          `Sync partial: ${insertedCount} new cats (synced up to #${this.localMax}, ` +
+          `stopped at #${firstMissing}; remote tip is #${remoteMax}). Retrying next tick.`,
+        );
+      } else {
+        this.logger.log(`Sync complete: ${insertedCount} new cats (synced up to #${remoteMax})`);
+      }
       this.lastSuccessAt = new Date();
 
       // After new cats arrive, the categories they fell into need re-
