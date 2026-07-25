@@ -12,6 +12,7 @@ import {
 } from '../shared/backend-network';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { bids } from '../shared/drizzle/schema/bids';
+import { ElectrsClientService } from '../sync/electrs-client.service';
 import { OrdClientService } from '../sync/ord-client.service';
 import { BidDto, PaginatedBidsDto } from './dto/bid.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
@@ -47,6 +48,7 @@ export class BidsService {
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly ordClient: OrdClientService,
+    private readonly electrsClient: ElectrsClientService,
   ) {
     this.logger.log(`BidsService: BACKEND_NETWORK = ${this.backendNetwork}`);
   }
@@ -216,6 +218,37 @@ export class BidsService {
         code: `psbt-${sdkResult.reason}`,
         detail: sdkResult.detail ?? `SDK validator rejected: ${sdkResult.reason}`,
       });
+    }
+
+    // (6b) Buyer inputs must reference outpoints that actually exist
+    //      on chain and are still spendable. Rejects the phantom-input
+    //      adversarial pattern (attacker POSTs a bid whose funding
+    //      inputs reference a made-up txid → electrs 404 → 'spent' →
+    //      reject at insert). Legitimate bids always pass — the
+    //      buyer wouldn't have been able to sign against a UTXO
+    //      they don't own. Cost: 1..N electrs HTTP calls per POST
+    //      (N = buyer input count, typically 1-3). 'unknown' (electrs
+    //      blip) is fail-safe: don't reject a legitimate bid because
+    //      electrs momentarily 500'd; the pruner catches truly
+    //      broken bids later.
+    for (let i = 1; i < tx.inputsLength; i++) {
+      const inp = tx.getInput(i);
+      if (!inp.txid) continue;
+      const inpTxid = hex.encode(inp.txid);
+      const inpVout = inp.index ?? 0;
+      const status = await this.electrsClient.getOutpointStatus(inpTxid, inpVout);
+      if (status === 'spent') {
+        throw new BadRequestException({
+          code: 'psbt-buyer-input-unspendable',
+          detail:
+            `PSBT input ${i} (${inpTxid}:${inpVout}) is unspendable — either the txid is ` +
+            `unknown to electrs (never broadcast / orphaned) or the vout was already spent.`,
+        });
+      }
+      // 'unspent' → ok, continue.
+      // 'unknown' → fail-safe, don't reject a legitimate bid on an
+      //             electrs blip. Pruner catches this later if the
+      //             input is truly bad.
     }
 
     // (7) Ord cats-bundle check.

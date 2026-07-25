@@ -165,14 +165,20 @@ export class BidsPruner implements OnModuleInit, OnModuleDestroy {
    * cat UTXO — that's the seller-side check's job), and query electrs
    * for each. Returns:
    *   true  → every buyer input is still spendable
-   *   false → at least one buyer input has been spent
+   *   false → at least one buyer input is 'spent' (per electrs's
+   *           tri-state check, which includes phantom-txid 404s)
    *
-   * Fail-safe: if the electrs client returns false for a spot-check
-   * because of a network flake (see `ElectrsClientService.isOutpointSpent`
-   * for the fail-safe posture), we treat it as "unknown → live" and
-   * keep the bid. Guaranteed not to destructively drop on electrs
-   * flake. The tradeoff is that a real stale bid may hang around one
-   * extra tick until electrs recovers.
+   * Uses the tri-state `getOutpointStatus`:
+   *   - 'spent'   → this bid is unbroadcastable → prune it
+   *   - 'unspent' → this input is fine → check the next
+   *   - 'unknown' → electrs blipped (5xx, network, malformed JSON) →
+   *                 fail-safe: treat as still live so a transient
+   *                 electrs failure can't destroy every legitimate
+   *                 bid. Bid gets re-checked next tick.
+   *
+   * Phantom-txid case (electrs 404 = txid never broadcast, e.g. an
+   * attacker POSTing a made-up funding input) is now 'spent', not
+   * 'unknown' — so the pruner drops it instead of leaving it forever.
    */
   private async checkBuyerInputsLive(psbtBase64: string): Promise<boolean | null> {
     const bytes = base64.decode(psbtBase64);
@@ -186,8 +192,10 @@ export class BidsPruner implements OnModuleInit, OnModuleDestroy {
       if (!inp.txid) continue;
       const txid = hex.encode(inp.txid);
       const vout = inp.index ?? 0;
-      const spent = await this.electrsClient.isOutpointSpent(txid, vout);
-      if (spent) return false;
+      const status = await this.electrsClient.getOutpointStatus(txid, vout);
+      if (status === 'spent') return false;
+      // 'unknown' or 'unspent' → keep checking the next input.
+      // 'unknown' does NOT drop the bid (fail-safe).
     }
     return true;
   }
