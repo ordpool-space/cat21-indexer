@@ -1,10 +1,11 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, catchError, of, switchMap, throwError } from 'rxjs';
 
 import { WalletService } from 'ordpool-sdk';
 
 import { environment } from '../../environments/environment';
+import { Cat21SessionService } from './cat21-session.service';
 
 /**
  * The backend's bid record (mirror of `BidDto` in
@@ -92,6 +93,7 @@ export interface PostBidArgs {
 export class Cat21BidsService {
   private http = inject(HttpClient);
   private walletService = inject(WalletService);
+  private session = inject(Cat21SessionService);
 
   private readonly baseUrl = `${environment.api}/api/v1/bids`;
 
@@ -152,25 +154,34 @@ export class Cat21BidsService {
   }
 
   /**
-   * Delete a bid by (outpoint, buyer). No signature required — the
-   * backend gates on the unique key. Used by the future buyer-side
-   * cancel flow; for X.4 (read-only) this is exposed but unused.
+   * Delete a bid by (outpoint, buyer). Requires session-token
+   * headers — the backend Cat21SessionGuard verifies the caller
+   * controls `buyerOrdinalsAddress`. First DELETE in a session
+   * prompts the wallet for a session sig; subsequent DELETEs in
+   * the same ~24h window reuse the cached token.
    */
   deleteBid(catTxid: string, catVout: number, buyerOrdinalsAddress: string): Observable<void> {
     const url = `${this.baseUrl}/outpoint/${catTxid}/${catVout}?buyer=${encodeURIComponent(buyerOrdinalsAddress)}`;
-    return this.http.delete<void>(url).pipe(
-      catchError((err: HttpErrorResponse) => throwError(() => this.mapHttpError(err))),
+    return this.session.headersFor(buyerOrdinalsAddress).pipe(
+      switchMap((headers) =>
+        this.http
+          .delete<void>(url, { headers: new HttpHeaders(headers) })
+          .pipe(catchError((err: HttpErrorResponse) => throwError(() => this.mapHttpError(err, buyerOrdinalsAddress)))),
+      ),
     );
   }
 
   /**
    * Same shape as `Cat21ListingService.mapHttpError`. Backend
    * responds with `{code, detail}` in the body for BadRequests;
-   * pass those through. Network errors get a generic
-   * `network-error` code.
+   * pass those through. On 401 (session token rejected) clear the
+   * cache so the next attempt re-prompts.
    */
-  private mapHttpError(err: unknown): BidError {
+  private mapHttpError(err: unknown, addressToClearOn401?: string): BidError {
     if (err instanceof HttpErrorResponse) {
+      if (err.status === 401 && addressToClearOn401) {
+        this.session.clearFor(addressToClearOn401);
+      }
       const body = err.error as { code?: string; detail?: string } | undefined;
       if (body?.code) {
         return {

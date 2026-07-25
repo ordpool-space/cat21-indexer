@@ -32,7 +32,38 @@ async function bootstrap() {
     contentSecurityPolicy: false,
   });
 
-  app.enableCors();
+  // Explicit origin allowlist — wildcard CORS combined with the
+  // capability-mutating routes (POST /listings, DELETE /listings,
+  // DELETE /bids) means a hostile web page can drive any visitor's
+  // browser to make cross-origin requests to our backend as that
+  // visitor. Session tokens (X-Cat21-Session-*) authenticate the
+  // action, so the practical damage window is narrow — but there's
+  // no reason to allow drive-by cross-origin from arbitrary sites.
+  const allowedOrigins = [
+    'https://cat21.space',
+    'https://ordpool.space',
+    // Dev origins for `ng serve` on the frontend.
+    'http://localhost:4200',
+    'http://localhost:4221',
+  ];
+  app.enableCors({
+    origin: (origin, cb) => {
+      // Same-origin, curl / Postman / server-to-server requests carry
+      // no Origin header; those are allowed. Browsers always send one
+      // on cross-origin requests.
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      cb(null, false);
+    },
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'X-Cat21-Session-Address',
+      'X-Cat21-Session-Valid-Until',
+      'X-Cat21-Session-Signature',
+    ],
+    credentials: false,
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

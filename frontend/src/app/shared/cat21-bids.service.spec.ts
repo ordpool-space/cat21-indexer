@@ -2,11 +2,12 @@ import { describe, expect, it } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 
 import { KnownOrdinalWalletType, Network, WalletInfo, WalletService } from 'ordpool-sdk';
 
 import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from './cat21-bids.service';
+import { Cat21SessionService } from './cat21-session.service';
 
 const WALLET_PAYMENT = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx';
 const WALLET_ORDINALS = 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9';
@@ -25,22 +26,41 @@ class WalletServiceStub {
   readonly network = Network.Mainnet;
 }
 
+// Session service stub — returns fixed session headers synchronously.
+// The real service prompts the wallet on first use; unit tests don't
+// exercise that path (that's what the wallet-signMessage spec covers).
+class Cat21SessionServiceStub {
+  headersFor(address: string) {
+    return of({
+      'X-Cat21-Session-Address': address,
+      'X-Cat21-Session-Valid-Until': '2099-01-01T00:00:00.000Z',
+      'X-Cat21-Session-Signature': 'AA==',
+    });
+  }
+  clearFor(_address: string): void {
+    // no-op
+  }
+}
+
 const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';
 
 async function setup() {
   const walletService = new WalletServiceStub();
+  const sessionService = new Cat21SessionServiceStub();
   await TestBed.configureTestingModule({
     providers: [
       Cat21BidsService,
       provideHttpClient(),
       provideHttpClientTesting(),
       { provide: WalletService, useValue: walletService },
+      { provide: Cat21SessionService, useValue: sessionService },
     ],
   }).compileComponents();
   return {
     service: TestBed.inject(Cat21BidsService),
     httpMock: TestBed.inject(HttpTestingController),
     walletService,
+    sessionService,
   };
 }
 

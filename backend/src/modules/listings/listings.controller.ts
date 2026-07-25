@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Post,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -25,6 +26,10 @@ import {
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
 
+import {
+  Cat21SessionAddress,
+  Cat21SessionGuard,
+} from '../shared/cat21-session.guard';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { ListingDto, PaginatedListingsDto } from './dto/listing.dto';
 import { ListingsService } from './listings.service';
@@ -50,19 +55,19 @@ export class ListingsController {
   // instance against DoS via valid-but-flooded POSTs (each POST costs
   // ~2 ord API calls). Legitimate sellers won't publish more than a
   // handful of listings per minute across their entire cat inventory;
-  // an attacker flooding with signed junk is capped hard.
+  // an attacker flooding with session-authed junk is capped hard.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(Cat21SessionGuard, ThrottlerGuard)
   @ApiOperation({
     summary: 'Create or overwrite a cat listing',
     description:
-      "Publishes a seller-signed sell intent to the CAT-21 orderbook. The seller's ordinals " +
-      'wallet must sign the canonical listing message (per ordpool-sdk `buildListingMessage`) ' +
-      'via BIP-322. The server verifies the signature and cross-checks with ord that the ' +
-      'DTO\'s `ordinalsAddress` really owns cat #`catNumber` at outpoint `catTxid:catVout` ' +
-      "RIGHT NOW. Any tamper / staleness / attacker-signature is rejected with a specific " +
-      'error code. cat_number is unique — re-POSTing for a cat OVERWRITES the previous ' +
-      'listing (price change flow). Rate-limited to 5/min/IP.',
+      "Publishes a sell intent to the CAT-21 orderbook. Authentication is header-based " +
+      "via the Cat21SessionGuard (X-Cat21-Session-Address / -Valid-Until / -Signature). " +
+      "The session address must match `dto.ordinalsAddress`. The server cross-checks " +
+      "with ord that the address really owns cat #`catNumber` at outpoint `catTxid:catVout` " +
+      "RIGHT NOW. Any tamper is rejected with a specific error code. cat_number is unique " +
+      "— re-POSTing for a cat OVERWRITES the previous listing (price change flow). " +
+      "Rate-limited to 5/min/IP.",
   })
   @ApiTooManyRequestsResponse({ description: 'Exceeded 5 listing publishes per minute per IP.' })
   @ApiCreatedResponse({ type: ListingDto })
@@ -70,23 +75,21 @@ export class ListingsController {
     description:
       'Rejection with a code:\n' +
       '- `network-mismatch` — DTO network doesn\'t match this backend\'s deployment\n' +
-      '- `signature-too-old` — signedAt > 24h in the past\n' +
-      '- `signature-in-future` — signedAt > 1h in the future\n' +
-      '- `signature-malformed-signature` — base64 or witness structure decode failed\n' +
-      '- `signature-unsupported-address-type` — ordinalsAddress is not P2TR\n' +
-      '- `signature-invalid-address` — ordinalsAddress does not decode\n' +
-      '- `signature-signature-does-not-verify` — schnorr verify returned false\n' +
+      '- `session-address-mismatch` — session address ≠ dto.ordinalsAddress\n' +
+      '- `headline-not-in-bundle` — catNumber not in cats[]\n' +
       '- `ord-lookup-failed` — upstream ord unreachable\n' +
       '- `cat-not-found` — ord does not know this cat (or it sits at an unspendable output)\n' +
-      '- `not-current-owner` — signature valid but the address does not own the cat right now\n' +
-      '- `outpoint-mismatch` — cat has moved since signing; re-sign against the current UTXO',
+      '- `cats-bundle-drift` — signed cats bundle no longer matches the UTXO\n' +
+      '- `not-current-owner` — session address is not the current on-chain owner\n' +
+      '- `outpoint-mismatch` — cat has moved; re-submit against the current UTXO',
   })
   async create(
     @Body() dto: CreateListingDto,
+    @Cat21SessionAddress() sessionAddress: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<ListingDto> {
     try {
-      const created = await this.listings.create(dto);
+      const created = await this.listings.create(dto, sessionAddress);
       reply.header('Cache-Control', NO_STORE);
       return created;
     } catch (err) {
@@ -156,19 +159,26 @@ export class ListingsController {
 
   @Delete('cat/:catNumber')
   @HttpCode(204)
+  @UseGuards(Cat21SessionGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({
-    summary: 'Delete a listing (server-side; used by the pruner + future cancel flow)',
+    summary: 'Delete a listing (seller unlists)',
     description:
-      'Removes the listing for cat #catNumber. No auth today — the pruner is the primary ' +
-      'caller. A future seller-side cancel flow will require a signature over a "cancel" ' +
-      'message.',
+      'Removes the listing for cat #catNumber iff the session token proves control of ' +
+      "the listing's `ordinalsAddress`. The pruner uses ListingsService directly and is " +
+      "unaffected by this route's auth.",
   })
-  @ApiNoContentResponse({ description: 'Deleted (or already absent).' })
+  @ApiNoContentResponse({ description: 'Deleted (or already absent — a wrong-owner request also 204s without leaking whether the row existed).' })
   async delete(
     @Param('catNumber', ParseIntPipe) catNumber: number,
+    @Cat21SessionAddress() sessionAddress: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    await this.listings.deleteByCatNumber(catNumber);
+    // Ownership-scoped delete: returns true iff a row matching both
+    // catNumber AND ordinalsAddress existed. Non-owner or missing
+    // row both 204 so we don't leak which listings exist to callers
+    // holding a valid session token for the wrong address.
+    await this.listings.deleteByCatNumberIfOwnedBy(catNumber, sessionAddress);
     reply.header('Cache-Control', NO_STORE);
   }
 }

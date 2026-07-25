@@ -9,6 +9,7 @@ import {
   Post,
   Query,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -25,6 +26,10 @@ import {
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
 
+import {
+  Cat21SessionAddress,
+  Cat21SessionGuard,
+} from '../shared/cat21-session.guard';
 import { BidDto, PaginatedBidsDto } from './dto/bid.dto';
 import { CreateBidDto } from './dto/create-bid.dto';
 import { BidsService } from './bids.service';
@@ -129,23 +134,34 @@ export class BidsController {
 
   @Delete('outpoint/:catTxid/:catVout')
   @HttpCode(204)
+  @UseGuards(Cat21SessionGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({
-    summary: 'Delete a bid (server-side; used by the pruner + future buyer-side cancel flow)',
+    summary: 'Delete a bid (buyer cancels)',
     description:
-      'Removes the bid uniquely identified by (catTxid, catVout, buyer_ordinals_address). ' +
-      'No auth today — the pruner is the primary caller. A future buyer-side cancel flow will ' +
-      "require a signature over a 'cancel' message.",
+      'Removes the bid uniquely identified by (catTxid, catVout, ' +
+      'buyer_ordinals_address). Requires the session-token headers ' +
+      '(X-Cat21-Session-Address / -Valid-Until / -Signature) proving ' +
+      'control of `?buyer=`. The pruner uses BidsService directly and ' +
+      'is unaffected by this route\'s auth.',
   })
   @ApiParam({ name: 'catTxid', description: 'Cat UTXO txid.' })
   @ApiParam({ name: 'catVout', example: 0 })
-  @ApiQuery({ name: 'buyer', description: 'Buyer ordinals address (unique-key second half).' })
+  @ApiQuery({ name: 'buyer', description: 'Buyer ordinals address (unique-key second half). Must match the session address.' })
   @ApiNoContentResponse({ description: 'Deleted (or already absent).' })
   async delete(
     @Param('catTxid') catTxid: string,
     @Param('catVout', ParseIntPipe) catVout: number,
     @Query('buyer') buyerOrdinalsAddress: string,
+    @Cat21SessionAddress() sessionAddress: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
+    if (sessionAddress !== buyerOrdinalsAddress) {
+      throw new UnauthorizedException({
+        code: 'session-address-mismatch',
+        detail: 'Session token proves control of a different address than ?buyer=.',
+      });
+    }
     await this.bids.deleteByOutpointAndBuyer(this.bids.network, catTxid, catVout, buyerOrdinalsAddress);
     reply.header('Cache-Control', NO_STORE);
   }

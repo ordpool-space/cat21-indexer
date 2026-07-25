@@ -1,28 +1,16 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { and, count, desc, eq } from 'drizzle-orm';
-import { verifyListingSignature } from 'ordpool-sdk/core';
 
 import { catsArraysEqual } from '../shared/array-utils';
 import {
   BackendNetworkString,
   readBackendNetworkFromEnv,
-  toSdkNetwork,
 } from '../shared/backend-network';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { listings } from '../shared/drizzle/schema/listings';
 import { OrdClientService } from '../sync/ord-client.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { ListingDto, PaginatedListingsDto } from './dto/listing.dto';
-
-/**
- * Anti-replay window. `signedAt` older than this or more than
- * `CLOCK_SKEW_FUTURE_S` in the future gets rejected at the door.
- * 24h back = generous room for a seller who signed and then took a
- * while to submit; 1h forward = only clock-skewed devices should
- * cross that line at all.
- */
-const ANTI_REPLAY_MAX_AGE_S = 24 * 60 * 60;
-const CLOCK_SKEW_FUTURE_S = 60 * 60;
 
 @Injectable()
 export class ListingsService {
@@ -39,46 +27,44 @@ export class ListingsService {
   /**
    * Create (or overwrite) the active listing for a cat UTXO.
    *
-   * Check order — CHEAP checks before expensive ones so a spammer
-   * can't burn CPU by flooding malformed payloads:
+   * Auth: caller must have passed the Cat21SessionGuard, which puts
+   * the verified `sellerOrdinalsAddress` on the request and hands it
+   * to this service via the second arg. This service asserts the
+   * session address matches `dto.ordinalsAddress` as defence in depth.
+   *
+   * Check order — CHEAP first so spammers can't burn CPU:
    *
    *   1. Network match (constant equality, sub-µs).
-   *   2. Anti-replay window (arithmetic).
+   *   2. Session address == DTO ordinals address.
    *   3. Headline-membership (`catNumber` ∈ `cats`).
-   *   4. BIP-322 signature verify (schnorr, ~ms).
-   *   5. On-chain cross-check via ord — TWO lookups:
+   *   4. On-chain cross-check via ord — TWO lookups:
    *        a. `/output/<outpoint>` returns the live `cats` array.
-   *           If it drifts from what the seller signed, reject.
+   *           If it drifts from what the seller submitted, reject.
    *        b. `/cat/N` + `/inscription/id` for the headline cat's
    *           current owning address (proves the seller controls
-   *           the UTXO).
-   *   6. Upsert.
+   *           the UTXO right now, not just at session-sign time).
+   *   5. Upsert.
    *
    * Any step that fails throws `BadRequestException` with a code the
    * frontend surfaces to the seller. No partial writes.
    */
-  async create(dto: CreateListingDto): Promise<ListingDto> {
-    // (1) Network — cheap fail-fast. Also blocks a seller who typo'd
-    //     `network=testnet3` from submitting to the mainnet backend.
+  async create(dto: CreateListingDto, sellerOrdinalsAddress: string): Promise<ListingDto> {
+    // (1) Network — cheap fail-fast.
     if (dto.network !== this.backendNetwork) {
       throw new BadRequestException({
         code: 'network-mismatch',
-        detail: `Listing signed for network=${dto.network}; this backend serves ${this.backendNetwork}.`,
+        detail: `Listing targets network=${dto.network}; this backend serves ${this.backendNetwork}.`,
       });
     }
 
-    // (2) Anti-replay window — arithmetic on a couple of ints.
-    const nowS = Math.floor(Date.now() / 1000);
-    if (dto.signedAt < nowS - ANTI_REPLAY_MAX_AGE_S) {
+    // (2) Session-address ↔ DTO ordinals-address match. The controller
+    //     also checks this via the guard's verified address, but a
+    //     defence-in-depth assert here means the service can't be
+    //     misused by a future caller that skips the guard check.
+    if (dto.ordinalsAddress !== sellerOrdinalsAddress) {
       throw new BadRequestException({
-        code: 'signature-too-old',
-        detail: `signedAt is ${nowS - dto.signedAt}s in the past; max ${ANTI_REPLAY_MAX_AGE_S}s`,
-      });
-    }
-    if (dto.signedAt > nowS + CLOCK_SKEW_FUTURE_S) {
-      throw new BadRequestException({
-        code: 'signature-in-future',
-        detail: `signedAt is ${dto.signedAt - nowS}s in the future; max ${CLOCK_SKEW_FUTURE_S}s`,
+        code: 'session-address-mismatch',
+        detail: 'Session token proves control of a different address than dto.ordinalsAddress.',
       });
     }
 
@@ -92,31 +78,7 @@ export class ListingsService {
       });
     }
 
-    // (4) BIP-322 signature verify — schnorr, ~ms. The SDK's verify
-    //     rebuilds the canonical message from the fields; no separate
-    //     builder call here.
-    const verifyResult = verifyListingSignature({
-      fields: {
-        catNumber: dto.catNumber,
-        cats: dto.cats,
-        network: toSdkNetwork(dto.network),
-        askSats: dto.askSats,
-        payTo: dto.payTo as never,
-        catTxid: dto.catTxid,
-        catVout: dto.catVout,
-        ordinalsAddress: dto.ordinalsAddress as never,
-        signedAt: dto.signedAt,
-      },
-      signatureBase64: dto.signature,
-    });
-    if (!verifyResult.ok) {
-      throw new BadRequestException({
-        code: `signature-${verifyResult.reason}`,
-        detail: verifyResult.detail,
-      });
-    }
-
-    // (5a) On-chain: fetch the live cats bundle on the UTXO.
+    // (4a) On-chain: fetch the live cats bundle on the UTXO.
     let liveCats: number[] | null;
     try {
       liveCats = await this.ordClient.getCatsAtOutput(dto.catTxid, dto.catVout);
@@ -185,9 +147,14 @@ export class ListingsService {
       });
     }
 
-    // (6) Upsert. UTXO uniqueness — a re-listing at a new price
-    //     replaces the old row atomically.
+    // (5) Upsert. UTXO uniqueness — a re-listing at a new price
+    //     replaces the old row atomically. Server-assigns `signedAt`
+    //     (used by the pruner's id+signedAt race-safe delete) and
+    //     stores an empty `signature` — the column is a legacy field
+    //     from the pre-session-token per-listing BIP-322 era and no
+    //     longer carries authoritative meaning.
     const catsSorted = [...new Set(dto.cats)].sort((a, b) => a - b);
+    const insertedSignedAt = Math.floor(Date.now() / 1000);
     const row = {
       catNumber: dto.catNumber,
       cats: catsSorted,
@@ -197,8 +164,8 @@ export class ListingsService {
       catTxid: dto.catTxid,
       catVout: dto.catVout,
       ordinalsAddress: dto.ordinalsAddress,
-      signedAt: dto.signedAt,
-      signature: dto.signature,
+      signedAt: insertedSignedAt,
+      signature: '',
     };
     await this.drizzle.db
       .insert(listings)
@@ -322,6 +289,25 @@ export class ListingsService {
    */
   async deleteByCatNumber(catNumber: number): Promise<void> {
     await this.drizzle.db.delete(listings).where(eq(listings.catNumber, catNumber));
+  }
+
+  /**
+   * Ownership-scoped delete used by the public DELETE route: only
+   * deletes the row iff its `ordinalsAddress` matches the caller's
+   * session-verified address. Returns `true` if a row was deleted,
+   * `false` if no matching row existed (already deleted, wrong
+   * address, or wrong cat).
+   */
+  async deleteByCatNumberIfOwnedBy(catNumber: number, ordinalsAddress: string): Promise<boolean> {
+    const [existing] = await this.drizzle.db
+      .select({ id: listings.id, ordinalsAddress: listings.ordinalsAddress })
+      .from(listings)
+      .where(eq(listings.catNumber, catNumber))
+      .limit(1);
+    if (!existing) return false;
+    if (existing.ordinalsAddress !== ordinalsAddress) return false;
+    await this.drizzle.db.delete(listings).where(eq(listings.id, existing.id));
+    return true;
   }
 
   /**

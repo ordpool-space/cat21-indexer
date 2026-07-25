@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 import { NoStoreOnErrorFilter } from '../shared/no-store-on-error.filter';
+import { Cat21SessionGuard } from '../shared/cat21-session.guard';
 import { ListingsController } from './listings.controller';
 import { ListingsService } from './listings.service';
 
@@ -48,9 +49,22 @@ describe('ListingsController — error responses carry Cache-Control: no-store (
       ],
       controllers: [ListingsController],
       providers: [
-        { provide: ListingsService, useValue: { create: mockCreate, findByCatNumber: jest.fn(), findPaginated: jest.fn(), deleteByCatNumber: jest.fn() } },
+        { provide: ListingsService, useValue: { create: mockCreate, findByCatNumber: jest.fn(), findPaginated: jest.fn(), deleteByCatNumber: jest.fn(), deleteByCatNumberIfOwnedBy: jest.fn() } },
       ],
-    }).compile();
+    })
+      // This spec covers the CACHE-CONTROL wire behavior across error
+      // paths (pipe, service throw, throttler, unhandled). It's not
+      // an auth test — bypass the session guard by returning the
+      // seller's ordinals address inline.
+      .overrideGuard(Cat21SessionGuard)
+      .useValue({
+        canActivate: (ctx: import('@nestjs/common').ExecutionContext) => {
+          const req = ctx.switchToHttp().getRequest();
+          req.cat21SessionAddress = 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9';
+          return true;
+        },
+      })
+      .compile();
 
     app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter({ logger: false }));
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -75,8 +89,6 @@ describe('ListingsController — error responses carry Cache-Control: no-store (
     catTxid: 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df',
     catVout: 0,
     ordinalsAddress: 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9',
-    signedAt: Math.floor(Date.now() / 1000),
-    signature: 'AUHd69PrJQEv+oKTfZ8l+WROBHuy9HKrbFCJu7U1iK2iiEy1vMU5EfMtjc+VSHM7aU0SDbak5IUZRVno2P5mjSafAQ==',
   });
 
   it('400 from ValidationPipe (missing required field) carries no-store', async () => {
