@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { base64, hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { and, count, desc, eq } from 'drizzle-orm';
-import { CAT21_POSTAGE_SATS, Network, toScureNetwork, validateCat21BuyOfferPsbt } from 'ordpool-sdk/core';
+import { validateCat21BuyOfferPsbt } from 'ordpool-sdk/core';
 
 import { catsArraysEqual } from '../shared/array-utils';
 import {
@@ -25,20 +25,6 @@ import { CreateBidDto } from './dto/create-bid.dto';
  * cost the seller nothing to accept and pollute the display.
  */
 const MARKETPLACE_FLOOR_SATS = 1_000;
-
-/**
- * Decode a scriptPubKey back into a bitcoin address for the given
- * network. Wraps scure's OutScript.decode + Address.encode. Returns
- * null on scripts we can't render (OP_RETURN, non-standard scripts).
- */
-export function scriptToAddress(script: Uint8Array, network: Network): string | null {
-  try {
-    const decoded = btc.OutScript.decode(script);
-    return btc.Address(toScureNetwork(network)).encode(decoded);
-  } catch {
-    return null;
-  }
-}
 
 @Injectable()
 export class BidsService {
@@ -65,10 +51,13 @@ export class BidsService {
    *   1. Network match.
    *   2. Headline membership (headline ∈ cats).
    *   3. Floor price (spam guard).
-   *   4. PSBT decode + shape (input 0 = the cat UTXO, output 0 = cat →
-   *      buyer, output 1 = sats → seller, output 2 = optional change).
-   *   5. Client-vs-PSBT cross-check (extracted values match DTO).
-   *   6. SDK validateCat21BuyOfferPsbt (SIGHASH invariants, buyer sigs).
+   *   4. PSBT decode + input/output count shape gates the SDK doesn't cap.
+   *   5. SDK validateCat21BuyOfferPsbt — single source of truth for the
+   *      full PSBT-vs-DTO consistency chain (seller input, sighash,
+   *      buyer signatures, seller payment address + floor, cat output
+   *      address, exact bidSats price, buyer change address).
+   *   6. Electrs — buyer inputs must be live outpoints (phantom-input
+   *      rejection).
    *   7. Ord `/output/<outpoint>` — cats-bundle drift check.
    *   8. Upsert.
    */
@@ -122,6 +111,14 @@ export class BidsService {
       });
     }
 
+    // (5) Shape guards not covered by the SDK validator. The SDK
+    //     iterates buyer inputs from index 1..N so a 1-input PSBT
+    //     silently passes its buyer-signature loop; a marketplace
+    //     bid MUST have at least one buyer funding input. The SDK
+    //     also doesn't cap the upper output count, but a legitimate
+    //     buy-offer has exactly 2 or 3 outputs (cat, seller-payment,
+    //     optional buyer-change); more is either malformed or an
+    //     unknown protocol variant we don't index.
     if (tx.inputsLength < 2) {
       throw new BadRequestException({
         code: 'psbt-shape-invalid',
@@ -137,80 +134,21 @@ export class BidsService {
 
     const sdkNetwork = toSdkNetwork(dto.network);
 
-    // Input 0 outpoint matches the DTO.
-    const input0 = tx.getInput(0);
-    const input0Txid = input0.txid ? hex.encode(input0.txid) : null;
-    if (input0Txid !== dto.catTxid.toLowerCase() || input0.index !== dto.catVout) {
-      throw new BadRequestException({
-        code: 'psbt-input0-mismatch',
-        detail:
-          `PSBT input 0 = ${input0Txid}:${input0.index}, but DTO claims ${dto.catTxid}:${dto.catVout}.`,
-      });
-    }
-
-    // Output 0 = cat lands here; decode address and check against buyerOrdinalsAddress.
-    const out0 = tx.getOutput(0);
-    if (!out0.script) {
-      throw new BadRequestException({ code: 'psbt-shape-invalid', detail: 'PSBT output 0 has no script' });
-    }
-    if (Number(out0.amount ?? 0n) !== CAT21_POSTAGE_SATS) {
-      throw new BadRequestException({
-        code: 'psbt-shape-invalid',
-        detail: `PSBT output 0 must be exactly ${CAT21_POSTAGE_SATS} sats (cat postage); got ${out0.amount}`,
-      });
-    }
-    const out0Address = scriptToAddress(out0.script, sdkNetwork);
-    if (!out0Address || out0Address !== dto.buyerOrdinalsAddress) {
-      throw new BadRequestException({
-        code: 'psbt-output0-mismatch',
-        detail: `PSBT output 0 pays ${out0Address ?? 'unknown'}, DTO claims ${dto.buyerOrdinalsAddress}`,
-      });
-    }
-
-    // Output 1 = seller payment.
-    const out1 = tx.getOutput(1);
-    if (!out1.script || out1.amount === undefined) {
-      throw new BadRequestException({ code: 'psbt-shape-invalid', detail: 'PSBT output 1 has no script or amount' });
-    }
-    const out1Address = scriptToAddress(out1.script, sdkNetwork);
-    if (!out1Address || out1Address !== dto.sellerPaymentAddress) {
-      throw new BadRequestException({
-        code: 'psbt-output1-mismatch',
-        detail: `PSBT output 1 pays ${out1Address ?? 'unknown'}, DTO claims ${dto.sellerPaymentAddress}`,
-      });
-    }
-    // Output 1 amount = bidSats + postage (ord-parity — seller made whole on postage).
-    const expectedOut1 = dto.bidSats + CAT21_POSTAGE_SATS;
-    if (Number(out1.amount) !== expectedOut1) {
-      throw new BadRequestException({
-        code: 'psbt-price-mismatch',
-        detail: `PSBT output 1 amount = ${out1.amount} sats, expected bidSats + postage = ${expectedOut1}`,
-      });
-    }
-
-    // Output 2 (optional) = buyer change.
-    if (tx.outputsLength === 3) {
-      const out2 = tx.getOutput(2);
-      if (!out2.script) {
-        throw new BadRequestException({ code: 'psbt-shape-invalid', detail: 'PSBT output 2 has no script' });
-      }
-      const out2Address = scriptToAddress(out2.script, sdkNetwork);
-      if (!out2Address || out2Address !== dto.buyerPaymentAddress) {
-        throw new BadRequestException({
-          code: 'psbt-output2-mismatch',
-          detail: `PSBT output 2 pays ${out2Address ?? 'unknown'}, DTO claims ${dto.buyerPaymentAddress}`,
-        });
-      }
-    }
-
-    // (6) SDK validate — SIGHASH_ALL invariants on buyer inputs,
-    //     seller-input postage, price ≥ floor (0 here — we already
-    //     enforce the marketplace floor above), address match.
+    // (6) Single SDK gate — parses the PSBT, checks every semantic
+    //     invariant (input 0 outpoint, seller-input postage, sighash
+    //     both PSBT field AND signature flag byte, buyer signatures,
+    //     Output 0 postage + script decodability, Output 1 address +
+    //     floor, Output 2 buyer-change address, exact-price gate).
+    //     Any drift between the buyer's declared DTO and the signed
+    //     bytes surfaces as a typed reason.
     const sdkResult = validateCat21BuyOfferPsbt({
       psbt: psbtBytes,
       expectedSellerUtxo: { txid: dto.catTxid, vout: dto.catVout },
       floorPriceSats: 0,
       expectedSellerPaymentAddress: dto.sellerPaymentAddress as never,
+      expectedBuyerReceiveAddress: dto.buyerOrdinalsAddress as never,
+      expectedBuyerChangeAddress: dto.buyerPaymentAddress as never,
+      expectedExactPrice: dto.bidSats,
       network: sdkNetwork,
     });
     if (!sdkResult.ok) {

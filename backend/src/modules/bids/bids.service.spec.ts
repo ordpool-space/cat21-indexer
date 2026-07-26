@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { BidsService, scriptToAddress } from './bids.service';
+import { BidsService } from './bids.service';
 
 // ---------------------------------------------------------------------------
 // This spec exercises the service's flow-control layer. The heavy lifts are
@@ -299,46 +299,62 @@ describe('BidsService.create — PSBT decode + shape', () => {
     });
   });
 
-  it('rejects psbt-input0-mismatch when PSBT input 0 outpoint disagrees with DTO', async () => {
-    buildPsbtMock({ input0Txid: OTHER_TXID });
+  // Post-finding-#15 the backend delegates all semantic PSBT gating to
+  // the SDK validator. These four tests pin that SDK rejection reasons
+  // propagate as `psbt-<reason>` codes verbatim — the parallel backend
+  // implementation is gone.
+
+  it('propagates SDK missing-seller-input as psbt-missing-seller-input (was psbt-input0-mismatch pre-#15)', async () => {
+    buildPsbtMock();
+    mockValidate.mockReturnValue({ ok: false, reason: 'missing-seller-input', detail: 'stub' });
     const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, createElectrsMock() as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'psbt-input0-mismatch' }),
+      response: expect.objectContaining({ code: 'psbt-missing-seller-input' }),
     });
   });
 
-  it('rejects psbt-shape-invalid when PSBT output 0 is not exactly 546 sats (cat postage)', async () => {
-    buildPsbtMock({ out0Amount: 1000 });
+  it('propagates SDK wrong-postage as psbt-wrong-postage (was psbt-shape-invalid pre-#15)', async () => {
+    buildPsbtMock();
+    mockValidate.mockReturnValue({ ok: false, reason: 'wrong-postage', detail: 'stub' });
     const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, createElectrsMock() as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'psbt-shape-invalid' }),
+      response: expect.objectContaining({ code: 'psbt-wrong-postage' }),
     });
   });
 
-  it('rejects psbt-output0-mismatch when PSBT output 0 address ≠ DTO buyerOrdinalsAddress', async () => {
-    // Override the encoded output 0 address to a different value.
-    mockOutScriptDecode.mockReturnValue({ marker: true });
-    mockAddressEncode.mockReturnValueOnce('bc1p-different-address').mockReturnValue(SELLER_PAY_ADDR);
-    mockFromPSBT.mockReturnValue({
-      inputsLength: 2,
-      outputsLength: 2,
-      getInput: () => ({ txid: new Uint8Array(REAL_TXID.match(/../g)!.map((h) => parseInt(h, 16))), index: 0 }),
-      getOutput: (i: number) => i === 0
-        ? { script: new Uint8Array([1]), amount: BigInt(CAT21_POSTAGE_SATS) }
-        : { script: new Uint8Array([2]), amount: BigInt(21_000 + CAT21_POSTAGE_SATS) },
-    });
+  it('propagates SDK cat-output-wrong-address as psbt-cat-output-wrong-address (was psbt-output0-mismatch pre-#15)', async () => {
+    buildPsbtMock();
+    mockValidate.mockReturnValue({ ok: false, reason: 'cat-output-wrong-address', detail: 'stub' });
     const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, createElectrsMock() as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'psbt-output0-mismatch' }),
+      response: expect.objectContaining({ code: 'psbt-cat-output-wrong-address' }),
     });
   });
 
-  it('rejects psbt-price-mismatch when output 1 amount ≠ bidSats + postage', async () => {
-    // PSBT claims 10_000 + postage, but DTO claims 21_000 bidSats.
-    buildPsbtMock({ out1Amount: 10_000 + CAT21_POSTAGE_SATS });
+  it('propagates SDK wrong-price-exact as psbt-wrong-price-exact (was psbt-price-mismatch pre-#15)', async () => {
+    buildPsbtMock();
+    mockValidate.mockReturnValue({ ok: false, reason: 'wrong-price-exact', detail: 'stub' });
     const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, createElectrsMock() as never);
     await expect(service.create(validDto())).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'psbt-price-mismatch' }),
+      response: expect.objectContaining({ code: 'psbt-wrong-price-exact' }),
+    });
+  });
+
+  it('wires every expected* arg into the SDK validator call', async () => {
+    // Positive-equality assert: proves the backend forwards the DTO's
+    // buyer/seller/change addresses AND bidSats as expectedExactPrice
+    // so the SDK actually pins the PSBT-vs-DTO consistency.
+    buildPsbtMock();
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, createElectrsMock() as never);
+    await service.create(validDto()).catch(() => { /* ord mock may reject downstream — we only care about the validator call */ });
+    expect(mockValidate).toHaveBeenCalledTimes(1);
+    const call = mockValidate.mock.calls[0][0];
+    expect(call).toMatchObject({
+      expectedSellerUtxo: { txid: REAL_TXID, vout: 0 },
+      expectedSellerPaymentAddress: SELLER_PAY_ADDR,
+      expectedBuyerReceiveAddress: BUYER_ORD_ADDR,
+      expectedBuyerChangeAddress: BUYER_PAY_ADDR,
+      expectedExactPrice: 21_000,
     });
   });
 });
