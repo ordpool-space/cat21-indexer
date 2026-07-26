@@ -78,13 +78,22 @@ export class CatUtxoLookupService {
         if (!addressInfo.cats || addressInfo.cats.length === 0) {
           return of([] as MyCatHolding[]);
         }
-        const lookups = addressInfo.cats.map((inscriptionId, i) =>
+        // Derive the cat number from the inscription's own
+        // /inscription/<id> response (`insc.number`) rather than
+        // positional-pairing against addressInfo.cat_numbers[i]. In
+        // cat21-ord mode the inscription index only contains cats, so
+        // inscription number == cat number by construction. Pairing by
+        // index breaks silently if ord ever changes the order of one
+        // array vs the other (e.g. sorts cats by satpoint but keeps
+        // cat_numbers numeric); pulling number and satpoint from the
+        // same per-inscription round-trip removes that coupling.
+        const lookups = addressInfo.cats.map((inscriptionId) =>
           this.ordApi.getInscription(inscriptionId).pipe(
             map<OrdInscriptionResponse, MyCatHolding | null>((insc) => {
               const parsed = parseSatpoint(insc.satpoint);
               if (!parsed) return null;
               return {
-                catNumber: addressInfo.cat_numbers[i],
+                catNumber: insc.number,
                 txid: parsed.txid,
                 vout: parsed.vout,
                 value: 546,

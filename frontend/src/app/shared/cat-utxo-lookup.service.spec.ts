@@ -107,6 +107,50 @@ describe('CatUtxoLookupService', () => {
       );
     });
 
+    it('derives the cat number from the inscription response, not the positional cat_numbers[i] array', async () => {
+      // Regression for finding #14: cats[i] was paired with cat_numbers[i]
+      // by index. If ord ever returns the two arrays in different orders
+      // (e.g. cats sorted by satpoint, cat_numbers numeric), the wrong
+      // cat number gets attached to the wrong inscription. Fix uses
+      // `insc.number` from each per-inscription round-trip, so a
+      // mis-aligned cat_numbers array is IGNORED. This test wires
+      // cat_numbers as [999, 888] but the inscription responses report
+      // 42 and 7 — the holdings must reflect the inscription responses.
+      const txidA = 'e'.repeat(64);
+      const txidB = 'f'.repeat(64);
+      const inscA = `${txidA}i0`;
+      const inscB = `${txidB}i0`;
+
+      ordApi.getAddress.mockReturnValue(of<OrdAddressResponse>({
+        outputs: [`${txidA}:0`, `${txidB}:0`],
+        cats: [inscA, inscB],
+        cat_numbers: [999, 888],
+        sat_balance: 1092,
+      }));
+      ordApi.getInscription.mockImplementation((id: unknown) => {
+        if (id === inscA) {
+          return of<OrdInscriptionResponse>({
+            id: inscA,
+            number: 42,
+            address: 'bc1pSeller',
+            satpoint: `${txidA}:0:0`,
+            sat: 1,
+          });
+        }
+        return of<OrdInscriptionResponse>({
+          id: inscB,
+          number: 7,
+          address: 'bc1pSeller',
+          satpoint: `${txidB}:0:0`,
+          sat: 2,
+        });
+      });
+
+      const result = await firstValueFrom(service.getMyHoldings('bc1pSeller'));
+      const numbers = result.map((h) => h.catNumber).sort((a, b) => a - b);
+      expect(numbers).toEqual([7, 42]);
+    });
+
     it('drops a cat whose satpoint cannot be parsed (does not poison the whole list)', async () => {
       const cleanTxid = 'c'.repeat(64);
       const cleanInscription = `${cleanTxid}i0`;
