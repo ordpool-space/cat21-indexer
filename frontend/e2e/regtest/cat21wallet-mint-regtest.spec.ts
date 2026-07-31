@@ -33,14 +33,14 @@ import { installContextErrorGuard } from './lib/browser-error-guard';
  *     `cat21wallet-onboard.spec.ts` and is embedded inline as
  *     beforeAll's primer.
  *
- *   - CAT-21 wallet has TWO regtest paths in the SDK (see the
- *     workspace's `E2E_WALLET_TRICKS.md`). This spec uses the
- *     NATIVE `connectCat21WalletRegtest` path — the connector
- *     honours `Network.Regtest → 'devnet'` and `getAddresses`
- *     returns `bcrt1q…`/`bcrt1p…` directly. No derivation shim
- *     needed. (The mainnet-derive path in the SDK's own
- *     `cat21wallet-mint-roundtrip.spec.ts` is kept only for
- *     historical Leather-parity reasons.)
+ *   - CAT-21 wallet's connector honours `Network.Regtest` but the
+ *     end-to-end pattern EVERY spec uses (mint, transfer, offer, and
+ *     this consumer-UI spec) is: connect the wallet as mainnet,
+ *     then derive the bcrt1q / bcrt1p addresses locally from the
+ *     same pubkeys via @scure/btc-signer. This spec drives the
+ *     cat21-indexer frontend UI which encapsulates that flow — see
+ *     `connectCat21WalletViaMintPage` below. Full details in the
+ *     workspace's `E2E_WALLET_TRICKS.md`.
  *
  * Test scope: mint round-trip, warned-cat "Use anyway" flow,
  * manual overrides, sign-popup cancel, broadcast-failure surfacing,
