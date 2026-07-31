@@ -33,12 +33,19 @@ import { installContextErrorGuard } from './lib/browser-error-guard';
  *     `cat21wallet-onboard.spec.ts` and is embedded inline as
  *     beforeAll's primer.
  *
- *   - CAT-21 wallet's `getAddresses` returns MAINNET addresses
- *     regardless of the dapp's Network.Regtest request, so the
- *     full mint round-trip needs SDK-level regtest-derivation
- *     plumbing that doesn't exist in the consumer flow yet. We
- *     stop at "connected wallet" here; the full mint round-trip
- *     is a follow-up iteration.
+ *   - CAT-21 wallet has TWO regtest paths in the SDK (see the
+ *     workspace's `E2E_WALLET_TRICKS.md`). This spec uses the
+ *     NATIVE `connectCat21WalletRegtest` path — the connector
+ *     honours `Network.Regtest → 'devnet'` and `getAddresses`
+ *     returns `bcrt1q…`/`bcrt1p…` directly. No derivation shim
+ *     needed. (The mainnet-derive path in the SDK's own
+ *     `cat21wallet-mint-roundtrip.spec.ts` is kept only for
+ *     historical Leather-parity reasons.)
+ *
+ * Test scope: mint round-trip, warned-cat "Use anyway" flow,
+ * manual overrides, sign-popup cancel, broadcast-failure surfacing,
+ * /cat/N + /dashboard/{trade,transfer} navigation, full offer /
+ * transfer / bid-marketplace round-trips.
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
