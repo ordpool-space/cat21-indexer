@@ -55,10 +55,18 @@ const listing = (over: Partial<Listing> = {}): Listing => ({
 
 /**
  * Install a strict mock: exactly the expected URL gets the given
- * body; any other `/api/v1/listings/*` call gets a 404 AND is
- * recorded to `badCalls` so the test can fail explicitly on it. Two
- * bugs this catches that the old `**\/*\/*` glob mock swallowed:
+ * body; ANY OTHER `/api/v1/**` call gets a 404 AND is recorded to
+ * `badCalls` so the test can fail explicitly on it. Two bugs this
+ * catches that the old `**\/*\/*` glob mock swallowed:
  * URL-construction bugs (NaN/NaN), and accidental double-fetches.
+ *
+ * The route pattern is `**\/api\/v1\/**` (not `**\/api\/v1\/listings\/**`)
+ * so a non-listings API call (cats, orders, bids, address, health…)
+ * ALSO lands in badCalls instead of quietly hitting whatever real
+ * backend the CI shell had running. Rule 2 in the file docstring
+ * ("Mock only the exact URL you expect") is only enforced by this
+ * wider scope — the previous listings-only route let non-listings
+ * URLs escape both the 404 AND the badCalls accounting.
  */
 async function installStrictListingsMock(
   page: Page,
@@ -67,7 +75,7 @@ async function installStrictListingsMock(
   badCalls: string[],
   status = 200,
 ): Promise<void> {
-  await page.route('**/api/v1/listings/**', async (route: Route) => {
+  await page.route('**/api/v1/**', async (route: Route) => {
     const url = route.request().url();
     if (url.endsWith(expectedPath)) {
       await route.fulfill({
@@ -164,7 +172,11 @@ test.describe('CAT-21 orderbook — user clicks through, no cheating', () => {
     const badCalls: string[] = [];
     let hits = 0;
     // Custom mock — count hits + always 500, but still strict on URL.
-    await page.route('**/api/v1/listings/**', async (route: Route) => {
+    // Route pattern widened to `**\/api\/v1\/**` per the strict-mock
+    // rationale in `installStrictListingsMock`: non-listings API calls
+    // must also land in badCalls, not escape both the 404 AND the
+    // accounting.
+    await page.route('**/api/v1/**', async (route: Route) => {
       const url = route.request().url();
       if (url.endsWith('/api/v1/listings/25/1')) {
         hits++;
@@ -195,7 +207,10 @@ test.describe('CAT-21 orderbook — user clicks through, no cheating', () => {
     const badCalls: string[] = [];
     // First page has total=60, so Next should navigate to /orderbook/25/2
     // and the frontend should GET /api/v1/listings/25/2 (NOT /25/NaN).
-    await page.route('**/api/v1/listings/**', async (route: Route) => {
+    // Route pattern widened to `**\/api\/v1\/**` per the strict-mock
+    // rationale in `installStrictListingsMock` — non-listings API
+    // calls must also land in badCalls.
+    await page.route('**/api/v1/**', async (route: Route) => {
       const url = route.request().url();
       if (url.endsWith('/api/v1/listings/25/1')) {
         await route.fulfill({

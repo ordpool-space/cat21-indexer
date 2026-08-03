@@ -406,7 +406,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   }
   // Output integrity — output 0 holds the cat sat at exactly 546
   // sat. Wallets that quietly reshuffle outputs (or drop dust)
-  // would orphan the cat even though locktime + parseability
+  // would misplace the cat sat even though locktime + parseability
   // still hold, because ord assigns the cat number to the first
   // sat of the first output.
   expect(esploraTx.vout.length).toBeGreaterThanOrEqual(1);

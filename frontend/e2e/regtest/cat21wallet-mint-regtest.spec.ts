@@ -205,7 +205,10 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
   // header popover is stable regardless of mint-page state.
   //
   // CAT-21 wallet's getAddresses honors the `network` param (SDK
-  // connector maps Network.Regtest → 'devnet'), so the returned
+  // connector maps Network.Regtest → 'regtest' — cat21-wallet also
+  // accepts Leather's legacy 'devnet' alias but the SDK sends the
+  // standard Bitcoin term; see toLeatherNetworkString in ordpool-sdk
+  // src/network.ts), so the returned
   // paymentAddr must start with bcrt1q.
   await page.getByTestId('wallet-connected-btn').click();
   const paymentAddrEl = page.getByTestId('wallet-payment-address-full');
@@ -1202,6 +1205,16 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
   await waitForElectrsSync(mineBlocks(1));
   const settleTx = await getTx(settleTxid);
   expect(settleTx.status.block_hash).toBeTruthy();
+  // Regression guard for the SDK's builder invariant, NOT a protocol
+  // requirement. `cat21-offer.helper.ts` throws if `lockTime !== 21`
+  // at build time — this asserts the same holds after broadcast so
+  // a change to the helper that dropped the invariant is caught here
+  // and not silently. A third-party-wallet settle with `locktime=0`
+  // would still deliver the cat (sat-tracking follows the sat, not
+  // the locktime); losing =21 only loses the SDK's bonus mint. See
+  // workspace HQ HARD RULE "nLockTime=21 is PROTOCOL for MINT,
+  // CONVENTION for everything else".
+  expect(settleTx.locktime).toBe(21);
   // Output 0 = cat at 546 sats to buyer's receive address.
   // Output 1 = seller payment = priceSats + postage to seller.
   // Output 2 (may or may not exist depending on change) = buyer change.
@@ -1421,7 +1434,13 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   await waitForElectrsSync(mineBlocks(1));
   const transferTx = await getTx(transferTxid);
   expect(transferTx.status.block_hash).toBeTruthy();
-  // Every cat-touching tx we build carries nLockTime=21 (workspace HQ HARD RULE #1).
+  // Regression guard for cat21-wallet's HARD RULE #1 + the SDK's
+  // `cat21-transfer.helper.ts` builder invariant (throws if
+  // `lockTime !== 21`). Not a protocol requirement — a third-party
+  // wallet transferring the same cat with `locktime=0` still moves
+  // the cat via sat-tracking; only the SDK/wallet's bonus mint is
+  // lost. See workspace HQ HARD RULE "nLockTime=21 is PROTOCOL for
+  // MINT, CONVENTION for everything else".
   expect(transferTx.locktime).toBe(21);
   expect(transferTx.vout.length).toBeGreaterThanOrEqual(1);
 
@@ -1689,6 +1708,14 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   await waitForElectrsSync(mineBlocks(1));
   const settleTx = await getTx(settleTxid);
   expect(settleTx.status.block_hash).toBeTruthy();
+  // Regression guard for the SDK's builder invariant (same as the
+  // offer round-trip above): `cat21-offer.helper.ts` throws if
+  // `lockTime !== 21` at build time. Not a protocol requirement — a
+  // regression that produced `locktime=0` still delivers the cat via
+  // sat-tracking; only the SDK's bonus mint is lost. See workspace HQ
+  // HARD RULE "nLockTime=21 is PROTOCOL for MINT, CONVENTION for
+  // everything else".
+  expect(settleTx.locktime).toBe(21);
   expect(settleTx.vout.length).toBeGreaterThanOrEqual(2);
 
   const settleRaw = JSON.parse(

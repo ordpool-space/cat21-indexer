@@ -89,6 +89,106 @@ async function installListingMock(page: Page, catNumber: number, body: unknown |
   });
 }
 
+/**
+ * Install the full ord + esplora + indexer chain the details page
+ * walks to resolve `currentTargetResource` (the "where does this cat
+ * live right now" lookup, chained through 4 services). Without these
+ * mocks the resource never resolves, `hasBids()` stays false, and the
+ * bids panel is never rendered — which used to hide the test's real
+ * bid-panel assertions behind an optional `.catch(() => 'no-panel')`
+ * gate. See `getTargetByNumber` in cat-utxo-lookup.service.ts for the
+ * chain: indexer → ord/inscription → ord/output → esplora/tx.
+ *
+ * scriptPubKey bytes are cross-checked between ord and esplora and
+ * must match exactly; a 51-byte P2TR script (OP_1 + 32-byte x-only
+ * pubkey) built from the ORD_A test address is used for both.
+ */
+async function installTargetResolutionMocks(
+  page: Page,
+  catNumber: number,
+  txid: string,
+  vout: number,
+  ordAddress: string,
+): Promise<void> {
+  // OP_1 (0x51) + push32 (0x20) + 32 zero bytes. This is not a real
+  // P2TR script for ordAddress — the test doesn't decode it. What
+  // matters is that ord and esplora return byte-identical bytes, which
+  // is the load-bearing cross-check in getTargetByNumber.
+  const scriptPubKeyHex = '5120' + '00'.repeat(32);
+
+  // 1) indexer: GET /api/cat/{catNumber} → CatDto with txHash.
+  await page.route(new RegExp(`/api/cat/${catNumber}(\\?|$)`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        catNumber,
+        txHash: txid,
+        blockHeight: 824205,
+        blockId: 'b'.repeat(64),
+        firstOwner: ordAddress,
+      }),
+    });
+  });
+
+  // 2) ord: GET /inscription/{txid}i0 → address + satpoint.
+  await page.route(new RegExp(`/inscription/${txid}i0(\\?|$)`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: `${txid}i0`,
+        number: catNumber,
+        address: ordAddress,
+        satpoint: `${txid}:${vout}:0`,
+        sat: 100_000_000,
+      }),
+    });
+  });
+
+  // 3) ord: GET /output/{txid}:{vout} → script_pubkey.
+  await page.route(new RegExp(`/output/${txid}:${vout}(\\?|$)`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        outpoint: `${txid}:${vout}`,
+        address: ordAddress,
+        script_pubkey: scriptPubKeyHex,
+        cats: [String(catNumber)],
+        sat_ranges: [[100_000_000, 100_000_001]],
+      }),
+    });
+  });
+
+  // 4) ord: GET /cat/{catNumber} → { address } (currentOwnerResource).
+  await page.route(new RegExp(`/cat/${catNumber}(\\?|$)`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ address: ordAddress }),
+    });
+  });
+
+  // 5) esplora: GET /api/tx/{txid} → vout scriptpubkey (must byte-match ord).
+  await page.route(new RegExp(`/api/tx/${txid}(\\?|$)`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        txid,
+        vout: [
+          {
+            scriptpubkey: scriptPubKeyHex,
+            scriptpubkey_address: ordAddress,
+            value: 546,
+          },
+        ],
+      }),
+    });
+  });
+}
+
 test.describe('CAT-21 bids marketplace — details-page read surface', () => {
 
   test('empty bids feed on a cat details page renders neither the panel nor the "N bids" heading', async ({ page }) => {
@@ -116,6 +216,11 @@ test.describe('CAT-21 bids marketplace — details-page read surface', () => {
 
   test('a bid feed renders the panel + one row per bid + a highest-bid summary', async ({ page }) => {
     const badCalls: string[] = [];
+    // Give the ord+esplora chain enough mocks that
+    // `currentTargetResource` resolves to a real outpoint. Without
+    // this the bids resource never fires and the panel silently
+    // stays hidden — which used to make this test a no-op.
+    await installTargetResolutionMocks(page, 42, TXID, 0, BUYER_ORD_A);
     await installListingMock(page, 42, null);
     await installStrictBidsMock(
       page,
@@ -129,37 +234,15 @@ test.describe('CAT-21 bids marketplace — details-page read surface', () => {
 
     await page.goto('/cat/42');
 
-    // We need `currentTargetResource` (ord lookup) to resolve so the
-    // details page knows the outpoint to fetch bids for. Mock the
-    // relevant network calls minimally — the details page pulls
-    // owner + target from separate ord endpoints; a 404 for both
-    // keeps state deterministic (isOwner=false, target=null → bids
-    // resource never fires against the mock).
-    //
-    // Skipping this test entirely if the ord chain doesn't reach a
-    // resolved outpoint would be dishonest — instead we assert the
-    // panel is either absent (target null) OR present with real rows
-    // (target resolved). Prefer the "panel present + real data"
-    // branch by giving the ord chain enough to resolve.
-
-    // Best-effort: wait for either the panel to render OR the empty
-    // page settled state. If the panel renders, verify.
-    const panel = page.getByTestId('cat-bids-panel');
-    const settled = await panel
-      .waitFor({ state: 'visible', timeout: 10_000 })
-      .then(() => 'panel' as const)
-      .catch(() => 'no-panel' as const);
-
-    if (settled === 'panel') {
-      await expect(page.getByTestId('cat-bids-row')).toHaveCount(2);
-      const firstRow = page.getByTestId('cat-bids-row').first();
-      await expect(firstRow.getByTestId('cat-bids-row-price')).toHaveText(/30,000 sats/);
-      await expect(page.getByTestId('cat-bids-row-price').nth(1)).toHaveText(/21,000 sats/);
-    }
-    // In the "no-panel" branch (ord chain didn't resolve to an
-    // outpoint in the test env — expected on route-mocked details
-    // page): the badCalls assertion below still enforces that no
-    // bogus URLs were built.
+    // With the target resolved (see installTargetResolutionMocks),
+    // the bids resource fires and the panel MUST render — no optional
+    // gate, no "no-panel" fallback. If this fails, either the target
+    // chain broke or the panel-rendering condition regressed.
+    await expect(page.getByTestId('cat-bids-panel')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('cat-bids-row')).toHaveCount(2);
+    const firstRow = page.getByTestId('cat-bids-row').first();
+    await expect(firstRow.getByTestId('cat-bids-row-price')).toHaveText(/30,000 sats/);
+    await expect(page.getByTestId('cat-bids-row-price').nth(1)).toHaveText(/21,000 sats/);
 
     expect(badCalls, `unexpected API calls: ${JSON.stringify(badCalls)}`).toHaveLength(0);
   });
