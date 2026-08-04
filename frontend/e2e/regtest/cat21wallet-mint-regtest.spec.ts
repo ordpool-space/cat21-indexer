@@ -123,6 +123,25 @@ let sharedPaymentAddress: string | undefined = loadShared().paymentAddress;
 // test picks this up as its sellerInput.
 let sharedMintTxid: string | undefined = loadShared().mintTxid;
 
+// TS narrowing message for sharedPaymentAddress reads throughout the
+// suite. beforeAll structurally sets sharedPaymentAddress; every
+// `if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET)`
+// below is a type-checker gate, not an ordering guard. If it fires,
+// the beforeAll itself would have failed first and Playwright would
+// have reported that instead. See `test.describe.configure` block
+// below for the serial-mode cascade-avoidance that also removes any
+// remaining "test N ran before test 1" concern.
+const SHARED_ADDR_UNSET = 'sharedPaymentAddress not initialized (beforeAll should have set it)';
+
+// File-scope serial mode: tests in this spec chain on shared on-chain
+// state (mint tx → transfer / offer / bid settle). Serial mode makes
+// Playwright run tests in file order AND skip subsequent tests when
+// one earlier in the file fails, so a broken mint doesn't cascade
+// into misleading "sharedMintTxid was not set" errors from every
+// downstream test. Same effect as wrapping the whole file in
+// `test.describe.serial(...)`, without the 1900-line reindent.
+test.describe.configure({ mode: 'serial' });
+
 async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
     path: path.resolve(RESULTS_DIR, `cat21wallet-mint-regtest-${name}.png`),
@@ -152,12 +171,9 @@ async function navigateViaHeaderToMint(page: Page): Promise<void> {
  * bcrt1q… regtest payment address; the persistent context carries the
  * connect state to every subsequent test's page.
  *
- * Hoisted out of test 1 into `beforeAll` per rule 1 — the previous
- * pattern (test 1 sets `sharedPaymentAddress`, tests 2-N `if
- * (!sharedPaymentAddress) throw 'first test must have set X'`) made
- * every downstream test order-coupled on test 1's success. beforeAll
- * runs before ANY test regardless of Playwright shard/retry order, so
- * shared state is now structurally guaranteed.
+ * Called from `beforeAll` (rule 1) so every test starts with a
+ * connected wallet and a known `sharedPaymentAddress`, regardless
+ * of Playwright shard/retry order.
  */
 async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddress: string }> {
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
@@ -328,7 +344,7 @@ test.afterAll(async () => {
 
 test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', { timeout: 180_000 }, async () => {
   // Connect flow already ran in beforeAll; sharedPaymentAddress is set.
-  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
   const paymentAddr = sharedPaymentAddress;
 
   const page = await context.newPage();
@@ -443,7 +459,7 @@ async function cat21walletMintAtRate(opts: {
   scenarioLabel: string;
   mockFeesAsHigh?: boolean;
 }): Promise<{ broadcastTxid: string; fee: number; vsize: number; rate: number }> {
-  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   if (opts.mockFeesAsHigh) {
     const res = await fetch('http://localhost:8999/admin/fees', {
@@ -531,7 +547,7 @@ async function cat21walletMintAtRate(opts: {
 }
 
 test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on CAT-21 wallet', async () => {
-  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   const SMALL_FUND_SATS = 15_000;
   const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.00015').trim();
@@ -656,7 +672,7 @@ test('manual override: typing 1 while the picker suggests 100 — low rate wins 
 });
 
 test('sign-popup cancel keeps state coherent on CAT-21 wallet', { timeout: 180_000 }, async () => {
-  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
   rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
 
@@ -710,7 +726,7 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', { timeout: 180_0
 });
 
 test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake success)', { timeout: 240_000 }, async () => {
-  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
   rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
 
@@ -1037,8 +1053,13 @@ function hexDecode(hexStr: string): Uint8Array {
 }
 
 test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves on-chain', { timeout: 240_000 }, async () => {
-  if (!sharedMintTxid) throw new Error('mint test must have set sharedMintTxid');
-  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  // Real dependency: this test consumes the cat produced by the mint
+  // test as its seller input. Under serial mode (see file-scope
+  // `test.describe.configure({ mode: 'serial' })` above), Playwright
+  // already skips this test if the mint failed — the throw is a
+  // TS narrowing gate for the reads below, not an ordering guard.
+  if (!sharedMintTxid) throw new Error('sharedMintTxid not initialized (the mint test should have set it — serial mode should have skipped this test)');
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   // ─── Read the mint tx to get the exact seller cat outpoint ───
   const mintTxJson = JSON.parse(
@@ -1253,7 +1274,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 // ============================================================
 
 test('full transfer round-trip: fresh mint → transfer via URL → cat moves on-chain', { timeout: 240_000 }, async () => {
-  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   // ─── Mint a fresh cat via the existing helper ───
   const fresh = await cat21walletMintAtRate({
@@ -1481,7 +1502,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 // malformed and the broadcast would reject.
 // ============================================================
 test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT → seller accepts via UI → cat moves on-chain', { timeout: 360_000 }, async () => {
-  if (!sharedPaymentAddress) throw new Error('beforeAll must have set sharedPaymentAddress');
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   // ─── Step 1: Fresh mint so we don't fight the earlier offer test
   //             for the shared cat UTXO. cat21walletMintAtRate drives
