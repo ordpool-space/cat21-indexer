@@ -249,7 +249,18 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
 async function clickApprovalButton(popup: Page): Promise<void> {
   const btn = popup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first();
   await expect(btn).toBeVisible({ timeout: 10_000 });
-  await btn.click({ noWaitAfter: true, timeout: 30_000 });
+  // noWaitAfter skips POST-click auto-wait for navigation but does NOT
+  // protect the click dispatch itself: if the popup tears down between
+  // Playwright's "performing click action" and the mouseup, click()
+  // throws "Target page, context or browser has been closed". Per the
+  // block comment above, that close IS the success signal, so we
+  // swallow only that specific error and re-throw everything else.
+  try {
+    await btn.click({ noWaitAfter: true, timeout: 30_000 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/Target (page|context|browser) has been closed/.test(msg)) throw err;
+  }
 }
 
 async function onboardCat21Wallet(page: Page): Promise<void> {
