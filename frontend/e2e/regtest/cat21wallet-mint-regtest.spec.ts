@@ -228,9 +228,8 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
   // paymentAddr must start with bcrt1q.
   await page.getByTestId('wallet-connected-btn').click();
   const paymentAddrEl = page.getByTestId('wallet-payment-address-full');
-  await expect(paymentAddrEl).toBeAttached({ timeout: 15_000 });
+  await expect(paymentAddrEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
   const paymentAddr = (await paymentAddrEl.textContent())!.trim();
-  expect(paymentAddr).toMatch(/^bcrt1q/);
   return { paymentAddress: paymentAddr };
 }
 
@@ -835,7 +834,7 @@ async function ensureSellerOrdinalsAddress(): Promise<string> {
   // E2E_BEST_PRACTICES.md rule 12 lands the untruncated value on a
   // visually-hidden sibling for E2E consumption).
   const ordinalsCode = page.getByTestId('wallet-ordinals-address-full');
-  await expect(ordinalsCode).toBeAttached({ timeout: 10_000 });
+  await expect(ordinalsCode).toHaveText(/^(bcrt1|bc1)/, { timeout: 10_000 });
   const addr = (await ordinalsCode.textContent())?.trim();
   if (!addr) throw new Error('could not extract connected wallet ordinals address from popover');
   sellerOrdinalsAddress = addr;

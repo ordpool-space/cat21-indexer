@@ -226,10 +226,9 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const noUtxos = page.getByTestId('mint-no-utxos');
   await expect(noUtxos).toBeVisible({ timeout: 60_000 });
   const paymentCode = noUtxos.locator('code').first();
-  await expect(paymentCode).toBeVisible({ timeout: 30_000 });
+  await expect(paymentCode).toHaveText(/^bcrt1q/, { timeout: 30_000 });
   const paymentAddress = (await paymentCode.textContent())!.trim();
   console.log(`[cat21-mint-page] payment=${paymentAddress}`);
-  expect(paymentAddress).toMatch(/^bcrt1q/);
   const wallet = { paymentAddress };
   sharedPaymentAddress = paymentAddress;
 
