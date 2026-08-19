@@ -1234,7 +1234,14 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 
   // ─── On-chain verification ───
   await waitForElectrsSync(mineBlocks(1));
-  const settleTx = await getTx(settleTxid);
+  // Electrs indexes the block header before the per-tx status
+  // sometimes; poll /tx/<txid> until status.block_hash is populated.
+  let settleTx = await getTx(settleTxid);
+  const settleBlockHashDeadline = Date.now() + 30_000;
+  while (!settleTx.status.block_hash && Date.now() < settleBlockHashDeadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    settleTx = await getTx(settleTxid);
+  }
   expect(settleTx.status.block_hash).toBeTruthy();
   // Regression guard for the SDK's builder invariant, NOT a protocol
   // requirement. `cat21-offer.helper.ts` throws if `lockTime !== 21`
@@ -1463,7 +1470,14 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 
   // ─── On-chain verification ───
   await waitForElectrsSync(mineBlocks(1));
-  const transferTx = await getTx(transferTxid);
+  // Electrs indexes the block header before the per-tx status
+  // sometimes; poll /tx/<txid> until status.block_hash is populated.
+  let transferTx = await getTx(transferTxid);
+  const blockHashDeadline = Date.now() + 30_000;
+  while (!transferTx.status.block_hash && Date.now() < blockHashDeadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    transferTx = await getTx(transferTxid);
+  }
   expect(transferTx.status.block_hash).toBeTruthy();
   // Regression guard for cat21-wallet's HARD RULE #1 + the SDK's
   // `cat21-transfer.helper.ts` builder invariant (throws if
