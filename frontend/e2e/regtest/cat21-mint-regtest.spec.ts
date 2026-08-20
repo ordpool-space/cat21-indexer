@@ -12,6 +12,7 @@ import {
   rpc,
   mineBlocks,
   getTx,
+  waitForTxConfirmed,
 } from './sdk-lib/regtest-helpers';
 import { waitForApprovalPopup } from './sdk-lib/approval-popup';
 import { installBrowserErrorGuard } from './console-guard';
@@ -389,19 +390,10 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // production gallery reads SVGs from the indexer backend instead),
   // so we stop at locktime=21 + confirmed block. The deeper parser
   // assertions live in the ordpool sister spec.
-  const confirmedTip = mineBlocks(1);
-  await waitForElectrsSync(confirmedTip);
-  // Electrs indexes the block header before the per-tx status
-  // sometimes; poll /tx/<txid> until status.block_hash is populated.
-  let esploraTx = await getTx(broadcastTxid);
-  const blockHashDeadline = Date.now() + 30_000;
-  while (!esploraTx.status.block_hash && Date.now() < blockHashDeadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    esploraTx = await getTx(broadcastTxid);
-  }
+  mineBlocks(1);
+  const esploraTx = await waitForTxConfirmed(broadcastTxid, 30_000);
   console.log(`[cat21-mint-page] locktime=${esploraTx.locktime}  block_hash=${esploraTx.status.block_hash}`);
   expect(esploraTx.locktime).toBe(21);
-  expect(esploraTx.status.block_hash).toBeTruthy();
   // RBF prevention — CAT-21 inputs MUST have sequence ≥ 0xfffffffe.
   // RBF-replaceable mints can be "accelerated" by a wallet (the
   // Xverse 2024 incident) which drops `nLockTime=21` and kills the
@@ -615,9 +607,8 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   const burnTxidMatch = burnHref!.match(/\/tx\/([0-9a-f]{64})/);
   expect(burnTxidMatch).not.toBeNull();
   const burnTxid = burnTxidMatch![1];
-  const burnConfTip = mineBlocks(1);
-  await waitForElectrsSync(burnConfTip);
-  const burnTx = await getTx(burnTxid);
+  mineBlocks(1);
+  const burnTx = await waitForTxConfirmed(burnTxid, 30_000);
   expect(burnTx.locktime).toBe(21);
   expect(burnTx.vout[0].value).toBe(546);
   for (const vin of burnTx.vin) {
@@ -906,18 +897,9 @@ async function mintAtRateAndVerify(opts: {
   const broadcastTxid = txidMatch![1];
 
   // ─── Mine confirmation block, read on-chain tx ───────────────
-  const confTip = mineBlocks(1);
-  await waitForElectrsSync(confTip);
-  // Electrs indexes the block header before the per-tx status
-  // sometimes; poll /tx/<txid> until status.block_hash is populated.
-  let tx = await getTx(broadcastTxid);
-  const confBlockHashDeadline = Date.now() + 30_000;
-  while (!tx.status.block_hash && Date.now() < confBlockHashDeadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    tx = await getTx(broadcastTxid);
-  }
+  mineBlocks(1);
+  const tx = await waitForTxConfirmed(broadcastTxid, 30_000);
   expect(tx.locktime).toBe(21);
-  expect(tx.status.block_hash).toBeTruthy();
   // RBF + output integrity on every mint round-trip — see test 1
   // for the safety rationale.
   expect(tx.vin.length).toBeGreaterThan(0);

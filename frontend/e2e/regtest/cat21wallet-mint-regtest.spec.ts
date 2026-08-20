@@ -10,6 +10,7 @@ import {
   rpc,
   mineBlocks,
   getTx,
+  waitForTxConfirmed,
 } from './sdk-lib/regtest-helpers';
 import { waitForApprovalPopup } from './sdk-lib/approval-popup';
 import { installContextErrorGuard } from './lib/browser-error-guard';
@@ -434,18 +435,9 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
   sharedMintTxid = broadcastTxid;
   saveShared({ mintTxid: broadcastTxid });
 
-  const confirmedTip = mineBlocks(1);
-  await waitForElectrsSync(confirmedTip);
-  // Electrs indexes the block header before the per-tx status
-  // sometimes; poll /tx/<txid> until status.block_hash is populated.
-  let esploraTx = await getTx(broadcastTxid);
-  const blockHashDeadline = Date.now() + 30_000;
-  while (!esploraTx.status.block_hash && Date.now() < blockHashDeadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    esploraTx = await getTx(broadcastTxid);
-  }
+  mineBlocks(1);
+  const esploraTx = await waitForTxConfirmed(broadcastTxid, 30_000);
   expect(esploraTx.locktime).toBe(21);
-  expect(esploraTx.status.block_hash).toBeTruthy();
   expect(esploraTx.vout.length).toBeGreaterThanOrEqual(1);
   expect(esploraTx.vout[0].value).toBe(546);
   // CAT-21 wallet RBF policy: input sequence == 0xfffffffd.
@@ -535,8 +527,8 @@ async function cat21walletMintAtRate(opts: {
     const successHref = await successCard.locator('a').first().getAttribute('href');
     const broadcastTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
 
-    await waitForElectrsSync(mineBlocks(1));
-    const tx = await getTx(broadcastTxid);
+    mineBlocks(1);
+    const tx = await waitForTxConfirmed(broadcastTxid, 30_000);
     expect(tx.locktime).toBe(21);
     expect(tx.vout[0].value).toBe(546);
     for (const vin of tx.vin) {
@@ -651,8 +643,8 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
   await expect(successCard).toBeVisible({ timeout: 90_000 });
   const successHref = await successCard.locator('a').first().getAttribute('href');
   const broadcastTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
-  await waitForElectrsSync(mineBlocks(1));
-  const tx = await getTx(broadcastTxid);
+  mineBlocks(1);
+  const tx = await waitForTxConfirmed(broadcastTxid, 30_000);
   expect(tx.locktime).toBe(21);
   expect(tx.vout[0].value).toBe(546);
   for (const vin of tx.vin) {
@@ -1233,16 +1225,8 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
   console.log(`[offer-flow] settlement txid = ${settleTxid}`);
 
   // ─── On-chain verification ───
-  await waitForElectrsSync(mineBlocks(1));
-  // Electrs indexes the block header before the per-tx status
-  // sometimes; poll /tx/<txid> until status.block_hash is populated.
-  let settleTx = await getTx(settleTxid);
-  const settleBlockHashDeadline = Date.now() + 30_000;
-  while (!settleTx.status.block_hash && Date.now() < settleBlockHashDeadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    settleTx = await getTx(settleTxid);
-  }
-  expect(settleTx.status.block_hash).toBeTruthy();
+  mineBlocks(1);
+  const settleTx = await waitForTxConfirmed(settleTxid, 30_000);
   // Regression guard for the SDK's builder invariant, NOT a protocol
   // requirement. `cat21-offer.helper.ts` throws if `lockTime !== 21`
   // at build time — this asserts the same holds after broadcast so
@@ -1469,16 +1453,8 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   console.log(`[transfer-flow] transfer tx = ${transferTxid}`);
 
   // ─── On-chain verification ───
-  await waitForElectrsSync(mineBlocks(1));
-  // Electrs indexes the block header before the per-tx status
-  // sometimes; poll /tx/<txid> until status.block_hash is populated.
-  let transferTx = await getTx(transferTxid);
-  const blockHashDeadline = Date.now() + 30_000;
-  while (!transferTx.status.block_hash && Date.now() < blockHashDeadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    transferTx = await getTx(transferTxid);
-  }
-  expect(transferTx.status.block_hash).toBeTruthy();
+  mineBlocks(1);
+  const transferTx = await waitForTxConfirmed(transferTxid, 30_000);
   // Regression guard for cat21-wallet's HARD RULE #1 + the SDK's
   // `cat21-transfer.helper.ts` builder invariant (throws if
   // `lockTime !== 21`). Not a protocol requirement — a third-party
@@ -1750,9 +1726,8 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   console.log(`[bid-mkt] settlement txid = ${settleTxid}`);
 
   // ─── Step 12: On-chain verification. Mine + read + assert. ───
-  await waitForElectrsSync(mineBlocks(1));
-  const settleTx = await getTx(settleTxid);
-  expect(settleTx.status.block_hash).toBeTruthy();
+  mineBlocks(1);
+  const settleTx = await waitForTxConfirmed(settleTxid, 30_000);
   // Regression guard for the SDK's builder invariant (same as the
   // offer round-trip above): `cat21-offer.helper.ts` throws if
   // `lockTime !== 21` at build time. Not a protocol requirement — a
