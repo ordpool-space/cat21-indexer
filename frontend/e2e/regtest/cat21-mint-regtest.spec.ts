@@ -391,7 +391,14 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // assertions live in the ordpool sister spec.
   const confirmedTip = mineBlocks(1);
   await waitForElectrsSync(confirmedTip);
-  const esploraTx = await getTx(broadcastTxid);
+  // Electrs indexes the block header before the per-tx status
+  // sometimes; poll /tx/<txid> until status.block_hash is populated.
+  let esploraTx = await getTx(broadcastTxid);
+  const blockHashDeadline = Date.now() + 30_000;
+  while (!esploraTx.status.block_hash && Date.now() < blockHashDeadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    esploraTx = await getTx(broadcastTxid);
+  }
   console.log(`[cat21-mint-page] locktime=${esploraTx.locktime}  block_hash=${esploraTx.status.block_hash}`);
   expect(esploraTx.locktime).toBe(21);
   expect(esploraTx.status.block_hash).toBeTruthy();
@@ -901,7 +908,14 @@ async function mintAtRateAndVerify(opts: {
   // ─── Mine confirmation block, read on-chain tx ───────────────
   const confTip = mineBlocks(1);
   await waitForElectrsSync(confTip);
-  const tx = await getTx(broadcastTxid);
+  // Electrs indexes the block header before the per-tx status
+  // sometimes; poll /tx/<txid> until status.block_hash is populated.
+  let tx = await getTx(broadcastTxid);
+  const confBlockHashDeadline = Date.now() + 30_000;
+  while (!tx.status.block_hash && Date.now() < confBlockHashDeadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    tx = await getTx(broadcastTxid);
+  }
   expect(tx.locktime).toBe(21);
   expect(tx.status.block_hash).toBeTruthy();
   // RBF + output integrity on every mint round-trip — see test 1
