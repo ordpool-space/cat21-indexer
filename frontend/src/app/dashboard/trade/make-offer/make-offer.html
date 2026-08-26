@@ -48,6 +48,13 @@
     </p>
     <app-wallet-connect />
   </div>
+} @else if (walletBlocksOffer()) {
+  <div class="connect-card" data-testid="make-offer-blocked">
+    <h2>This wallet can't create offers</h2>
+    @if (connectedWallet(); as wallet) {
+      <app-wallet-capability-notice [wallet]="wallet.type" [capability]="offerCreateCapability" />
+    }
+  </div>
 } @else {
   @if (state() === 'success' && offerArtifact(); as artifact) {
     <section class="make-offer-section" data-testid="make-offer-success">

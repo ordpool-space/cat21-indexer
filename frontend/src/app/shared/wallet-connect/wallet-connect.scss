@@ -79,6 +79,83 @@
   opacity: 0.85;
 }
 
+// Wallet row: the pick button + the info icon side by side.
+.wallet-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+
+  .wallet-pick { flex: 1 1 auto; }
+}
+
+.wallet-info-icon {
+  flex: 0 0 auto;
+  width: 2rem;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  font-style: italic;
+  font-weight: bold;
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+  cursor: pointer;
+  image-rendering: pixelated;
+
+  &:hover { background: rgba(0, 0, 0, 0.15); }
+  &:focus-visible { outline: 2px solid black; outline-offset: 2px; }
+}
+
+// --- Info popover (capability detail) ---
+.info-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.info-platforms { font-weight: bold; }
+
+.info-caps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.info-cap {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.15);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.info-cap-icon {
+  flex: 0 0 auto;
+  width: 1rem;
+  text-align: center;
+  font-weight: bold;
+}
+
+.info-cap-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.info-cap-name { font-weight: bold; }
+.info-cap-wording { opacity: 0.85; }
+
+.info-note {
+  margin: 0.5rem 0 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.15);
+  font-size: 0.72rem;
+  opacity: 0.8;
+  line-height: 1.3;
+}
+
 .not-installed-heading {
   font-family: "Public Pixel", sans-serif;
   font-size: 0.85rem;

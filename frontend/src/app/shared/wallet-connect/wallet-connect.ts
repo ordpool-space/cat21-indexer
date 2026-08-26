@@ -1,24 +1,61 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, TemplateRef, inject, signal, viewChild } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef, NgbPopover, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
-import { KnownOrdinalWalletType, KnownOrdinalWallets, WalletService } from 'ordpool-sdk';
+import {
+  KnownOrdinalWalletType,
+  KnownOrdinalWallets,
+  WALLET_MATRIX,
+  WalletMatrixEntry,
+  WalletPlatform,
+  WalletService,
+  capabilityOf,
+} from 'ordpool-sdk';
 
 import { PendingCats } from '../pending-cats/pending-cats';
+import {
+  CAPABILITY_DISPLAY_ORDER,
+  capabilityDisplayName,
+  signingModeWording,
+  supportIcon,
+  supportWording,
+} from '../wallet-capability-display';
+import { detectWalletPlatform } from '../wallet-platform';
 
 /**
- * Wallet connection control for the header. Shows "Connect" when no
- * wallet is connected and opens a modal picker; once connected, shows
- * the wallet's icon and exposes the addresses + a disconnect button via
- * a popover. State comes from `ordpool-sdk`'s `WalletService` — a single
- * RxJS BehaviorSubject bridged to a signal here so the rest of the
- * component stays signal-native.
+ * One row in the connect picker: a matrix entry the current platform can
+ * reach, annotated with whether the wallet is detected in the browser
+ * right now (`installed`) and therefore which action the row offers.
+ */
+interface WalletPickerRow {
+  entry: WalletMatrixEntry;
+  installed: boolean;
+}
+
+/** One capability line in the info popover. */
+interface CapabilityLine {
+  name: string;
+  icon: string;
+  wording: string;
+}
+
+/**
+ * Wallet connection control for the header.
+ *
+ * The picker is driven by the SDK's `WALLET_MATRIX` (the single source of
+ * truth for which wallet can do what, where): the list is the matrix
+ * entries reachable on the current platform, cross-referenced with the
+ * `WalletService` runtime detection to split installed (Connect) from
+ * not-installed (Download). Every row carries an info icon whose popover
+ * reads its facts from the matrix. Once connected, the button shows the
+ * wallet + addresses via a popover.
  */
 @Component({
   selector: 'app-wallet-connect',
   templateUrl: './wallet-connect.html',
   styleUrl: './wallet-connect.scss',
-  imports: [RouterLink, NgbPopoverModule, PendingCats],
+  imports: [RouterLink, NgbPopoverModule, PendingCats, NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WalletConnect {
@@ -27,7 +64,30 @@ export class WalletConnect {
   private cdr = inject(ChangeDetectorRef);
 
   readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
-  readonly wallets = toSignal(this.walletService.wallets$, { initialValue: { installedWallets: [], notInstalledWallets: [] } });
+  private readonly detectedWallets = toSignal(this.walletService.wallets$, {
+    initialValue: { installedWallets: [], notInstalledWallets: [] },
+  });
+
+  /** Desktop vs Mobile — decides which matrix rows are reachable at all. */
+  readonly platform = signal<WalletPlatform>(detectWalletPlatform());
+
+  /**
+   * The picker rows: every INJECTED (in-browser signing) matrix entry
+   * reachable on this platform, each tagged installed/not from runtime
+   * detection. Oyl never appears (no matrix row); Phantom/Binance never
+   * appear on desktop (matrix marks them Mobile-only). Watch-only (xpub)
+   * has no in-browser connect flow yet, so it is omitted here.
+   */
+  readonly pickerRows = computed<WalletPickerRow[]>(() => {
+    const installedTypes = new Set(this.detectedWallets().installedWallets.map((w) => w.type));
+    const plat = this.platform();
+    return WALLET_MATRIX
+      .filter((e) => e.signingMode === 'injected' && e.platforms.includes(plat))
+      .map((entry) => ({ entry, installed: installedTypes.has(entry.wallet) }));
+  });
+
+  readonly installedRows = computed(() => this.pickerRows().filter((r) => r.installed));
+  readonly notInstalledRows = computed(() => this.pickerRows().filter((r) => !r.installed));
 
   /**
    * `true` when the connected wallet's address prefix doesn't match
@@ -50,7 +110,33 @@ export class WalletConnect {
     return addr.length > 16 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
   }
 
+  // --- Info popover: everything sourced from the matrix + the shared-UX wording tables ---
+
+  /** Platform badges for a wallet, e.g. "Desktop · Mobile". */
+  platformLabel(entry: WalletMatrixEntry): string {
+    return entry.platforms
+      .map((p) => (p === WalletPlatform.Desktop ? 'Desktop' : 'Mobile'))
+      .join(' · ');
+  }
+
+  signingModeLabel(entry: WalletMatrixEntry): string {
+    return signingModeWording(entry.signingMode);
+  }
+
+  /** All seven capabilities for a wallet, in display order, with icon + wording. */
+  capabilityLines(entry: WalletMatrixEntry): CapabilityLine[] {
+    return CAPABILITY_DISPLAY_ORDER.map((cap) => {
+      const status = capabilityOf(entry.wallet, cap);
+      return {
+        name: capabilityDisplayName(cap),
+        icon: supportIcon(status.support),
+        wording: supportWording(status),
+      };
+    });
+  }
+
   open(): void {
+    this.platform.set(detectWalletPlatform());
     this.connectButtonDisabled.set(false);
     this.connectError.set(null);
     this.modalRef = this.modalService.open(this.connectTemplate(), {

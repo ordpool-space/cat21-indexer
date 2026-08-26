@@ -5,8 +5,11 @@ import { RouterLink } from '@angular/router';
 import {
   BuyOfferTargetCat,
   buildAcceptOfferQueryParams,
+  CapabilitySupport,
   Cat21CreateOfferOrchestrator,
   CreateOfferSimulationOutcome,
+  WalletCapability,
+  capabilityOf,
   parseBuyOfferQueryParams,
   toPaymentAddress,
   TxnOutput,
@@ -17,6 +20,7 @@ import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { FeesPicker } from '../../../shared/fees-picker/fees-picker';
 import { OrdApiService } from '../../../shared/ord-api.service';
 import { UtxoPicker } from '../../../shared/utxo-picker/utxo-picker';
+import { WalletCapabilityNotice } from '../../../shared/wallet-capability-notice/wallet-capability-notice';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 
 interface MakeOfferDraft {
@@ -31,7 +35,7 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
   selector: 'app-make-offer',
   templateUrl: './make-offer.html',
   styleUrl: './make-offer.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect],
+  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect, WalletCapabilityNotice],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MakeOffer {
@@ -104,6 +108,20 @@ export class MakeOffer {
   // ---------- Live state from the orchestrator ----------
 
   readonly connectedWallet = this.orchestrator.connectedWallet;
+
+  /** The matrix capability this page drives; feeds the disabled-action notice. */
+  readonly offerCreateCapability = WalletCapability.Cat21OfferCreate;
+
+  /**
+   * True when a wallet is connected but the matrix marks it Unsupported
+   * for creating offers (Alby: its signPsbt can't leave the seller's
+   * input 0 unsigned). The template shows the notice instead of the flow.
+   */
+  readonly walletBlocksOffer = computed(() => {
+    const w = this.connectedWallet();
+    return !!w && capabilityOf(w.type, WalletCapability.Cat21OfferCreate).support === CapabilitySupport.Unsupported;
+  });
+
   readonly state = this.orchestrator.state;
   readonly errorMessage = this.orchestrator.errorMessage;
   readonly offerArtifact = this.orchestrator.offerArtifact;

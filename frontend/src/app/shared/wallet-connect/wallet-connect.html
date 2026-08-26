@@ -8,16 +8,14 @@
       <p class="connect-error" role="alert">Connection failed: {{ err }}</p>
     }
 
-    @if (wallets().installedWallets.length > 0) {
+    @if (installedRows().length > 0) {
       <ul class="wallet-list">
-        @for (w of wallets().installedWallets; track w.type) {
-          <li>
-            <button class="wallet-pick" [disabled]="connectButtonDisabled()" (click)="connectWallet(w.type)">
-              <span class="label">{{ w.label }}</span>
-              @if (w.subLabel) {
-                <small class="sub-label">{{ w.subLabel }}</small>
-              }
+        @for (row of installedRows(); track row.entry.wallet) {
+          <li class="wallet-row">
+            <button class="wallet-pick" [attr.data-testid]="'wallet-pick-' + row.entry.wallet" [disabled]="connectButtonDisabled()" (click)="connectWallet(row.entry.wallet)">
+              <span class="label">{{ row.entry.label }}</span>
             </button>
+            <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: row.entry }" />
           </li>
         }
       </ul>
@@ -25,22 +23,57 @@
       <p class="no-installed">No supported wallets detected in this browser.</p>
     }
 
-    @if (wallets().notInstalledWallets.length > 0) {
+    @if (notInstalledRows().length > 0) {
       <h5 class="not-installed-heading">Not installed — click to download:</h5>
       <ul class="wallet-list">
-        @for (w of wallets().notInstalledWallets; track w.type) {
-          <li>
-            <a class="wallet-pick wallet-pick-download" [href]="w.downloadLink" target="_blank" rel="noopener">
-              <span class="label">{{ w.label }}</span>
-              @if (w.subLabel) {
-                <small class="sub-label">{{ w.subLabel }}</small>
-              }
+        @for (row of notInstalledRows(); track row.entry.wallet) {
+          <li class="wallet-row">
+            <a class="wallet-pick wallet-pick-download" [attr.data-testid]="'wallet-download-' + row.entry.wallet" [href]="knownOrdinalWallets[row.entry.wallet].downloadLink" target="_blank" rel="noopener">
+              <span class="label">{{ row.entry.label }}</span>
             </a>
+            <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: row.entry }" />
           </li>
         }
       </ul>
     }
   </div>
+</ng-template>
+
+<!-- Per-row info icon + capability popover. Facts sourced from the SDK
+     matrix; wording from the shared-UX tables. Keyboard-focusable, opens
+     on click (never hover-only, for mobile). -->
+<ng-template #infoIcon let-entry>
+  <button
+    type="button"
+    class="wallet-info-icon"
+    [ngbPopover]="infoPop"
+    [popoverTitle]="entry.label"
+    triggers="manual"
+    #infoPopover="ngbPopover"
+    (click)="infoPopover.toggle()"
+    [attr.aria-label]="'What does ' + entry.label + ' support?'"
+    popoverClass="wallet-info-popover">i</button>
+
+  <ng-template #infoPop>
+    <div class="info-head">
+      <span class="info-platforms">{{ platformLabel(entry) }}</span>
+      <span class="info-signing">{{ signingModeLabel(entry) }}</span>
+    </div>
+    <ul class="info-caps">
+      @for (line of capabilityLines(entry); track line.name) {
+        <li class="info-cap">
+          <span class="info-cap-icon" aria-hidden="true">{{ line.icon }}</span>
+          <span class="info-cap-body">
+            <span class="info-cap-name">{{ line.name }}</span>
+            <span class="info-cap-wording">{{ line.wording }}</span>
+          </span>
+        </li>
+      }
+    </ul>
+    @if (entry.note) {
+      <p class="info-note">{{ entry.note }}</p>
+    }
+  </ng-template>
 </ng-template>
 
 @if (connectedWallet(); as wallet) {

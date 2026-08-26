@@ -18,6 +18,13 @@
     </p>
     <app-wallet-connect />
   </div>
+} @else if (walletBlocksAccept()) {
+  <div class="connect-card" data-testid="accept-offer-blocked">
+    <h2>This wallet can't accept offers</h2>
+    @if (connectedWallet(); as wallet) {
+      <app-wallet-capability-notice [wallet]="wallet.type" [capability]="offerAcceptCapability" />
+    }
+  </div>
 } @else {
   @if (state() === 'success' && successTxId(); as txid) {
     <section class="accept-offer-section" data-testid="accept-offer-success">

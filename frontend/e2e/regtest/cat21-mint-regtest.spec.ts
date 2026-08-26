@@ -197,8 +197,9 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // else that might match "connect" on the page.
   await page.getByTestId('wallet-connect-btn').first().click();
 
-  // The modal lists supported wallets — click Xverse.
-  await page.getByRole('button', { name: /^xverse$/i }).first()
+  // The modal lists supported wallets — click Xverse. Pick by testid
+  // (matrix-driven rows carry `wallet-pick-<type>`), immune to label wording.
+  await page.getByTestId('wallet-pick-xverse').first()
     .click({ timeout: 20_000 });
   await shot(page, '03-picker-clicked');
 

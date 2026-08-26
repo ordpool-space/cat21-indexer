@@ -187,10 +187,10 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
   const knownPagesBeforeConnect = new Set(context.pages());
   await page.getByTestId('wallet-connect-btn').first().click();
 
-  // Picker modal — CAT-21 wallet sits in the "installed" section. The
-  // card isn't a `<button>` element (clickable container), so
-  // `getByRole('button', …)` doesn't find it. Match by visible text.
-  const cat21Picker = page.getByText(/CAT-21\s+wallet/i).first();
+  // Picker modal — CAT-21 wallet sits in the "installed" section. Pick
+  // by testid (matrix-driven rows carry `wallet-pick-<type>`), immune to
+  // label wording.
+  const cat21Picker = page.getByTestId('wallet-pick-cat21wallet').first();
   await expect(cat21Picker).toBeVisible({ timeout: 20_000 });
   await cat21Picker.click({ timeout: 20_000 });
 

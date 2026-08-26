@@ -4,8 +4,11 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { EMPTY } from 'rxjs';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
+  CapabilitySupport,
   Cat21AcceptOfferOrchestrator,
   Cat21OfferRejectionReason,
+  WalletCapability,
+  capabilityOf,
   parseAcceptOfferQueryParams,
   toPaymentAddress,
   WalletService,
@@ -13,13 +16,14 @@ import {
 
 import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';
 import { rxResourceFixed } from '../../../shared/rx-resource-fixed';
+import { WalletCapabilityNotice } from '../../../shared/wallet-capability-notice/wallet-capability-notice';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 
 @Component({
   selector: 'app-accept-offer',
   templateUrl: './accept-offer.html',
   styleUrl: './accept-offer.scss',
-  imports: [DecimalPipe, RouterLink, WalletConnect],
+  imports: [DecimalPipe, RouterLink, WalletConnect, WalletCapabilityNotice],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AcceptOffer implements OnInit {
@@ -33,6 +37,21 @@ export class AcceptOffer implements OnInit {
   // ---------- Live state from the orchestrator ----------
 
   readonly connectedWallet = this.orchestrator.connectedWallet;
+
+  /** The matrix capability this page drives; feeds the disabled-action notice. */
+  readonly offerAcceptCapability = WalletCapability.Cat21OfferAccept;
+
+  /**
+   * True when a wallet is connected but the matrix marks it Unsupported
+   * for accepting offers (Alby: its signPsbt can't sign only input 0 and
+   * leave the buyer's pre-signed inputs untouched). Template shows the
+   * notice instead of the accept flow.
+   */
+  readonly walletBlocksAccept = computed(() => {
+    const w = this.connectedWallet();
+    return !!w && capabilityOf(w.type, WalletCapability.Cat21OfferAccept).support === CapabilitySupport.Unsupported;
+  });
+
   readonly state = this.orchestrator.state;
   readonly errorMessage = this.orchestrator.errorMessage;
   readonly successTxId = this.orchestrator.successTxId;
