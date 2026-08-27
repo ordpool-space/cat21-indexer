@@ -15,6 +15,7 @@ import {
 } from 'ordpool-sdk';
 
 import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';
+import { PsbtExportBridgeService } from '../../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { rxResourceFixed } from '../../../shared/rx-resource-fixed';
 import { WalletCapabilityNotice } from '../../../shared/wallet-capability-notice/wallet-capability-notice';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
@@ -28,6 +29,7 @@ import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 })
 export class AcceptOffer implements OnInit {
   private orchestrator = inject(Cat21AcceptOfferOrchestrator);
+  private psbtBridge = inject(PsbtExportBridgeService);
   private walletService = inject(WalletService);
   private lookup = inject(CatUtxoLookupService);
   private route = inject(ActivatedRoute);
@@ -215,7 +217,9 @@ export class AcceptOffer implements OnInit {
   }
 
   onAcceptClick(): void {
-    this.orchestrator.acceptOffer().subscribe({
+    // Pass the export/paste bridge unconditionally: injected wallets
+    // ignore it, a watch-only (xpub) wallet signs through it.
+    this.orchestrator.acceptOffer(this.psbtBridge.promptForSignedPsbt).subscribe({
       error: () => undefined,
     });
   }

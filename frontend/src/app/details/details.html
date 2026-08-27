@@ -399,21 +399,25 @@
 
       <!-- Orderbook opt-in — pre-checked because the whole point of
            listing is to be discoverable. Unchecking degrades to the
-           original "just give me a link" behaviour. -->
-      <div class="form-check mt-3">
-        <input
-          id="publish-to-orderbook"
-          type="checkbox"
-          class="form-check-input"
-          data-testid="sell-modal-publish-to-orderbook"
-          [checked]="publishToOrderbook()"
-          (change)="onPublishToOrderbookToggle($any($event.target).checked)" />
-        <label class="form-check-label" for="publish-to-orderbook">
-          <strong>List on the CAT-21 orderbook (public).</strong>
-          Anyone browsing cat21.space will see this ask. You'll sign a
-          message proving you own the cat — no on-chain cost.
-        </label>
-      </div>
+           original "just give me a link" behaviour. Hidden for watch-only
+           (xpub) wallets: publishing signs a BIP-322 ownership message,
+           which a watch-only wallet can't produce. -->
+      @if (walletCanSignMessage()) {
+        <div class="form-check mt-3">
+          <input
+            id="publish-to-orderbook"
+            type="checkbox"
+            class="form-check-input"
+            data-testid="sell-modal-publish-to-orderbook"
+            [checked]="publishToOrderbook()"
+            (change)="onPublishToOrderbookToggle($any($event.target).checked)" />
+          <label class="form-check-label" for="publish-to-orderbook">
+            <strong>List on the CAT-21 orderbook (public).</strong>
+            Anyone browsing cat21.space will see this ask. You'll sign a
+            message proving you own the cat — no on-chain cost.
+          </label>
+        </div>
+      }
 
       @if (orderbookState() === 'signing') {
         <div class="alert alert-info mt-3" role="status" data-testid="sell-modal-orderbook-signing">

@@ -22,6 +22,7 @@ import {
 } from 'ordpool-sdk';
 
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
+import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 
 interface ViableUtxoRow {
@@ -40,6 +41,7 @@ interface ViableUtxoRow {
 })
 export class Mint {
   private orchestrator = inject(Cat21MintOrchestrator);
+  private psbtBridge = inject(PsbtExportBridgeService);
   private scanner = inject(UtxoContentScanner);
   private wallet = inject(WalletService);
   private config = inject(cat21Config);
@@ -216,7 +218,9 @@ export class Mint {
 
   mint(): void {
     this.mintAttempted.set(true);
-    this.orchestrator.mint().subscribe({
+    // Pass the export/paste bridge unconditionally: injected wallets
+    // ignore it, a watch-only (xpub) wallet signs through it.
+    this.orchestrator.mint(this.psbtBridge.promptForSignedPsbt).subscribe({
       error: () => {/* error fields are already populated by the orchestrator */},
     });
   }

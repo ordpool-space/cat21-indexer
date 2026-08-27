@@ -17,6 +17,7 @@ import {
 
 import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
+import { PsbtExportBridgeService } from '../../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { FeesPicker } from '../../../shared/fees-picker/fees-picker';
 import { OrdApiService } from '../../../shared/ord-api.service';
 import { UtxoPicker } from '../../../shared/utxo-picker/utxo-picker';
@@ -40,6 +41,7 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
 })
 export class MakeOffer {
   private orchestrator = inject(Cat21CreateOfferOrchestrator);
+  private psbtBridge = inject(PsbtExportBridgeService);
   private lookup = inject(CatUtxoLookupService);
   private ordApi = inject(OrdApiService);
   private bidsService = inject(Cat21BidsService);
@@ -371,7 +373,9 @@ export class MakeOffer {
   }
 
   onCreateOfferClick(): void {
-    this.orchestrator.createOffer().subscribe({
+    // Pass the export/paste bridge unconditionally: injected wallets
+    // ignore it, a watch-only (xpub) wallet signs through it.
+    this.orchestrator.createOffer(this.psbtBridge.promptForSignedPsbt).subscribe({
       error: () => undefined,
     });
   }

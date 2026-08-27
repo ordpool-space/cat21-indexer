@@ -36,6 +36,65 @@
         }
       </ul>
     }
+
+    <!-- Watch-only (xpub): a paste flow, not a one-click connect. The
+         signing step for every action is an Export PSBT bridge. -->
+    @if (xpubEntry; as xpub) {
+      <h5 class="not-installed-heading">Watch-only:</h5>
+      <ul class="wallet-list">
+        <li class="wallet-row">
+          <button class="wallet-pick" data-testid="wallet-pick-xpub" [attr.aria-expanded]="xpubMode()" (click)="toggleXpubMode()">
+            <span class="label">Connect (xpub)</span>
+            <small class="sub-label">Sparrow, Electrum, Coldcard, Ledger…</small>
+          </button>
+          <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: xpub }" />
+        </li>
+      </ul>
+
+      @if (xpubMode()) {
+        <div class="xpub-form" data-testid="xpub-form">
+          <label class="xpub-label" for="xpub-key">Account extended public key</label>
+          <textarea
+            id="xpub-key"
+            class="xpub-input"
+            rows="3"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="xpub… / ypub… / zpub…"
+            [value]="xpubKey()"
+            (input)="onXpubKeyInput($any($event.target).value)"></textarea>
+
+          @if (xpubNeedsScriptType()) {
+            <label class="xpub-label" for="xpub-scripttype">Account type</label>
+            <select
+              id="xpub-scripttype"
+              class="xpub-select"
+              data-testid="xpub-scripttype"
+              [value]="xpubScriptType()"
+              (change)="onXpubScriptTypeChange($any($event.target).value)">
+              <option value="p2tr">Taproot (P2TR) — recommended for cats</option>
+              <option value="p2wpkh">Native SegWit (P2WPKH)</option>
+              <option value="p2sh-p2wpkh">Nested SegWit (P2SH-P2WPKH)</option>
+              <option value="p2pkh">Legacy (P2PKH)</option>
+            </select>
+          }
+
+          @if (xpubError(); as err) {
+            <p class="xpub-error" role="alert">{{ err }}</p>
+          }
+
+          <button
+            type="button"
+            class="xpub-connect-btn"
+            data-testid="xpub-connect-submit"
+            [disabled]="xpubConnecting()"
+            (click)="submitXpub()">
+            {{ xpubConnecting() ? 'Scanning…' : 'Connect watch-only' }}
+          </button>
+          <p class="xpub-note">You sign each action's PSBT in your own wallet — nothing is signed in the browser.</p>
+        </div>
+      }
+    }
   </div>
 </ng-template>
 

@@ -10,7 +10,9 @@ import {
   WalletMatrixEntry,
   WalletPlatform,
   WalletService,
+  WatchOnlyScriptType,
   capabilityOf,
+  walletMatrixEntry,
 } from 'ordpool-sdk';
 
 import { PendingCats } from '../pending-cats/pending-cats';
@@ -22,6 +24,7 @@ import {
   supportWording,
 } from '../wallet-capability-display';
 import { detectWalletPlatform } from '../wallet-platform';
+import { WatchOnlyConnectService } from '../watch-only-connect.service';
 
 /**
  * One row in the connect picker: a matrix entry the current platform can
@@ -62,6 +65,7 @@ export class WalletConnect {
   private walletService = inject(WalletService);
   private modalService = inject(NgbModal);
   private cdr = inject(ChangeDetectorRef);
+  private watchOnly = inject(WatchOnlyConnectService);
 
   readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
   private readonly detectedWallets = toSignal(this.walletService.wallets$, {
@@ -76,7 +80,7 @@ export class WalletConnect {
    * reachable on this platform, each tagged installed/not from runtime
    * detection. Oyl never appears (no matrix row); Phantom/Binance never
    * appear on desktop (matrix marks them Mobile-only). Watch-only (xpub)
-   * has no in-browser connect flow yet, so it is omitted here.
+   * is a separate row (no runtime detection; a paste flow) — see below.
    */
   readonly pickerRows = computed<WalletPickerRow[]>(() => {
     const installedTypes = new Set(this.detectedWallets().installedWallets.map((w) => w.type));
@@ -88,6 +92,17 @@ export class WalletConnect {
 
   readonly installedRows = computed(() => this.pickerRows().filter((r) => r.installed));
   readonly notInstalledRows = computed(() => this.pickerRows().filter((r) => !r.installed));
+
+  /** The watch-only (xpub) matrix entry, for its own picker row + info popover. */
+  readonly xpubEntry = walletMatrixEntry(KnownOrdinalWalletType.xpub);
+
+  // --- Watch-only (xpub) paste flow ---
+  readonly xpubMode = signal(false);                 // paste form open?
+  readonly xpubKey = signal('');                     // pasted extended key
+  readonly xpubNeedsScriptType = signal(false);      // ambiguous prefix → ask
+  readonly xpubScriptType = signal<WatchOnlyScriptType>('p2tr');
+  readonly xpubConnecting = signal(false);
+  readonly xpubError = signal<string | null>(null);
 
   /**
    * `true` when the connected wallet's address prefix doesn't match
@@ -179,6 +194,70 @@ export class WalletConnect {
   disconnect(popover: NgbPopover): void {
     popover.close();
     this.walletService.disconnectWallet();
+  }
+
+  // --- Watch-only (xpub) paste flow ---
+
+  /** Reveal the paste form (or collapse it). */
+  toggleXpubMode(): void {
+    this.xpubMode.update((on) => !on);
+    this.xpubError.set(null);
+    this.xpubNeedsScriptType.set(false);
+  }
+
+  onXpubKeyInput(value: string): void {
+    this.xpubKey.set(value);
+    // A fresh key invalidates a prior ambiguity prompt.
+    this.xpubNeedsScriptType.set(false);
+    this.xpubError.set(null);
+  }
+
+  onXpubScriptTypeChange(value: string): void {
+    this.xpubScriptType.set(value as WatchOnlyScriptType);
+  }
+
+  /**
+   * Paste -> connect. On a plain xpub/tpub the SDK rejects for missing
+   * script type; we catch that once, reveal the script-type select, and
+   * the next submit passes the chosen type. Every other error surfaces
+   * verbatim.
+   */
+  submitXpub(): void {
+    const key = this.xpubKey().trim();
+    if (!key) {
+      this.xpubError.set('Paste an account extended public key (xpub, ypub, zpub, …).');
+      return;
+    }
+    this.xpubConnecting.set(true);
+    this.xpubError.set(null);
+    const scriptType = this.xpubNeedsScriptType() ? this.xpubScriptType() : undefined;
+    this.watchOnly.connect(key, scriptType).subscribe({
+      next: () => {
+        this.xpubConnecting.set(false);
+        this.resetXpubForm();
+        this.closeModal();
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        this.xpubConnecting.set(false);
+        if (WatchOnlyConnectService.isScriptTypeAmbiguous(err) && !this.xpubNeedsScriptType()) {
+          // First encounter: ask for the account type, keep the key.
+          this.xpubNeedsScriptType.set(true);
+          this.xpubError.set('This key type is ambiguous. Pick the account type (Taproot for cats).');
+        } else {
+          this.xpubError.set(err instanceof Error ? err.message : String(err));
+        }
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  private resetXpubForm(): void {
+    this.xpubMode.set(false);
+    this.xpubKey.set('');
+    this.xpubNeedsScriptType.set(false);
+    this.xpubScriptType.set('p2tr');
+    this.xpubError.set(null);
   }
 
   copyToClipboard(text: string): void {

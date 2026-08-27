@@ -15,6 +15,7 @@ import {
 } from 'ordpool-sdk';
 
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
+import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 import { CatUtxoLookupService, MyCatHolding } from '../../shared/cat-utxo-lookup.service';
@@ -31,6 +32,7 @@ const TXID_RE = /^[0-9a-f]{64}$/i;
 })
 export class Transfer {
   private orchestrator = inject(Cat21TransferOrchestrator);
+  private psbtBridge = inject(PsbtExportBridgeService);
   private lookup = inject(CatUtxoLookupService);
 
   readonly txLinkBase = 'https://ordpool.space/tx/';
@@ -272,7 +274,9 @@ export class Transfer {
   }
 
   onTransferClick(): void {
-    this.orchestrator.transfer().subscribe({
+    // Pass the export/paste bridge unconditionally: injected wallets
+    // ignore it, a watch-only (xpub) wallet signs through it.
+    this.orchestrator.transfer(this.psbtBridge.promptForSignedPsbt).subscribe({
       // Tap + catchError inside the orchestrator already manage state +
       // error + success signals; this is just a fire-and-forget kick.
       error: () => undefined,

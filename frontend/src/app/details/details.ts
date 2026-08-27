@@ -10,6 +10,7 @@ import {
   buildBuyOfferQueryParams,
   buildTransferQueryParams,
   CatOutpoint,
+  KnownOrdinalWalletType,
   WalletService,
 } from 'ordpool-sdk';
 
@@ -245,6 +246,15 @@ export class Details {
   readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
 
   /**
+   * A watch-only (xpub) wallet cannot sign a BIP-322 message (no key in
+   * the browser; BIP-322 is interactive, nothing to export), so the
+   * orderbook opt-in — which proves ownership via signMessage — is hidden
+   * for it. The offer permalink itself still works: that path signs a
+   * PSBT via the export bridge, not a message.
+   */
+  readonly walletCanSignMessage = computed(() => this.connectedWallet()?.type !== KnownOrdinalWalletType.xpub);
+
+  /**
    * True when the connected wallet's ordinals address equals the cat's
    * current owner (resolved from ord). CAT-21 cats live on the ordinals
    * address per ordinal theory FIFO.
@@ -441,8 +451,10 @@ export class Details {
     );
     // Additionally publish to the orderbook if opted in. Sequential so
     // a wallet rejection during signing doesn't clobber the copied-URL
-    // feedback the user already got.
-    if (this.publishToOrderbook()) {
+    // feedback the user already got. Skipped for watch-only wallets: the
+    // opt-in is hidden for them and publishing needs a signMessage they
+    // can't produce.
+    if (this.publishToOrderbook() && this.walletCanSignMessage()) {
       this.publishListing();
     }
   }
