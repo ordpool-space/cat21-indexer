@@ -28,22 +28,7 @@ export function detectWalletPlatform(): WalletPlatform {
   return WalletPlatform.Desktop;
 }
 
-/**
- * Deep-link that reopens the given URL inside a wallet's own in-app
- * browser, for the "mobile, plain browser, no injected provider" case.
- * Returns `null` for wallets whose scheme we have not verified (the
- * picker then omits the deep-link affordance for that wallet rather than
- * sending the user to a guessed URL).
- *
- * Only Xverse's scheme is wired: it is the one given verbatim in the
- * cat21.space handover doc. OKX and Binance ship their own dApp-browser
- * entry points but the exact URL shapes are not yet verified against
- * their developer docs — they stay `null` until confirmed (never guess a
- * scheme; a wrong deep-link is a dead end for the user).
- */
-export function walletInAppBrowserDeepLink(wallet: string, targetUrl: string): string | null {
-  if (wallet === 'xverse') {
-    return `https://connect.xverse.app/browser?url=${encodeURIComponent(targetUrl)}`;
-  }
-  return null;
-}
+// The in-app-browser deep-link helper now lives in the SDK
+// (`walletInAppBrowserDeepLink` from 'ordpool-sdk'), so the verified
+// scheme list is curated in one place across all consumers. Import it
+// directly where the mobile-plain-browser affordance is built.
