@@ -61,7 +61,9 @@ export class WalletCapabilityNotice {
     if (status.support !== CapabilitySupport.Unsupported) return null;
 
     const walletLabel = walletMatrixEntry(this.wallet())?.label ?? 'This wallet';
-    const reason = status.caveat ?? 'this wallet cannot perform this action';
+    // The template appends the sentence-final period; strip any the matrix
+    // caveat already carries so a caveat that ends in "." doesn't double up.
+    const reason = (status.caveat ?? 'this wallet cannot perform this action').replace(/[.\s]+$/, '');
 
     const others = walletsSupporting(this.capability(), { platform: detectWalletPlatform() })
       .filter((e) => e.wallet !== this.wallet());
