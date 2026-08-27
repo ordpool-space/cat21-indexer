@@ -46,7 +46,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
     <div class="modal-footer">
       <button type="button" class="ghost-btn" (click)="activeModal.dismiss('cancel')">Cancel</button>
       <button type="button" class="primary-btn" data-testid="psbt-submit" [disabled]="!signed().trim()" (click)="submit()">
-        Broadcast signed transaction
+        {{ actionLabel }}
       </button>
     </div>
   `,
@@ -80,6 +80,14 @@ export class PsbtExportBridge {
 
   /** Set by the service before open. The unsigned PSBT to sign externally. */
   unsignedBase64 = '';
+
+  /**
+   * Primary-button copy, set by the service per operation. Mint /
+   * transfer / accept finalize + broadcast, so the default reads
+   * "Broadcast"; create-offer produces a partial-signed artifact and does
+   * NOT broadcast, so it passes "Build the offer".
+   */
+  actionLabel = 'Broadcast signed transaction';
 
   readonly signed = signal('');
   readonly copied = signal(false);

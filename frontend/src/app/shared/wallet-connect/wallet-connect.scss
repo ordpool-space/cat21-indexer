@@ -51,11 +51,14 @@
   li:first-child { margin-top: 0; }
 }
 
+// The row's action button (Connect / Download / Open in <wallet> /
+// Connect (xpub)). The wallet name sits in its own `.wallet-name`
+// element, so this is the trailing action only.
 .wallet-pick {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  width: 100%;
   padding: 0.6rem 0.9rem;
   background: transparent;
   border: 2px solid white;
@@ -63,15 +66,13 @@
   font-family: "Public Pixel", sans-serif;
   font-size: 0.85rem;
   cursor: pointer;
-  text-align: left;
+  text-align: center;
   text-decoration: none;
+  white-space: nowrap;
   image-rendering: pixelated;
 
   &:hover:not(:disabled) { background: rgba(0, 0, 0, 0.15); }
   &:disabled { opacity: 0.5; cursor: progress; }
-
-  .label { flex: 1 1 auto; }
-  .sub-label { font-size: 0.7rem; opacity: 0.8; font-family: inherit; }
 }
 
 .wallet-pick-download {
@@ -79,13 +80,38 @@
   opacity: 0.85;
 }
 
-// Wallet row: the pick button + the info icon side by side.
+// Mobile in-app-browser bounce — filled to read as the primary action.
+.wallet-pick-deeplink {
+  background: white;
+  border-color: #FF9900;
+  color: #FF9900;
+
+  &:hover { background: #f5f5f5; }
+}
+
+// Wallet row: name (i) [action] — info icon sits between the name and
+// the action button (shared-UX diagram `Name (i) [Connect]`).
 .wallet-row {
   display: flex;
   align-items: stretch;
   gap: 0.4rem;
 
-  .wallet-pick { flex: 1 1 auto; }
+  .wallet-name { flex: 1 1 auto; }
+  .wallet-pick { flex: 0 0 auto; }
+}
+
+.wallet-name {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.3rem 0.2rem;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.85rem;
+  color: white;
+  line-height: 1.2;
+
+  .sub-label { font-size: 0.7rem; opacity: 0.8; font-family: inherit; }
 }
 
 .wallet-info-icon {
@@ -177,6 +203,24 @@
 }
 
 .info-platforms { font-weight: bold; }
+
+// "What this action needs" — the current action's capability, called out
+// above the full capability list (shared-UX §2 item 2).
+.info-action-needed {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+
+  .info-cap { border-top: none; padding-top: 0.15rem; }
+}
+
+.info-action-heading {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: bold;
+  opacity: 0.75;
+  margin-bottom: 0.2rem;
+}
 
 .info-caps {
   list-style: none;

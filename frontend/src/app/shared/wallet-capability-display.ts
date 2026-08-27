@@ -33,19 +33,23 @@ export function supportIcon(support: CapabilitySupport): string {
 
 /**
  * User-facing sentence for a capability's status, per the shared-UX
- * "Support-level wording" table. A `Proven`/`Unsupported` status with a
- * matrix `caveat` appends the caveat sentence; `Adapter` never carries
- * one in the matrix.
+ * "Support-level wording" table. The base wording carries NO trailing
+ * period (it's a label, matching the shared-UX table and the ordpool /
+ * cubes sister sites). A `Proven`/`Unsupported` status with a matrix
+ * `caveat` follows the base wording with the caveat as its own sentence
+ * (separated by a period, keeping its own punctuation); `Adapter` never
+ * carries a caveat in the matrix.
  */
 export function supportWording(status: WalletCapabilityStatus): string {
   const caveat = status.caveat ? ` ${capitalizeSentence(status.caveat)}.` : '';
+  const sep = status.caveat ? '.' : '';
   switch (status.support) {
     case CapabilitySupport.Proven:
-      return `Verified end-to-end on our test network.${caveat}`;
+      return `Verified end-to-end on our test network${sep}${caveat}`;
     case CapabilitySupport.Adapter:
-      return 'Supported, not yet verified end-to-end.';
+      return `Supported, not yet verified end-to-end${sep}${caveat}`;
     case CapabilitySupport.Unsupported:
-      return `Not available with this wallet.${caveat}`;
+      return `Not available with this wallet${sep}${caveat}`;
   }
 }
 

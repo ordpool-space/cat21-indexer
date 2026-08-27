@@ -12,10 +12,11 @@
       <ul class="wallet-list">
         @for (row of installedRows(); track row.entry.wallet) {
           <li class="wallet-row">
-            <button class="wallet-pick" [attr.data-testid]="'wallet-pick-' + row.entry.wallet" [disabled]="connectButtonDisabled()" (click)="connectWallet(row.entry.wallet)">
-              <span class="label">{{ row.entry.label }}</span>
-            </button>
+            <span class="wallet-name">{{ row.entry.label }}</span>
             <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: row.entry }" />
+            <button class="wallet-pick" [attr.data-testid]="'wallet-pick-' + row.entry.wallet" [disabled]="connectButtonDisabled()" (click)="connectWallet(row.entry.wallet)">
+              Connect
+            </button>
           </li>
         }
       </ul>
@@ -24,14 +25,24 @@
     }
 
     @if (notInstalledRows().length > 0) {
-      <h5 class="not-installed-heading">Not installed — click to download:</h5>
+      <h5 class="not-installed-heading">Not installed:</h5>
       <ul class="wallet-list">
         @for (row of notInstalledRows(); track row.entry.wallet) {
           <li class="wallet-row">
-            <a class="wallet-pick wallet-pick-download" [attr.data-testid]="'wallet-download-' + row.entry.wallet" [href]="knownOrdinalWallets[row.entry.wallet].downloadLink" target="_blank" rel="noopener">
-              <span class="label">{{ row.entry.label }}</span>
-            </a>
+            <span class="wallet-name">{{ row.entry.label }}</span>
             <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: row.entry }" />
+            @if (deepLinkFor(row.entry); as deepLink) {
+              <!-- Plain mobile browser: no injected provider, so bounce the
+                   user into the wallet's in-app browser (verified scheme
+                   only, from the SDK registry) instead of a dead Download. -->
+              <a class="wallet-pick wallet-pick-deeplink" [attr.data-testid]="'wallet-open-' + row.entry.wallet" [href]="deepLink" rel="noopener">
+                Open in {{ row.entry.label }}
+              </a>
+            } @else {
+              <a class="wallet-pick wallet-pick-download" [attr.data-testid]="'wallet-download-' + row.entry.wallet" [href]="knownOrdinalWallets[row.entry.wallet].downloadLink" target="_blank" rel="noopener">
+                Download
+              </a>
+            }
           </li>
         }
       </ul>
@@ -43,11 +54,14 @@
       <h5 class="not-installed-heading">Watch-only:</h5>
       <ul class="wallet-list">
         <li class="wallet-row">
-          <button class="wallet-pick" data-testid="wallet-pick-xpub" [attr.aria-expanded]="xpubMode()" (click)="toggleXpubMode()">
-            <span class="label">Connect (xpub)</span>
+          <span class="wallet-name">
+            {{ xpub.label }}
             <small class="sub-label">Sparrow, Electrum, Coldcard, Ledger…</small>
-          </button>
+          </span>
           <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: xpub }" />
+          <button class="wallet-pick" data-testid="wallet-pick-xpub" [attr.aria-expanded]="xpubMode()" (click)="toggleXpubMode()">
+            Connect (xpub)
+          </button>
         </li>
       </ul>
 
@@ -72,7 +86,7 @@
               data-testid="xpub-scripttype"
               [value]="xpubScriptType()"
               (change)="onXpubScriptTypeChange($any($event.target).value)">
-              <option value="p2tr">Taproot (P2TR) — recommended for cats</option>
+              <option value="p2tr">Taproot (P2TR): recommended for cats</option>
               <option value="p2wpkh">Native SegWit (P2WPKH)</option>
               <option value="p2sh-p2wpkh">Nested SegWit (P2SH-P2WPKH)</option>
               <option value="p2pkh">Legacy (P2PKH)</option>
@@ -91,7 +105,7 @@
             (click)="submitXpub()">
             {{ xpubConnecting() ? 'Scanning…' : 'Connect watch-only' }}
           </button>
-          <p class="xpub-note">You sign each action's PSBT in your own wallet — nothing is signed in the browser.</p>
+          <p class="xpub-note">You sign each action's PSBT in your own wallet; nothing is signed in the browser.</p>
         </div>
       }
     }
@@ -118,6 +132,18 @@
       <span class="info-platforms">{{ platformLabel(entry) }}</span>
       <span class="info-signing">{{ signingModeLabel(entry) }}</span>
     </div>
+    @if (actionCapabilityLine(entry); as action) {
+      <div class="info-action-needed">
+        <span class="info-action-heading">What this action needs</span>
+        <div class="info-cap">
+          <span class="info-cap-icon" aria-hidden="true">{{ action.icon }}</span>
+          <span class="info-cap-body">
+            <span class="info-cap-name">{{ action.name }}</span>
+            <span class="info-cap-wording">{{ action.wording }}</span>
+          </span>
+        </div>
+      </div>
+    }
     <ul class="info-caps">
       @for (line of capabilityLines(entry); track line.name) {
         <li class="info-cap">
@@ -147,7 +173,7 @@
     [autoClose]="'outside'"
     popoverClass="wallet-popover"
     [title]="networkMismatch()
-      ? 'Wallet is on the wrong network — expected ' + expectedNetworkGroup
+      ? 'Wallet is on the wrong network, expected ' + expectedNetworkGroup
       : 'Connected via ' + knownOrdinalWallets[wallet.type].label">
     @if (networkMismatch()) {
       <span class="wallet-mismatch-icon" aria-hidden="true">⚠</span>
@@ -157,7 +183,7 @@
   </button>
 
   <ng-template #popTitle>
-    <strong>Connected — {{ knownOrdinalWallets[wallet.type].label }}</strong>
+    <strong>Connected: {{ knownOrdinalWallets[wallet.type].label }}</strong>
   </ng-template>
 
   <ng-template #popContent>

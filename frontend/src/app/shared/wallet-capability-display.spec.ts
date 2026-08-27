@@ -24,9 +24,9 @@ describe('wallet-capability-display', () => {
   });
 
   describe('supportWording', () => {
-    it('Proven without caveat', () => {
+    it('Proven without caveat carries no trailing period (shared-UX label)', () => {
       expect(supportWording({ support: CapabilitySupport.Proven }))
-        .toBe('Verified end-to-end on our test network.');
+        .toBe('Verified end-to-end on our test network');
     });
 
     it('Proven with caveat appends the capitalized caveat sentence', () => {
@@ -36,9 +36,9 @@ describe('wallet-capability-display', () => {
       })).toBe('Verified end-to-end on our test network. Requires the wallet\'s active address type to be Taproot (P2TR).');
     });
 
-    it('Adapter never carries a caveat', () => {
+    it('Adapter never carries a caveat and has no trailing period', () => {
       expect(supportWording({ support: CapabilitySupport.Adapter }))
-        .toBe('Supported, not yet verified end-to-end.');
+        .toBe('Supported, not yet verified end-to-end');
     });
 
     it('Unsupported with caveat appends the reason', () => {
@@ -48,9 +48,9 @@ describe('wallet-capability-display', () => {
       })).toBe('Not available with this wallet. Alby WebBTC signPsbt signs EVERY input with one Taproot key.');
     });
 
-    it('Unsupported without caveat', () => {
+    it('Unsupported without caveat carries no trailing period (shared-UX label)', () => {
       expect(supportWording({ support: CapabilitySupport.Unsupported }))
-        .toBe('Not available with this wallet.');
+        .toBe('Not available with this wallet');
     });
   });
 

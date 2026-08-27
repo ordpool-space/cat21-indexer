@@ -32,8 +32,10 @@ describe('WalletCapabilityNotice', () => {
     const text = render(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate);
     expect(text).not.toBeNull();
     expect(text).toContain('Alby');
-    // The reason comes from the matrix caveat (mentions signPsbt).
-    expect(text!.toLowerCase()).toContain('signpsbt');
+    // The reason comes from the matrix caveat: Alby signs every input
+    // with its one key, so it can't co-sign an offer alongside the buyer.
+    expect(text!.toLowerCase()).toContain('signs every input');
+    expect(text!.toLowerCase()).toContain('co-sign an offer');
     // Alternatives name a capable injected wallet.
     expect(text).toContain('Connect');
     expect(text).toContain('Xverse');

@@ -16,7 +16,7 @@
       but uses one address for both payments and ordinals, so be
       careful there.
     </p>
-    <app-wallet-connect />
+    <app-wallet-connect [capability]="offerAcceptCapability" />
   </div>
 } @else if (walletBlocksAccept()) {
   <div class="connect-card" data-testid="accept-offer-blocked">

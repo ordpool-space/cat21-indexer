@@ -17,7 +17,9 @@ describe('PsbtExportBridgeService', () => {
   let componentInstance: PsbtExportBridge;
 
   function setup(result: Promise<string>) {
-    componentInstance = {} as PsbtExportBridge;
+    // Mirror the real component's default primary-button copy so we can
+    // assert positively whether a given prompt path overrode it.
+    componentInstance = { actionLabel: 'Broadcast signed transaction' } as PsbtExportBridge;
     open = jest.fn().mockReturnValue({ componentInstance, result });
     TestBed.configureTestingModule({
       providers: [
@@ -38,6 +40,21 @@ describe('PsbtExportBridgeService', () => {
     expect(open).toHaveBeenCalledTimes(1);
     expect(componentInstance.unsignedBase64).toBe('UNSIGNED_B64');
     expect(emitted).toBe('signed-psbt-base64');
+  });
+
+  it('the default promptForSignedPsbt keeps the "Broadcast" primary-button copy (mint/transfer/accept)', async () => {
+    setup(Promise.resolve('signed'));
+    await firstValueFrom(service.promptForSignedPsbt({ base64: 'B', hex: 'H' }));
+    expect(componentInstance.actionLabel).toBe('Broadcast signed transaction');
+  });
+
+  it('promptForSignedPsbtWithLabel overrides the primary-button copy (create-offer builds, does not broadcast)', async () => {
+    setup(Promise.resolve('signed'));
+    const prompt = service.promptForSignedPsbtWithLabel('Build the offer');
+    const emitted = await firstValueFrom(prompt({ base64: 'OFFER_B64', hex: 'aa' }));
+    expect(componentInstance.unsignedBase64).toBe('OFFER_B64');
+    expect(componentInstance.actionLabel).toBe('Build the offer');
+    expect(emitted).toBe('signed');
   });
 
   it('errors when the modal is dismissed (user cancelled)', async () => {

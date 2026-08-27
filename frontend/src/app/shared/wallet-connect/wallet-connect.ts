@@ -1,17 +1,20 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, TemplateRef, computed, inject, input, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef, NgbPopover, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import {
+  CapabilitySupport,
   KnownOrdinalWalletType,
   KnownOrdinalWallets,
   WALLET_MATRIX,
+  WalletCapability,
   WalletMatrixEntry,
   WalletPlatform,
   WalletService,
   WatchOnlyScriptType,
   capabilityOf,
+  walletInAppBrowserDeepLink,
   walletMatrixEntry,
 } from 'ordpool-sdk';
 
@@ -76,17 +79,35 @@ export class WalletConnect {
   readonly platform = signal<WalletPlatform>(detectWalletPlatform());
 
   /**
+   * The action this picker connects a wallet FOR, when embedded in an
+   * action card (make-offer, accept-offer). Two effects, per shared-UX:
+   *   1. action-scopes the rows — wallets the matrix marks `Unsupported`
+   *      for this capability are dropped from the picker (no Alby in a
+   *      buy/sell dialog);
+   *   2. adds the "What this action needs" block to each row's popover.
+   * Undefined for the global header picker, which offers every wallet
+   * reachable on the platform and omits the action block.
+   */
+  readonly capability = input<WalletCapability | undefined>(undefined);
+
+  /**
    * The picker rows: every INJECTED (in-browser signing) matrix entry
    * reachable on this platform, each tagged installed/not from runtime
    * detection. Oyl never appears (no matrix row); Phantom/Binance never
    * appear on desktop (matrix marks them Mobile-only). Watch-only (xpub)
    * is a separate row (no runtime detection; a paste flow) — see below.
+   *
+   * When `capability` is set (an action card), rows the matrix marks
+   * `Unsupported` for that action are excluded (shared-UX §1: don't offer
+   * incapable wallets in an action connect dialog).
    */
   readonly pickerRows = computed<WalletPickerRow[]>(() => {
     const installedTypes = new Set(this.detectedWallets().installedWallets.map((w) => w.type));
     const plat = this.platform();
+    const cap = this.capability();
     return WALLET_MATRIX
       .filter((e) => e.signingMode === 'injected' && e.platforms.includes(plat))
+      .filter((e) => cap === undefined || capabilityOf(e.wallet, cap).support !== CapabilitySupport.Unsupported)
       .map((entry) => ({ entry, installed: installedTypes.has(entry.wallet) }));
   });
 
@@ -148,6 +169,37 @@ export class WalletConnect {
         wording: supportWording(status),
       };
     });
+  }
+
+  /**
+   * The "What this action needs" popover line: the current page action's
+   * capability and this wallet's status for it (shared-UX §2 item 2).
+   * Null when the picker is not action-scoped (the header picker), so the
+   * block is omitted.
+   */
+  actionCapabilityLine(entry: WalletMatrixEntry): CapabilityLine | null {
+    const cap = this.capability();
+    if (cap === undefined) return null;
+    const status = capabilityOf(entry.wallet, cap);
+    return {
+      name: capabilityDisplayName(cap),
+      icon: supportIcon(status.support),
+      wording: supportWording(status),
+    };
+  }
+
+  /**
+   * On a plain mobile browser no wallet provider is injected, so a
+   * not-installed wallet can't connect — bounce the user into the
+   * wallet's own in-app dApp browser via the SDK's docs-verified deep-link
+   * registry (Xverse today; every other wallet returns null). Returns the
+   * deep link, or null when there's no verified scheme (keep the Download
+   * fallback) or on desktop (extensions install normally).
+   */
+  deepLinkFor(entry: WalletMatrixEntry): string | null {
+    if (this.platform() !== WalletPlatform.Mobile) return null;
+    if (typeof window === 'undefined') return null;
+    return walletInAppBrowserDeepLink(entry.wallet, window.location.href);
   }
 
   open(): void {

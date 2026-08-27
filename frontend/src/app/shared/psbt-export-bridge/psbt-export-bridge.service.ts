@@ -22,18 +22,36 @@ export class PsbtExportBridgeService {
   /**
    * The callback to hand each orchestrator's action method. Bound so it
    * can be passed by reference: `orchestrator.mint(bridge.promptForSignedPsbt)`.
+   * Uses the default "Broadcast" primary-button copy — correct for mint,
+   * transfer, and accept, which finalize + broadcast the signed PSBT.
    */
-  readonly promptForSignedPsbt = (unsigned: { base64: string; hex: string }): Observable<string> => {
+  readonly promptForSignedPsbt = (unsigned: { base64: string; hex: string }): Observable<string> =>
+    this.openBridge(unsigned);
+
+  /**
+   * A prompt callback with operation-specific primary-button copy. The
+   * create-offer flow uses "Build the offer" because it produces a
+   * partial-signed artifact and does NOT broadcast — a "Broadcast" label
+   * there would be a lie. Call per-invocation:
+   * `orchestrator.createOffer(bridge.promptForSignedPsbtWithLabel('Build the offer'))`.
+   */
+  promptForSignedPsbtWithLabel(actionLabel: string): (unsigned: { base64: string; hex: string }) => Observable<string> {
+    return (unsigned) => this.openBridge(unsigned, actionLabel);
+  }
+
+  private openBridge(unsigned: { base64: string; hex: string }, actionLabel?: string): Observable<string> {
     const ref = this.modalService.open(PsbtExportBridge, {
       ariaLabelledBy: 'psbt-export-bridge-title',
       centered: true,
       backdrop: 'static',
       keyboard: false,
     });
-    (ref.componentInstance as PsbtExportBridge).unsignedBase64 = unsigned.base64;
+    const instance = ref.componentInstance as PsbtExportBridge;
+    instance.unsignedBase64 = unsigned.base64;
+    if (actionLabel !== undefined) instance.actionLabel = actionLabel;
     // `ref.result` resolves with the pasted signed PSBT on submit, or
     // rejects on dismiss. `from` turns that promise into a one-shot
     // observable the SDK subscribes to.
     return from(ref.result as Promise<string>);
-  };
+  }
 }

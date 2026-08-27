@@ -374,8 +374,11 @@ export class MakeOffer {
 
   onCreateOfferClick(): void {
     // Pass the export/paste bridge unconditionally: injected wallets
-    // ignore it, a watch-only (xpub) wallet signs through it.
-    this.orchestrator.createOffer(this.psbtBridge.promptForSignedPsbt).subscribe({
+    // ignore it, a watch-only (xpub) wallet signs through it. Label the
+    // bridge's primary button "Build the offer": create-offer returns a
+    // partial-signed artifact, it does NOT broadcast (unlike mint /
+    // transfer / accept, which keep the default "Broadcast" copy).
+    this.orchestrator.createOffer(this.psbtBridge.promptForSignedPsbtWithLabel('Build the offer')).subscribe({
       error: () => undefined,
     });
   }
