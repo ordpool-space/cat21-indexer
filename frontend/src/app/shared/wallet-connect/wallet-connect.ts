@@ -136,7 +136,7 @@ export class WalletConnect {
   private connectTemplate = viewChild.required<TemplateRef<unknown>>('connectModal');
   private modalRef: NgbModalRef | undefined;
 
-  /** First 8 + last 6 chars of the connected ordinals address (taproot — that's where cats live). */
+  /** First 8 + last 6 chars of the connected ordinals address (the wallet's ordinals-receiving address; usually Taproot). */
   shortAddress(addr: string | undefined | null): string {
     if (!addr) return '';
     return addr.length > 16 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
@@ -263,7 +263,7 @@ export class WalletConnect {
         if (WatchOnlyConnectService.isScriptTypeAmbiguous(err) && !this.xpubNeedsScriptType()) {
           // First encounter: ask for the account type, keep the key.
           this.xpubNeedsScriptType.set(true);
-          this.xpubError.set('This key type is ambiguous. Pick the account type (Taproot for cats).');
+          this.xpubError.set('This key type is ambiguous. Pick the account type (Taproot is the usual choice for cats).');
         } else {
           this.xpubError.set(err instanceof Error ? err.message : String(err));
         }

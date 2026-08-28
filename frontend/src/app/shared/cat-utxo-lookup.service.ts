@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { forkJoin, map, Observable, of, switchMap } from 'rxjs';
+import { catchError, forkJoin, map, Observable, of, switchMap } from 'rxjs';
 import { hex } from '@scure/base';
 import { BuyOfferTargetCat, Cat21Holding } from 'ordpool-sdk';
 
@@ -54,14 +54,14 @@ export interface MyCatHolding extends Cat21Holding {
  *
  * Both flows read the cat's ACTUAL UTXO value from electrs (our own
  * Bitcoin Core node — the authority for the amount a signature commits
- * to). 546 sats is the SDK/wallet mint POSTAGE, a builder convention and
- * NOT a chain invariant (see SDK-3): a cat rides the first sat of the
- * first output per ordinal theory, and that output can be any size a
- * third-party minter chose. The SDK transfer/offer builder enforces its
- * own `value === CAT21_POSTAGE_SATS` (546) postage rule, so passing the
- * real value makes a non-546 cat fail cleanly at build time
- * ("must equal 546; got X") rather than produce a PSBT signed over the
- * wrong amount that fails opaquely at broadcast (script-verify).
+ * to). We never assume 546: a cat is defined by nLockTime=21 + sat
+ * tracking and rides the first sat of the first output per ordinal
+ * theory, so its UTXO can be ANY size a minter chose. 546 sats is only
+ * the OUTPUT size the SDK/wallet creates when it moves a cat (a handy
+ * cross-address dust floor), never a constraint on the cat INPUT. The
+ * SDK transfer/offer builder uses whatever real value we pass, so a cat
+ * on any UTXO size transfers/offers correctly; a wrong (assumed) value
+ * would sign over the wrong amount and fail at broadcast (script-verify).
  */
 @Injectable({ providedIn: 'root' })
 export class CatUtxoLookupService {
@@ -100,9 +100,9 @@ export class CatUtxoLookupService {
               const parsed = parseSatpoint(insc.satpoint);
               if (!parsed) return of(null);
               // Read the cat UTXO's ACTUAL value from electrs — never
-              // assume 546 (that is mint postage, a builder convention,
-              // not a chain invariant). The SDK builder enforces its own
-              // 546 rule, so a non-546 cat fails cleanly at build.
+              // assume 546 (that is mint OUTPUT postage, not a constraint
+              // on the cat input). The SDK builder uses the real value, so
+              // a cat on any UTXO size transfers correctly.
               return this.fetchEsploraTx(parsed.txid).pipe(
                 map<EsploraTxResponse, MyCatHolding | null>((tx) => {
                   const out = tx.vout?.[parsed.vout];
@@ -212,6 +212,25 @@ export class CatUtxoLookupService {
           }),
         );
       }),
+    );
+  }
+
+  /**
+   * Resolve a single cat outpoint (from a deep-link `?catTxid=&catVout=`)
+   * into an orchestrator-ready `Cat21Holding` by reading the UTXO's REAL
+   * value from electrs — never an assumed 546. Returns null if the tx or
+   * vout can't be found (deep-link to a spent / nonexistent outpoint), so
+   * the caller degrades gracefully instead of signing over a guessed value.
+   * `catNumber` is display-only (not part of the tx signing surface).
+   */
+  getHoldingByOutpoint(txid: string, vout: number, catNumber: number): Observable<Cat21Holding | null> {
+    return this.fetchEsploraTx(txid).pipe(
+      map<EsploraTxResponse, Cat21Holding | null>((tx) => {
+        const out = tx.vout?.[vout];
+        if (!out) return null;
+        return { catNumber, txid, vout, value: out.value };
+      }),
+      catchError(() => of(null)),
     );
   }
 

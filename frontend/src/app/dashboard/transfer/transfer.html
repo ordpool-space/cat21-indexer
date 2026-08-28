@@ -53,7 +53,7 @@
   } @else {
     <section class="transfer-section" data-testid="transfer-cat-section">
       <h2 class="transfer-section-heading">1. Pick the cat you want to send</h2>
-      @if (urlCatUtxo(); as fromUrl) {
+      @if (urlCatOutpoint(); as fromUrl) {
         <!-- Deep-link supplied the cat outpoint; no picker needed. Show
              it as read-only info so the seller sees what's queued. -->
         <p class="text-muted small" data-testid="transfer-cat-from-url">

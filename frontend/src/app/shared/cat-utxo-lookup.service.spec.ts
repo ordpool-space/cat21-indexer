@@ -350,4 +350,33 @@ describe('CatUtxoLookupService', () => {
       await expect(firstValueFrom(service.getTargetByNumber(99999))).rejects.toThrow('404');
     });
   });
+
+  describe('getHoldingByOutpoint (deep-link resolver)', () => {
+    it('resolves the outpoint with the REAL electrs value (not an assumed 546)', async () => {
+      const txid = 'a'.repeat(64);
+      // non-546 sentinel at vout 1 proves the real value flows through.
+      http.get.mockReturnValue(of({
+        txid,
+        vout: [
+          { scriptpubkey: '51', value: 111 },
+          { scriptpubkey: '5120' + 'a'.repeat(64), value: 3210 },
+        ],
+      }));
+      const result = await firstValueFrom(service.getHoldingByOutpoint(txid, 1, 42));
+      expect(result).toEqual({ catNumber: 42, txid, vout: 1, value: 3210 });
+    });
+
+    it('returns null when the vout does not exist at that tx', async () => {
+      const txid = 'b'.repeat(64);
+      http.get.mockReturnValue(of({ txid, vout: [] }));
+      const result = await firstValueFrom(service.getHoldingByOutpoint(txid, 0, 7));
+      expect(result).toBeNull();
+    });
+
+    it('returns null (degrades gracefully) when the electrs fetch errors', async () => {
+      http.get.mockReturnValue(throwError(() => new Error('404')));
+      const result = await firstValueFrom(service.getHoldingByOutpoint('c'.repeat(64), 0, 9));
+      expect(result).toBeNull();
+    });
+  });
 });

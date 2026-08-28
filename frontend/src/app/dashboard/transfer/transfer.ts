@@ -6,7 +6,6 @@ import { RouterLink } from '@angular/router';
 import * as btc from '@scure/btc-signer';
 import {
   bitcoinNetwork,
-  Cat21Holding,
   Cat21TransferOrchestrator,
   parseTransferQueryParams,
   toScureNetwork,
@@ -48,10 +47,12 @@ export class Transfer {
   /**
    * Query params `?catTxid=<txid>&catVout=<n>` — direct override for
    * the picker. When both are present, skip the ord-driven holdings
-   * lookup and use them as the cat UTXO. Value is always 546 sats
-   * (SDK HARD RULE: cat UTXO is always 546 sats). Used by deep-links
-   * that already know the cat's outpoint; also unblocks e2e flows
-   * where ord is unreachable and the picker would otherwise be empty.
+   * lookup and use them as the cat UTXO. The UTXO's REAL value is read
+   * from electrs (never assumed 546 — 546 is only the mint OUTPUT size,
+   * not a property of an existing cat's UTXO). Used by deep-links that
+   * already know the cat's outpoint; also unblocks e2e flows where ord
+   * is unreachable and the picker would otherwise be empty (electrs
+   * stays reachable, so the value lookup still resolves).
    */
   readonly catTxidParam = input<string | undefined>(undefined, { alias: 'catTxid' });
   readonly catVoutParam = input<string | undefined>(undefined, { alias: 'catVout' });
@@ -170,7 +171,7 @@ export class Transfer {
     // already know the outpoint, or e2e where ord is unreachable).
     effect(() => {
       const fromPicker = this.selectedHolding();
-      const fromUrl = this.urlCatUtxo();
+      const fromUrl = this.urlCatUtxoResource.value() ?? null;
       if (fromPicker) {
         this.orchestrator.setCatUtxo({
           catNumber: fromPicker.catNumber,
@@ -224,11 +225,12 @@ export class Transfer {
   private prefilledFor: string | null = null;
 
   /**
-   * Cat outpoint parsed from `?catTxid=&catVout=` query params. The
-   * picker's effect uses this as a fallback when no picker selection
-   * is active. Returns null when either param is missing or malformed.
+   * Cat outpoint parsed from `?catTxid=&catVout=` query params. Returns
+   * null when either param is missing or malformed. Carries only the
+   * outpoint + display cat number; the UTXO VALUE is resolved separately
+   * (see {@link urlCatUtxoResource}) by reading electrs — never guessed.
    */
-  readonly urlCatUtxo = computed<Cat21Holding | null>(() => {
+  readonly urlCatOutpoint = computed<{ txid: string; vout: number; catNumber: number } | null>(() => {
     // Router's `withComponentInputBinding()` delivers the params via
     // input signals (catNumberParam, catTxidParam, catVoutParam). Feed
     // them to the SDK's `parseTransferQueryParams` — the canonical
@@ -246,8 +248,25 @@ export class Transfer {
       catNumber: parsed.catNumber ?? 0,
       txid: parsed.catOutpoint.txid,
       vout: parsed.catOutpoint.vout,
-      value: 546,
     };
+  });
+
+  /**
+   * Resolves the deep-linked outpoint into a full `Cat21Holding` by
+   * reading the UTXO's REAL value from electrs (a cat rides any-size
+   * UTXO; 546 is only our mint OUTPUT size). Value stays `undefined`
+   * while loading and null if the outpoint can't be found.
+   */
+  readonly urlCatUtxoResource = rxResourceFixed({
+    params: () => ({ outpoint: this.urlCatOutpoint() }),
+    stream: ({ params }) =>
+      params.outpoint
+        ? this.lookup.getHoldingByOutpoint(
+            params.outpoint.txid,
+            params.outpoint.vout,
+            params.outpoint.catNumber,
+          )
+        : EMPTY,
   });
 
   // ---------- Commands ----------
