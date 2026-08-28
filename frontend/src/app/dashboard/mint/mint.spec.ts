@@ -13,6 +13,7 @@ import {
 
 import {
   AUTO_SCAN_MAX_VALUE_SAT,
+  CAT21_POSTAGE_SATS,
   Cat21MintOrchestrator,
   RecommendedFees,
   SimulateTransactionResult,
@@ -277,33 +278,41 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   // D. Empty-state hint + dynamic funding floor
   // -------------------------------------------------------------------
 
-  describe('D. recommendedFundingSats — dynamic floor', () => {
+  describe('D. recommendedFundingSats — component contract (value from the SDK)', () => {
     beforeEach(() => {
       orch.connectedWallet.set(wallet());
       orch.state.set('ready');
       fixture.detectChanges();
     });
 
-    it('D1: feeRate null → falls back to 1 sat/vB → 800 sat', () => {
-      expect(component.recommendedFundingSats()).toBe(800);
-    });
+    // The component's OWN logic is the `?? 1` fee-rate fallback plus pass-through
+    // of the SDK's `calculateRecommendedFundingSats`. We assert that contract,
+    // not the SDK's internal vsize/formula (the SDK owns it and may sharpen the
+    // estimate), so this spec doesn't re-break when the SDK refines the number.
 
-    it('D2: feeRate=1 → 800 sat (546 + 200×1, rounded to next 100)', () => {
+    it('D1: null feeRate falls back to the feeRate=1 funding (the component `?? 1` guard)', () => {
       orch.feeRate.set(1);
       fixture.detectChanges();
-      expect(component.recommendedFundingSats()).toBe(800);
-    });
-
-    it('D3: feeRate=5 → 1600 sat (546 + 1000 = 1546 → 1600)', () => {
-      orch.feeRate.set(5);
+      const atOne = component.recommendedFundingSats();
+      orch.feeRate.set(null);
       fixture.detectChanges();
-      expect(component.recommendedFundingSats()).toBe(1600);
+      expect(component.recommendedFundingSats()).toBe(atOne);
     });
 
-    it('D4: feeRate=100 → 20600 sat (546 + 20000 = 20546 → 20600)', () => {
+    it('D2: funding is a positive sat amount covering at least the cat postage', () => {
+      orch.feeRate.set(1);
+      fixture.detectChanges();
+      const funding = component.recommendedFundingSats();
+      expect(funding).toBeGreaterThanOrEqual(CAT21_POSTAGE_SATS);
+    });
+
+    it('D3: funding rises with the fee rate (a higher rate needs more funding)', () => {
+      orch.feeRate.set(1);
+      fixture.detectChanges();
+      const low = component.recommendedFundingSats();
       orch.feeRate.set(100);
       fixture.detectChanges();
-      expect(component.recommendedFundingSats()).toBe(20600);
+      expect(component.recommendedFundingSats()).toBeGreaterThan(low);
     });
   });
 
@@ -775,28 +784,30 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   });
 
   describe('MATRIX-B. fee-rate-driven viability', () => {
-    it('MATRIX-B14(B): recommendedFundingSats scales correctly at 1/5/50/100 sat/vB', () => {
+    it('MATRIX-B14(B): recommendedFundingSats increases strictly across 1/5/50/100 sat/vB', () => {
       orch.connectedWallet.set(wallet());
       orch.state.set('ready');
-      const cases: Array<[number, number]> = [
-        [1, 800],
-        [5, 1600],
-        [50, 10600],
-        [100, 20600],
-      ];
-      for (const [rate, expected] of cases) {
+      // Pin the component contract (strictly rising with the fee rate), not the
+      // SDK's exact vsize output — same reasoning as the D-block.
+      const values = [1, 5, 50, 100].map((rate) => {
         orch.feeRate.set(rate);
         fixture.detectChanges();
-        expect(component.recommendedFundingSats()).toBe(expected);
+        return component.recommendedFundingSats();
+      });
+      for (let i = 1; i < values.length; i++) {
+        expect(values[i]).toBeGreaterThan(values[i - 1]);
       }
     });
 
-    it('MATRIX-B15(B): recommendedFundingSats with feeRate=null falls back to 1 sat/vB → 800', () => {
+    it('MATRIX-B15(B): feeRate=null yields the same funding as feeRate=1 (the `?? 1` fallback)', () => {
       orch.connectedWallet.set(wallet());
       orch.state.set('ready');
+      orch.feeRate.set(1);
+      fixture.detectChanges();
+      const atOne = component.recommendedFundingSats();
       orch.feeRate.set(null);
       fixture.detectChanges();
-      expect(component.recommendedFundingSats()).toBe(800);
+      expect(component.recommendedFundingSats()).toBe(atOne);
     });
   });
 
