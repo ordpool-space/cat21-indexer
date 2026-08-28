@@ -52,14 +52,14 @@ describe('CatUtxoLookupService', () => {
       expect(result).toEqual([]);
     });
 
-    it('expands each cat into a Cat21Holding via the inscription endpoint', async () => {
+    it('reads the cat UTXO real value from electrs (not a hardcoded 546)', async () => {
       const txid = 'a'.repeat(64);
       const inscriptionId = `${txid}i0`;
       ordApi.getAddress.mockReturnValue(of<OrdAddressResponse>({
         outputs: [`${txid}:0`],
         cats: [inscriptionId],
         cat_numbers: [42],
-        sat_balance: 546,
+        sat_balance: 987,
       }));
       ordApi.getInscription.mockReturnValue(of<OrdInscriptionResponse>({
         id: inscriptionId,
@@ -68,6 +68,12 @@ describe('CatUtxoLookupService', () => {
         satpoint: `${txid}:0:0`,
         sat: 1234567890,
       }));
+      // A deliberately non-546 value so the assertion proves the real
+      // electrs value flows through, not an assumed postage.
+      http.get.mockReturnValue(of({
+        txid,
+        vout: [{ scriptpubkey: '5120' + 'a'.repeat(64), value: 987 }],
+      }));
 
       const result = await firstValueFrom(service.getMyHoldings('bc1pSeller'));
       expect(result).toEqual([
@@ -75,7 +81,7 @@ describe('CatUtxoLookupService', () => {
           catNumber: 42,
           txid,
           vout: 0,
-          value: 546,
+          value: 987,
           inscriptionId,
         },
       ]);
@@ -100,10 +106,19 @@ describe('CatUtxoLookupService', () => {
         satpoint: `${txid}:1:546`,
         sat: 9876543210,
       }));
+      // Real value read from the cat's actual vout (index 1); distinct
+      // sentinel proves it comes from electrs, not an assumed 546.
+      http.get.mockReturnValue(of({
+        txid,
+        vout: [
+          { scriptpubkey: '00', value: 111 },
+          { scriptpubkey: '5120' + 'b'.repeat(64), value: 1234 },
+        ],
+      }));
 
       const result = await firstValueFrom(service.getMyHoldings('bc1pSeller'));
       expect(result[0]).toEqual(
-        expect.objectContaining({ txid, vout: 1, value: 546 }),
+        expect.objectContaining({ txid, vout: 1, value: 1234 }),
       );
     });
 
@@ -145,6 +160,14 @@ describe('CatUtxoLookupService', () => {
           sat: 2,
         });
       });
+      // Each cat's value comes from its own electrs tx lookup.
+      http.get.mockImplementation((url: unknown) => {
+        const u = String(url);
+        if (u.includes(txidA)) {
+          return of({ txid: txidA, vout: [{ scriptpubkey: '51', value: 546 }] });
+        }
+        return of({ txid: txidB, vout: [{ scriptpubkey: '51', value: 600 }] });
+      });
 
       const result = await firstValueFrom(service.getMyHoldings('bc1pSeller'));
       const numbers = result.map((h) => h.catNumber).sort((a, b) => a - b);
@@ -180,6 +203,12 @@ describe('CatUtxoLookupService', () => {
           sat: 200,
         });
       });
+      // Only the clean cat reaches the electrs lookup; the broken-satpoint
+      // cat short-circuits to null before any tx fetch.
+      http.get.mockReturnValue(of({
+        txid: cleanTxid,
+        vout: [{ scriptpubkey: '51', value: 546 }],
+      }));
 
       const result = await firstValueFrom(service.getMyHoldings('bc1pSeller'));
       expect(result).toEqual([
@@ -228,6 +257,22 @@ describe('CatUtxoLookupService', () => {
       expect(result!.target.value).toBe(546);
       expect(result!.target.scriptPubKey).toEqual(hex.decode(scriptHex));
       expect(result!.sellerAddress).toBe('bc1pSellerCurrent');
+    });
+
+    it('uses the real electrs value for the target (proves value is not hardcoded 546)', async () => {
+      const { currentTxid, scriptHex } = setupHappyPath(42);
+      // ord + esplora agree on scriptPubKey; esplora reports a non-546
+      // value, which must flow into target.value unchanged so the seller
+      // signs the input over its real amount.
+      http.get.mockReturnValue(of({
+        txid: currentTxid,
+        vout: [
+          { scriptpubkey: scriptHex, scriptpubkey_address: 'bc1pSellerCurrent', value: 1000 },
+        ],
+      }));
+      const result = await firstValueFrom(service.getTargetByNumber(42));
+      expect(result).not.toBeNull();
+      expect(result!.target.value).toBe(1000);
     });
 
     it('fails closed when esplora reports a different scriptPubKey than ord (oracle disagreement — audit C1)', async () => {

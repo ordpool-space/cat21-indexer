@@ -52,9 +52,16 @@ export interface MyCatHolding extends Cat21Holding {
  *    on-chain state. Returns the cat's current outpoint + scriptPubKey
  *    + owning address.
  *
- * Both flows assume the cat is at a 546-sat UTXO (CAT-21 protocol
- * invariant); we don't double-check the value here, the orchestrator's
- * own assert catches a mismatch with a clean error.
+ * Both flows read the cat's ACTUAL UTXO value from electrs (our own
+ * Bitcoin Core node — the authority for the amount a signature commits
+ * to). 546 sats is the SDK/wallet mint POSTAGE, a builder convention and
+ * NOT a chain invariant (see SDK-3): a cat rides the first sat of the
+ * first output per ordinal theory, and that output can be any size a
+ * third-party minter chose. The SDK transfer/offer builder enforces its
+ * own `value === CAT21_POSTAGE_SATS` (546) postage rule, so passing the
+ * real value makes a non-546 cat fail cleanly at build time
+ * ("must equal 546; got X") rather than produce a PSBT signed over the
+ * wrong amount that fails opaquely at broadcast (script-verify).
  */
 @Injectable({ providedIn: 'root' })
 export class CatUtxoLookupService {
@@ -89,16 +96,26 @@ export class CatUtxoLookupService {
         // same per-inscription round-trip removes that coupling.
         const lookups = addressInfo.cats.map((inscriptionId) =>
           this.ordApi.getInscription(inscriptionId).pipe(
-            map<OrdInscriptionResponse, MyCatHolding | null>((insc) => {
+            switchMap<OrdInscriptionResponse, Observable<MyCatHolding | null>>((insc) => {
               const parsed = parseSatpoint(insc.satpoint);
-              if (!parsed) return null;
-              return {
-                catNumber: insc.number,
-                txid: parsed.txid,
-                vout: parsed.vout,
-                value: 546,
-                inscriptionId,
-              };
+              if (!parsed) return of(null);
+              // Read the cat UTXO's ACTUAL value from electrs — never
+              // assume 546 (that is mint postage, a builder convention,
+              // not a chain invariant). The SDK builder enforces its own
+              // 546 rule, so a non-546 cat fails cleanly at build.
+              return this.fetchEsploraTx(parsed.txid).pipe(
+                map<EsploraTxResponse, MyCatHolding | null>((tx) => {
+                  const out = tx.vout?.[parsed.vout];
+                  if (!out) return null;
+                  return {
+                    catNumber: insc.number,
+                    txid: parsed.txid,
+                    vout: parsed.vout,
+                    value: out.value,
+                    inscriptionId,
+                  };
+                }),
+              );
             }),
           ),
         );
@@ -181,7 +198,11 @@ export class CatUtxoLookupService {
                     catNumber,
                     txid: parsed.txid,
                     vout: parsed.vout,
-                    value: 546,
+                    // The cat UTXO's ACTUAL value from electrs (already
+                    // fetched + cross-checked on scriptPubKey above). The
+                    // seller signs this input over this amount, so it must
+                    // be the real value, never an assumed 546.
+                    value: esploraOut.value,
                     scriptPubKey: scriptBytes,
                   },
                   sellerAddress,
