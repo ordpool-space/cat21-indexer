@@ -1,38 +1,42 @@
-import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable, catchError, firstValueFrom, of, switchMap } from 'rxjs';
-import { AddressProbe, WalletInfo, WalletService, WatchOnlyScriptType } from 'ordpool-sdk';
+import { Observable } from 'rxjs';
+import { WalletInfo, WalletService, WatchOnlyScriptType, makeWatchOnlyProbe } from 'ordpool-sdk';
 
 import { environment } from '../../environments/environment';
-import { OrdApiService } from './ord-api.service';
-
-/** One spendable output as esplora `/address/:a/utxo` returns it. */
-interface EsploraUtxo {
-  txid: string;
-  vout: number;
-  value: number;
-}
 
 /**
  * Watch-only (xpub) connect for cat21.space.
  *
- * Owns the one piece the SDK leaves to the consumer: the `probe`. The SDK
- * derives the receive window and auto-picks the ordinals + payment
- * identities; the consumer answers "what is on-chain at this address"
- * per derived address. We wire that to electrs (funded / fundedSats) and
- * ord (hasCat), so the Genesis Cat is auto-picked as the ordinals
- * identity even when it does not sit at receive index 0.
+ * The probe — the "what is on-chain at this address" lookup `scanWatchOnly`
+ * needs — is the SDK's shared, ordinals-safe `makeWatchOnlyProbe`: it
+ * classifies every UTXO against the full ord (inscriptions + runes + rare
+ * sats) AND cat21-ord (cats), so `funded`/`fundedSats` count ONLY provably
+ * clean UTXOs and `hasCat` comes from the cat index. One authoritative
+ * implementation, shared across ordpool.space / cat21.space / cubes — no
+ * per-consumer funded/fundedSats logic, no size heuristics. The Genesis
+ * Cat (cat #0, not at receive index 0) is auto-picked as the ordinals
+ * identity; a cat/inscription-only address is never picked for payment.
  *
- * `connectXpub` returns a normal `WalletInfo` on `connectedWallet$`;
- * every existing flow then works, EXCEPT the signing step, which routes
- * through the export/paste bridge (`promptForSignedPsbt`) because a
- * watch-only wallet holds no key in the browser.
+ * `connectXpub` returns a normal `WalletInfo` on `connectedWallet$`; every
+ * existing flow then works, EXCEPT the signing step, which routes through
+ * the export/paste bridge (`promptForSignedPsbt`) — a watch-only wallet
+ * holds no key in the browser.
  */
 @Injectable({ providedIn: 'root' })
 export class WatchOnlyConnectService {
   private walletService = inject(WalletService);
-  private http = inject(HttpClient);
-  private ordApi = inject(OrdApiService);
+
+  /**
+   * The shared ordinals-safe probe, wired to cat21.space's endpoints:
+   * electrs behind `/api` (esploraApi already carries it), the full ord
+   * (ordFullExplorer) for inscriptions/runes/rare-sats, and cat21-ord
+   * (ordExplorer) for cats.
+   */
+  private readonly probe = makeWatchOnlyProbe({
+    esploraApiUrl: environment.esploraApi,      // https://api.ordpool.space/api -> /address/:a/utxo
+    ordApiUrl: environment.ordFullExplorer,     // https://ord.ordpool.space (inscriptions + runes + rare sats)
+    cat21OrdApiUrl: environment.ordExplorer,    // https://ord.cat21.space (cats)
+  });
 
   /** True when the SDK rejected a plain xpub/tpub for missing script type. */
   static isScriptTypeAmbiguous(err: unknown): boolean {
@@ -51,35 +55,7 @@ export class WatchOnlyConnectService {
     return this.walletService.connectXpub({
       extendedPublicKey: extendedPublicKey.trim(),
       scriptType,
-      probe: (address) => this.probe(address),
+      probe: this.probe,
     });
-  }
-
-  /**
-   * On-chain state of one derived address. `funded` / `fundedSats` come
-   * from electrs; `hasCat` from ord's per-address cat list (best-effort:
-   * an ord miss degrades to "no cat", never blocks the scan).
-   */
-  private async probe(address: string): Promise<AddressProbe> {
-    // why: the SDK's probe contract returns a Promise (probe:
-    // (address) => Promise<AddressProbe>), so firstValueFrom is the
-    // boundary adapter here rather than a service-internal shortcut the
-    // RxJS convention forbids. The two lookups are independent I/O — run
-    // them concurrently so a gap-limit scan doesn't serialise 2N calls.
-    const [utxos, hasCat] = await Promise.all([
-      firstValueFrom(
-        this.http.get<EsploraUtxo[]>(`${environment.esploraApi}/address/${address}/utxo`).pipe(
-          catchError(() => of([] as EsploraUtxo[])),
-        ),
-      ),
-      firstValueFrom(
-        this.ordApi.getAddress(address).pipe(
-          switchMap((info) => of((info.cats?.length ?? 0) > 0)),
-          catchError(() => of(false)),
-        ),
-      ),
-    ]);
-    const fundedSats = utxos.reduce((sum, u) => sum + u.value, 0);
-    return { funded: utxos.length > 0, fundedSats, hasCat };
   }
 }

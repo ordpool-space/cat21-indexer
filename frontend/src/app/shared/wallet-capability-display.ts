@@ -1,5 +1,7 @@
 import {
   CapabilitySupport,
+  KnownOrdinalWallets,
+  KnownOrdinalWalletType,
   WalletCapability,
 } from 'ordpool-sdk';
 
@@ -71,9 +73,13 @@ export function capabilityDisplayName(capability: WalletCapability): string {
 
 /** Signing-mode line, per the shared-UX info-icon "Header" wording. */
 export function signingModeWording(signingMode: 'injected' | 'watch-only'): string {
+  // The external-wallet example list is sourced from the SDK matrix
+  // (`KnownOrdinalWallets[xpub].subLabel`) — single source of truth,
+  // agreed cross-session so the three sites can't drift. Only the
+  // sentence frame is local UI copy.
   return signingMode === 'injected'
     ? 'Signs in your browser'
-    : 'You sign in your own wallet (Sparrow, Coldcard, Ledger, …)';
+    : `You sign in your own wallet (${KnownOrdinalWallets[KnownOrdinalWalletType.xpub].subLabel})`;
 }
 
 /**

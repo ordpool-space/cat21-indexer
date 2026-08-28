@@ -56,7 +56,7 @@
         <li class="wallet-row">
           <span class="wallet-name">
             {{ xpub.label }}
-            <small class="sub-label">Sparrow, Electrum, Coldcard, Ledger…</small>
+            <small class="sub-label">{{ knownOrdinalWallets[xpub.wallet].subLabel }}</small>
           </span>
           <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: xpub }" />
           <button class="wallet-pick" data-testid="wallet-pick-xpub" [attr.aria-expanded]="xpubMode()" (click)="toggleXpubMode()">
@@ -106,7 +106,6 @@
             {{ xpubConnecting() ? 'Scanning…' : 'Connect watch-only' }}
           </button>
           <p class="xpub-note">You sign each action's PSBT in your own wallet; nothing is signed in the browser.</p>
-          <p class="xpub-note xpub-warn" role="note">Multi-address wallet? Verify the auto-selected payment address before signing — an address holding only a cat or an inscription must not be spent for fees.</p>
         </div>
       }
     }
