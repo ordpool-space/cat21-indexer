@@ -1,8 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { WalletInfo, WalletService, WatchOnlyScriptType, makeWatchOnlyProbe } from 'ordpool-sdk';
-
-import { environment } from '../../environments/environment';
+import { WalletInfo, WalletService, WatchOnlyScriptType, cat21Config, makeWatchOnlyProbe } from 'ordpool-sdk';
 
 /**
  * Watch-only (xpub) connect for cat21.space.
@@ -25,17 +23,18 @@ import { environment } from '../../environments/environment';
 @Injectable({ providedIn: 'root' })
 export class WatchOnlyConnectService {
   private walletService = inject(WalletService);
+  private cfg = inject(cat21Config);
 
   /**
-   * The shared ordinals-safe probe, wired to cat21.space's endpoints:
-   * electrs behind `/api` (esploraApi already carries it), the full ord
-   * (ordFullExplorer) for inscriptions/runes/rare-sats, and cat21-ord
-   * (ordExplorer) for cats.
+   * The shared ordinals-safe probe, wired from the SDK's `cat21Config` (the
+   * single URL source the app provides and the regtest harness patches):
+   * electrs behind `/api`, the full ord for inscriptions/runes/rare-sats,
+   * and cat21-ord for cats.
    */
   private readonly probe = makeWatchOnlyProbe({
-    esploraApiUrl: environment.esploraApi,      // https://api.ordpool.space/api -> /address/:a/utxo
-    ordApiUrl: environment.ordFullExplorer,     // https://ord.ordpool.space (inscriptions + runes + rare sats)
-    cat21OrdApiUrl: environment.ordExplorer,    // https://ord.cat21.space (cats)
+    esploraApiUrl: this.cfg.mempoolApiUrl + '/api',  // electrs -> /address/:a/utxo
+    ordApiUrl: this.cfg.ordApiUrl,                   // full ord (inscriptions + runes + rare sats)
+    cat21OrdApiUrl: this.cfg.cat21OrdApiUrl,          // cat21-ord (cats)
   });
 
   /** True when the SDK rejected a plain xpub/tpub for missing script type. */

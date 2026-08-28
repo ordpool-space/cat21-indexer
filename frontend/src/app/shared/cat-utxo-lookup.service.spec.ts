@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of, throwError } from 'rxjs';
 import { hex } from '@scure/base';
+import { cat21Config } from 'ordpool-sdk';
 
 import { ApiService } from './cat21-api/api/api.service';
 import { CatUtxoLookupService } from './cat-utxo-lookup.service';
@@ -35,6 +36,15 @@ describe('CatUtxoLookupService', () => {
         { provide: OrdApiService, useValue: ordApi },
         { provide: ApiService, useValue: cat21Api },
         { provide: HttpClient, useValue: http },
+        {
+          provide: cat21Config,
+          useValue: {
+            mempoolApiUrl: 'https://api.ordpool.space',
+            cat21ApiUrl: 'https://backend2.cat21.space',
+            ordApiUrl: 'https://ord.ordpool.space',
+            cat21OrdApiUrl: 'https://ord.cat21.space',
+          },
+        },
       ],
     });
     service = TestBed.inject(CatUtxoLookupService);

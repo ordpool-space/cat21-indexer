@@ -1,7 +1,7 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
-import { WalletService } from 'ordpool-sdk';
+import { WalletService, cat21Config } from 'ordpool-sdk';
 
 import { WatchOnlyConnectService } from './watch-only-connect.service';
 
@@ -21,6 +21,15 @@ describe('WatchOnlyConnectService', () => {
       providers: [
         WatchOnlyConnectService,
         { provide: WalletService, useValue: { connectXpub } },
+        {
+          provide: cat21Config,
+          useValue: {
+            mempoolApiUrl: 'https://api.ordpool.space',
+            cat21ApiUrl: 'https://backend2.cat21.space',
+            ordApiUrl: 'https://ord.ordpool.space',
+            cat21OrdApiUrl: 'https://ord.cat21.space',
+          },
+        },
       ],
     });
     service = TestBed.inject(WatchOnlyConnectService);

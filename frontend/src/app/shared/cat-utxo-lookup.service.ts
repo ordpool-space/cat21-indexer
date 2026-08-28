@@ -2,9 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { catchError, forkJoin, map, Observable, of, switchMap } from 'rxjs';
 import { hex } from '@scure/base';
-import { BuyOfferTargetCat, Cat21Holding } from 'ordpool-sdk';
+import { BuyOfferTargetCat, Cat21Holding, cat21Config } from 'ordpool-sdk';
 
-import { environment } from '../../environments/environment';
 import { ApiService } from './cat21-api/api/api.service';
 import { OrdApiService, OrdInscriptionResponse, OrdOutputResponse } from './ord-api.service';
 
@@ -68,6 +67,12 @@ export class CatUtxoLookupService {
   private ordApi = inject(OrdApiService);
   private cat21Api = inject(ApiService);
   private http = inject(HttpClient);
+
+  // Electrs (esplora) base, derived from the SDK's `cat21Config.mempoolApiUrl`
+  // — the single URL source the app already provides (and the regtest harness
+  // patches to the local electrs shim). Using it here keeps every esplora call
+  // on the same host the SDK uses, instead of a parallel `environment` value.
+  private readonly esploraApi = inject(cat21Config).mempoolApiUrl + '/api';
 
   /**
    * For each cat at the supplied ordinals address (typically the
@@ -236,7 +241,7 @@ export class CatUtxoLookupService {
 
   private fetchEsploraTx(txid: string): Observable<EsploraTxResponse> {
     return this.http.get<EsploraTxResponse>(
-      `${environment.esploraApi}/tx/${txid}`,
+      `${this.esploraApi}/tx/${txid}`,
       { headers: { Accept: 'application/json' } },
     );
   }
