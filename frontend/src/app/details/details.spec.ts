@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { EMPTY, Observable, of, throwError } from 'rxjs';
 
-import { BuyOfferTargetCat, WalletInfo, WalletService } from 'ordpool-sdk';
+import { BuyOfferTargetCat, KnownOrdinalWalletType, WalletInfo, WalletService } from 'ordpool-sdk';
 
 import { Details } from './details';
 import { ApiService } from '../shared/cat21-api';
@@ -697,11 +697,14 @@ describe('Details — publishListing threads the cats bundle from ord (v3 flow)'
   const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';
 
   it('fetches getCatsAtOutput + calls publishListing with the cats array', async () => {
-    const { component, listingService, ordApi } = await setup({
+    const { component, listingService, ordApi, walletService } = await setup({
       catNumber: 42,
       currentTarget: () => of(targetAt(REAL_TXID, 0)),
       catsAtOutput: () => of([0, 42, 100]),
     });
+    // A connected SignMessage-capable wallet (default = Xverse) is
+    // required to reach the publish path — walletCanSignMessage gates it.
+    walletService.connectedWalletSubject.next(wallet());
     // Wait for currentTargetResource to resolve.
     for (let i = 0; i < 10; i++) await Promise.resolve();
 
@@ -729,11 +732,12 @@ describe('Details — publishListing threads the cats bundle from ord (v3 flow)'
     // ord reports cats [7, 100] — cat #42 (the headline) is no longer
     // on this UTXO. Surface as `cats-bundle-drift` (same code the
     // backend uses) and DO NOT call publishListing.
-    const { component, listingService } = await setup({
+    const { component, listingService, walletService } = await setup({
       catNumber: 42,
       currentTarget: () => of(targetAt(REAL_TXID, 0)),
       catsAtOutput: () => of([7, 100]),
     });
+    walletService.connectedWalletSubject.next(wallet());
     for (let i = 0; i < 10; i++) await Promise.resolve();
     const spy = jest.spyOn(listingService, 'publishListing');
 
@@ -745,5 +749,46 @@ describe('Details — publishListing threads the cats bundle from ord (v3 flow)'
     expect(spy).not.toHaveBeenCalled();
     expect(component.orderbookState()).toBe('error');
     expect(component.orderbookError()?.code).toBe('cats-bundle-drift');
+  });
+});
+
+describe('Details — orderbook publish is gated by the SDK SignMessage capability', () => {
+
+  const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';
+
+  async function publishAttempt(walletType: KnownOrdinalWalletType) {
+    const { component, listingService, walletService } = await setup({
+      catNumber: 42,
+      currentTarget: () => of(targetAt(REAL_TXID, 0)),
+      catsAtOutput: () => of([0, 42, 100]),
+    });
+    walletService.connectedWalletSubject.next(wallet({ type: walletType }));
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    const spy = jest.spyOn(listingService, 'publishListing').mockReturnValue(of({} as never));
+    component.onAskInputChange('21000');
+    component.publishToOrderbook.set(true);
+    component.onCopyPermalinkClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    return spy;
+  }
+
+  // The gate reads the matrix (supportsCapability(SignMessage)), not a
+  // hardcoded wallet list, so it must block EVERY wallet the matrix marks
+  // Unsupported for SignMessage — not just xpub.
+
+  it('publishes for a SignMessage-capable wallet (Xverse, Adapter)', async () => {
+    expect(await publishAttempt(KnownOrdinalWalletType.xverse)).toHaveBeenCalled();
+  });
+
+  it('does NOT publish for Wizz (matrix SignMessage=Unsupported)', async () => {
+    expect(await publishAttempt(KnownOrdinalWalletType.wizz)).not.toHaveBeenCalled();
+  });
+
+  it('does NOT publish for Alby (matrix SignMessage=Unsupported)', async () => {
+    expect(await publishAttempt(KnownOrdinalWalletType.alby)).not.toHaveBeenCalled();
+  });
+
+  it('does NOT publish for watch-only xpub (matrix SignMessage=Unsupported)', async () => {
+    expect(await publishAttempt(KnownOrdinalWalletType.xpub)).not.toHaveBeenCalled();
   });
 });

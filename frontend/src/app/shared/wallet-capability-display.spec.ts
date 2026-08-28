@@ -52,6 +52,15 @@ describe('wallet-capability-display', () => {
       expect(supportWording({ support: CapabilitySupport.Unsupported }))
         .toBe('Not available with this wallet');
     });
+
+    it('does not double-punctuate a caveat that already ends in a period', () => {
+      // Real matrix caveats (Alby offers/collections, OKX collections)
+      // end in a period; the appended sentence must not add a second.
+      expect(supportWording({
+        support: CapabilitySupport.Unsupported,
+        caveat: 'Alby cannot create offers: it signs every input with your one key, so it cannot co-sign an offer alongside the buyer.',
+      })).toBe('Not available with this wallet. Alby cannot create offers: it signs every input with your one key, so it cannot co-sign an offer alongside the buyer.');
+    });
   });
 
   describe('capabilityDisplayName', () => {

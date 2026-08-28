@@ -41,7 +41,11 @@ export function supportIcon(support: CapabilitySupport): string {
  * carries a caveat in the matrix.
  */
 export function supportWording(status: WalletCapabilityStatus): string {
-  const caveat = status.caveat ? ` ${capitalizeSentence(status.caveat)}.` : '';
+  // Keep the caveat's own terminal punctuation: many matrix caveats
+  // already end in a period, so append one only when they don't (else
+  // "…the buyer.." double-punctuates).
+  const trailing = status.caveat && /[.!?]$/.test(status.caveat.trim()) ? '' : '.';
+  const caveat = status.caveat ? ` ${capitalizeSentence(status.caveat)}${trailing}` : '';
   const sep = status.caveat ? '.' : '';
   switch (status.support) {
     case CapabilitySupport.Proven:

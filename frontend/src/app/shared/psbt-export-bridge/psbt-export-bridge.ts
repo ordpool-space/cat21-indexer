@@ -106,7 +106,15 @@ export class PsbtExportBridge {
   }
 
   download(): void {
-    const blob = new Blob([this.unsignedBase64], { type: 'application/octet-stream' });
+    // A .psbt file is BINARY (BIP-174 magic 'psbt\xff'), so decode the
+    // base64 to bytes before writing it — a file holding the base64 text
+    // would be rejected by wallets that import .psbt as binary (Coldcard
+    // SD-card, Sparrow file-open). The Copy button keeps the base64 text
+    // for the paste path.
+    const bin = atob(this.unsignedBase64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

@@ -10,8 +10,9 @@ import {
   buildBuyOfferQueryParams,
   buildTransferQueryParams,
   CatOutpoint,
-  KnownOrdinalWalletType,
+  WalletCapability,
   WalletService,
+  supportsCapability,
 } from 'ordpool-sdk';
 
 import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
@@ -246,13 +247,19 @@ export class Details {
   readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
 
   /**
-   * A watch-only (xpub) wallet cannot sign a BIP-322 message (no key in
-   * the browser; BIP-322 is interactive, nothing to export), so the
-   * orderbook opt-in — which proves ownership via signMessage — is hidden
-   * for it. The offer permalink itself still works: that path signs a
+   * Whether the connected wallet can produce a BIP-322 message signature,
+   * per the SDK matrix (not a hardcoded wallet list). Gates the orderbook
+   * opt-in, which proves ownership via signMessage. Unsupported for
+   * watch-only (xpub: no key in the browser) AND for injected wallets the
+   * matrix marks Unsupported for SignMessage (Wizz, Alby, and mobile
+   * Phantom/Binance) — offering them the publish would fail at sign time.
+   * The offer permalink itself still works everywhere: that path signs a
    * PSBT via the export bridge, not a message.
    */
-  readonly walletCanSignMessage = computed(() => this.connectedWallet()?.type !== KnownOrdinalWalletType.xpub);
+  readonly walletCanSignMessage = computed(() => {
+    const w = this.connectedWallet();
+    return !!w && supportsCapability(w.type, WalletCapability.SignMessage);
+  });
 
   /**
    * True when the connected wallet's ordinals address equals the cat's

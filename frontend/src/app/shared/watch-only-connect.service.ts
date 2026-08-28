@@ -61,20 +61,25 @@ export class WatchOnlyConnectService {
    * an ord miss degrades to "no cat", never blocks the scan).
    */
   private async probe(address: string): Promise<AddressProbe> {
-    const utxos = await firstValueFrom(
-      this.http.get<EsploraUtxo[]>(`${environment.esploraApi}/address/${address}/utxo`).pipe(
-        catchError(() => of([] as EsploraUtxo[])),
+    // why: the SDK's probe contract returns a Promise (probe:
+    // (address) => Promise<AddressProbe>), so firstValueFrom is the
+    // boundary adapter here rather than a service-internal shortcut the
+    // RxJS convention forbids. The two lookups are independent I/O — run
+    // them concurrently so a gap-limit scan doesn't serialise 2N calls.
+    const [utxos, hasCat] = await Promise.all([
+      firstValueFrom(
+        this.http.get<EsploraUtxo[]>(`${environment.esploraApi}/address/${address}/utxo`).pipe(
+          catchError(() => of([] as EsploraUtxo[])),
+        ),
       ),
-    );
+      firstValueFrom(
+        this.ordApi.getAddress(address).pipe(
+          switchMap((info) => of((info.cats?.length ?? 0) > 0)),
+          catchError(() => of(false)),
+        ),
+      ),
+    ]);
     const fundedSats = utxos.reduce((sum, u) => sum + u.value, 0);
-
-    const hasCat = await firstValueFrom(
-      this.ordApi.getAddress(address).pipe(
-        switchMap((info) => of((info.cats?.length ?? 0) > 0)),
-        catchError(() => of(false)),
-      ),
-    );
-
     return { funded: utxos.length > 0, fundedSats, hasCat };
   }
 }
