@@ -86,7 +86,16 @@ export class WalletConnect {
    * in `wallet-picker-rows.ts` and is unit-tested against the real matrix.
    */
   readonly pickerRows = computed<WalletPickerRow[]>(() => {
-    const installedTypes = new Set(this.detectedWallets().installedWallets.map((w) => w.type));
+    // `wallets$` (detectedWallets) is only the re-emit TRIGGER: it strips
+    // `hiddenFromPicker` (Phantom/Binance) on EVERY platform, so a wallet
+    // detected inside its own mobile in-app browser would wrongly read as
+    // "not installed" (Download). Take the install set from the UNFILTERED
+    // `getInstalledWallets()`; the matrix `platforms` list governs which
+    // rows appear. Canonical X-1 fix (cross-session sync 2026-08-28).
+    this.detectedWallets(); // establish the reactive dependency (re-poll trigger)
+    const installedTypes = new Set(
+      this.walletService.getInstalledWallets().installedWallets.map((w) => w.type),
+    );
     const targetUrl = typeof window !== 'undefined' ? window.location.href : '';
     return buildInjectedPickerRows(
       WALLET_MATRIX,

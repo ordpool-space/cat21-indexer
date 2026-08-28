@@ -67,6 +67,22 @@ describe('buildInjectedPickerRows — deep-link resolution', () => {
     expect(xverse!.installed).toBe(true);
     expect(xverse!.deepLink).toBeNull();
   });
+
+  // X-1 (cross-session 2026-08-28): Phantom is Mobile-only AND
+  // hiddenFromPicker in the SDK metadata. When it's DETECTED (in its own
+  // mobile in-app browser) it must read as INSTALLED (Connect), not
+  // Download. The builder must not filter hiddenFromPicker — that's why
+  // the component feeds it the UNFILTERED getInstalledWallets set rather
+  // than wallets$ (which strips hiddenFromPicker on every platform).
+  it('Mobile + DETECTED Phantom (hiddenFromPicker) → installed row, no deep-link', () => {
+    const rows = buildInjectedPickerRows(
+      WALLET_MATRIX, WalletPlatform.Mobile, new Set([KnownOrdinalWalletType.phantom]), undefined, TARGET_URL, walletInAppBrowserDeepLink,
+    );
+    const phantom = rows.find((r) => r.entry.wallet === KnownOrdinalWalletType.phantom);
+    expect(phantom).toBeDefined();
+    expect(phantom!.installed).toBe(true);
+    expect(phantom!.deepLink).toBeNull();
+  });
 });
 
 describe('buildInjectedPickerRows — action-scoping', () => {
