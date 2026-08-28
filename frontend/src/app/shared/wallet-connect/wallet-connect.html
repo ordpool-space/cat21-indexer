@@ -106,6 +106,7 @@
             {{ xpubConnecting() ? 'Scanning…' : 'Connect watch-only' }}
           </button>
           <p class="xpub-note">You sign each action's PSBT in your own wallet; nothing is signed in the browser.</p>
+          <p class="xpub-note xpub-warn" role="note">Multi-address wallet? Verify the auto-selected payment address before signing — an address holding only a cat or an inscription must not be spent for fees.</p>
         </div>
       }
     }
