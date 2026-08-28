@@ -31,7 +31,7 @@
           <li class="wallet-row">
             <span class="wallet-name">{{ row.entry.label }}</span>
             <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: row.entry }" />
-            @if (deepLinkFor(row.entry); as deepLink) {
+            @if (row.deepLink; as deepLink) {
               <!-- Plain mobile browser: no injected provider, so bounce the
                    user into the wallet's in-app browser (verified scheme
                    only, from the SDK registry) instead of a dead Download. -->

@@ -4,7 +4,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef, NgbPopover, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import {
-  CapabilitySupport,
   KnownOrdinalWalletType,
   KnownOrdinalWallets,
   WALLET_MATRIX,
@@ -13,38 +12,21 @@ import {
   WalletPlatform,
   WalletService,
   WatchOnlyScriptType,
-  capabilityOf,
   walletInAppBrowserDeepLink,
   walletMatrixEntry,
 } from 'ordpool-sdk';
 
 import { PendingCats } from '../pending-cats/pending-cats';
-import {
-  CAPABILITY_DISPLAY_ORDER,
-  capabilityDisplayName,
-  signingModeWording,
-  supportIcon,
-  supportWording,
-} from '../wallet-capability-display';
+import { signingModeWording } from '../wallet-capability-display';
 import { detectWalletPlatform } from '../wallet-platform';
+import {
+  CapabilityLine,
+  WalletPickerRow,
+  actionCapabilityLineFor,
+  buildInjectedPickerRows,
+  capabilityLinesFor,
+} from './wallet-picker-rows';
 import { WatchOnlyConnectService } from '../watch-only-connect.service';
-
-/**
- * One row in the connect picker: a matrix entry the current platform can
- * reach, annotated with whether the wallet is detected in the browser
- * right now (`installed`) and therefore which action the row offers.
- */
-interface WalletPickerRow {
-  entry: WalletMatrixEntry;
-  installed: boolean;
-}
-
-/** One capability line in the info popover. */
-interface CapabilityLine {
-  name: string;
-  icon: string;
-  wording: string;
-}
 
 /**
  * Wallet connection control for the header.
@@ -93,22 +75,27 @@ export class WalletConnect {
   /**
    * The picker rows: every INJECTED (in-browser signing) matrix entry
    * reachable on this platform, each tagged installed/not from runtime
-   * detection. Oyl never appears (no matrix row); Phantom/Binance never
-   * appear on desktop (matrix marks them Mobile-only). Watch-only (xpub)
-   * is a separate row (no runtime detection; a paste flow) — see below.
+   * detection and carrying its mobile deep link where one applies. Oyl
+   * never appears (no matrix row); Phantom/Binance never appear on desktop
+   * (matrix marks them Mobile-only). Watch-only (xpub) is a separate row
+   * (no runtime detection; a paste flow) — see below.
    *
    * When `capability` is set (an action card), rows the matrix marks
    * `Unsupported` for that action are excluded (shared-UX §1: don't offer
-   * incapable wallets in an action connect dialog).
+   * incapable wallets in an action connect dialog). The pure builder lives
+   * in `wallet-picker-rows.ts` and is unit-tested against the real matrix.
    */
   readonly pickerRows = computed<WalletPickerRow[]>(() => {
     const installedTypes = new Set(this.detectedWallets().installedWallets.map((w) => w.type));
-    const plat = this.platform();
-    const cap = this.capability();
-    return WALLET_MATRIX
-      .filter((e) => e.signingMode === 'injected' && e.platforms.includes(plat))
-      .filter((e) => cap === undefined || capabilityOf(e.wallet, cap).support !== CapabilitySupport.Unsupported)
-      .map((entry) => ({ entry, installed: installedTypes.has(entry.wallet) }));
+    const targetUrl = typeof window !== 'undefined' ? window.location.href : '';
+    return buildInjectedPickerRows(
+      WALLET_MATRIX,
+      this.platform(),
+      installedTypes,
+      this.capability(),
+      targetUrl,
+      walletInAppBrowserDeepLink,
+    );
   });
 
   readonly installedRows = computed(() => this.pickerRows().filter((r) => r.installed));
@@ -161,14 +148,7 @@ export class WalletConnect {
 
   /** All seven capabilities for a wallet, in display order, with icon + wording. */
   capabilityLines(entry: WalletMatrixEntry): CapabilityLine[] {
-    return CAPABILITY_DISPLAY_ORDER.map((cap) => {
-      const status = capabilityOf(entry.wallet, cap);
-      return {
-        name: capabilityDisplayName(cap),
-        icon: supportIcon(status.support),
-        wording: supportWording(status),
-      };
-    });
+    return capabilityLinesFor(entry.wallet);
   }
 
   /**
@@ -178,28 +158,7 @@ export class WalletConnect {
    * block is omitted.
    */
   actionCapabilityLine(entry: WalletMatrixEntry): CapabilityLine | null {
-    const cap = this.capability();
-    if (cap === undefined) return null;
-    const status = capabilityOf(entry.wallet, cap);
-    return {
-      name: capabilityDisplayName(cap),
-      icon: supportIcon(status.support),
-      wording: supportWording(status),
-    };
-  }
-
-  /**
-   * On a plain mobile browser no wallet provider is injected, so a
-   * not-installed wallet can't connect — bounce the user into the
-   * wallet's own in-app dApp browser via the SDK's docs-verified deep-link
-   * registry (Xverse today; every other wallet returns null). Returns the
-   * deep link, or null when there's no verified scheme (keep the Download
-   * fallback) or on desktop (extensions install normally).
-   */
-  deepLinkFor(entry: WalletMatrixEntry): string | null {
-    if (this.platform() !== WalletPlatform.Mobile) return null;
-    if (typeof window === 'undefined') return null;
-    return walletInAppBrowserDeepLink(entry.wallet, window.location.href);
+    return actionCapabilityLineFor(entry.wallet, this.capability());
   }
 
   open(): void {
