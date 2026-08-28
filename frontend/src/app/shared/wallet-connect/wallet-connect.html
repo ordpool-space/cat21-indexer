@@ -140,6 +140,9 @@
           <span class="info-cap-body">
             <span class="info-cap-name">{{ action.name }}</span>
             <span class="info-cap-wording">{{ action.wording }}</span>
+            @if (action.caveat; as c) {
+              <span class="info-cap-caveat">{{ c }}</span>
+            }
           </span>
         </div>
       </div>
@@ -151,6 +154,9 @@
           <span class="info-cap-body">
             <span class="info-cap-name">{{ line.name }}</span>
             <span class="info-cap-wording">{{ line.wording }}</span>
+            @if (line.caveat; as c) {
+              <span class="info-cap-caveat">{{ c }}</span>
+            }
           </span>
         </li>
       }

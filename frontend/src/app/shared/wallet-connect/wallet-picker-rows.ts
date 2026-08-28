@@ -33,6 +33,8 @@ export interface CapabilityLine {
   name: string;
   icon: string;
   wording: string;
+  /** The matrix caveat, rendered as its own element after the wording. */
+  caveat?: string;
 }
 
 /**
@@ -105,7 +107,8 @@ export function actionCapabilityLineFor(
   return {
     name: capabilityDisplayName(capability),
     icon: supportIcon(status.support),
-    wording: supportWording(status),
+    wording: supportWording(status.support),
+    caveat: status.caveat,
   };
 }
 
@@ -116,7 +119,8 @@ export function capabilityLinesFor(wallet: KnownOrdinalWalletType): CapabilityLi
     return {
       name: capabilityDisplayName(cap),
       icon: supportIcon(status.support),
-      wording: supportWording(status),
+      wording: supportWording(status.support),
+      caveat: status.caveat,
     };
   });
 }

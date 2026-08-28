@@ -24,42 +24,14 @@ describe('wallet-capability-display', () => {
   });
 
   describe('supportWording', () => {
-    it('Proven without caveat carries no trailing period (shared-UX label)', () => {
-      expect(supportWording({ support: CapabilitySupport.Proven }))
-        .toBe('Verified end-to-end on our test network');
-    });
-
-    it('Proven with caveat appends the capitalized caveat sentence', () => {
-      expect(supportWording({
-        support: CapabilitySupport.Proven,
-        caveat: 'requires the wallet\'s active address type to be Taproot (P2TR)',
-      })).toBe('Verified end-to-end on our test network. Requires the wallet\'s active address type to be Taproot (P2TR).');
-    });
-
-    it('Adapter never carries a caveat and has no trailing period', () => {
-      expect(supportWording({ support: CapabilitySupport.Adapter }))
-        .toBe('Supported, not yet verified end-to-end');
-    });
-
-    it('Unsupported with caveat appends the reason', () => {
-      expect(supportWording({
-        support: CapabilitySupport.Unsupported,
-        caveat: 'Alby WebBTC signPsbt signs EVERY input with one Taproot key',
-      })).toBe('Not available with this wallet. Alby WebBTC signPsbt signs EVERY input with one Taproot key.');
-    });
-
-    it('Unsupported without caveat carries no trailing period (shared-UX label)', () => {
-      expect(supportWording({ support: CapabilitySupport.Unsupported }))
-        .toBe('Not available with this wallet');
-    });
-
-    it('does not double-punctuate a caveat that already ends in a period', () => {
-      // Real matrix caveats (Alby offers/collections, OKX collections)
-      // end in a period; the appended sentence must not add a second.
-      expect(supportWording({
-        support: CapabilitySupport.Unsupported,
-        caveat: 'Alby cannot create offers: it signs every input with your one key, so it cannot co-sign an offer alongside the buyer.',
-      })).toBe('Not available with this wallet. Alby cannot create offers: it signs every input with your one key, so it cannot co-sign an offer alongside the buyer.');
+    // Cross-site canonical (2026-08-28 sync): supportWording is the base
+    // label ONLY, no trailing period, no caveat. The matrix caveat is a
+    // separate field rendered beside it (punctuation-safe; can't
+    // double-punctuate a caveat that already ends in a period).
+    it('returns the shared-UX base label per support level, no trailing period', () => {
+      expect(supportWording(CapabilitySupport.Proven)).toBe('Verified end-to-end on our test network');
+      expect(supportWording(CapabilitySupport.Adapter)).toBe('Supported, not yet verified end-to-end');
+      expect(supportWording(CapabilitySupport.Unsupported)).toBe('Not available with this wallet');
     });
   });
 
@@ -79,7 +51,7 @@ describe('wallet-capability-display', () => {
     it('injected vs watch-only', () => {
       expect(signingModeWording('injected')).toBe('Signs in your browser');
       expect(signingModeWording('watch-only'))
-        .toBe('You sign in your own wallet (Sparrow, Coldcard, Ledger, ...)');
+        .toBe('You sign in your own wallet (Sparrow, Coldcard, Ledger, …)');
     });
   });
 

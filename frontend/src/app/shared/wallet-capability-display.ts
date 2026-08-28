@@ -1,7 +1,6 @@
 import {
   CapabilitySupport,
   WalletCapability,
-  WalletCapabilityStatus,
 } from 'ordpool-sdk';
 
 /**
@@ -32,28 +31,21 @@ export function supportIcon(support: CapabilitySupport): string {
 }
 
 /**
- * User-facing sentence for a capability's status, per the shared-UX
- * "Support-level wording" table. The base wording carries NO trailing
- * period (it's a label, matching the shared-UX table and the ordpool /
- * cubes sister sites). A `Proven`/`Unsupported` status with a matrix
- * `caveat` follows the base wording with the caveat as its own sentence
- * (separated by a period, keeping its own punctuation); `Adapter` never
- * carries a caveat in the matrix.
+ * Base wording for a support level, per the shared-UX "Support-level
+ * wording" table. NO trailing period (it's a label) and NO caveat: the
+ * matrix `caveat` is rendered as its OWN element beside this wording, the
+ * cross-site canonical structure (ordpool + cubes + cat21.space) agreed
+ * in the 2026-08-28 sync — a separate field is punctuation-safe and can't
+ * double-punctuate a caveat that already ends in a period.
  */
-export function supportWording(status: WalletCapabilityStatus): string {
-  // Keep the caveat's own terminal punctuation: many matrix caveats
-  // already end in a period, so append one only when they don't (else
-  // "…the buyer.." double-punctuates).
-  const trailing = status.caveat && /[.!?]$/.test(status.caveat.trim()) ? '' : '.';
-  const caveat = status.caveat ? ` ${capitalizeSentence(status.caveat)}${trailing}` : '';
-  const sep = status.caveat ? '.' : '';
-  switch (status.support) {
+export function supportWording(support: CapabilitySupport): string {
+  switch (support) {
     case CapabilitySupport.Proven:
-      return `Verified end-to-end on our test network${sep}${caveat}`;
+      return 'Verified end-to-end on our test network';
     case CapabilitySupport.Adapter:
-      return `Supported, not yet verified end-to-end${sep}${caveat}`;
+      return 'Supported, not yet verified end-to-end';
     case CapabilitySupport.Unsupported:
-      return `Not available with this wallet${sep}${caveat}`;
+      return 'Not available with this wallet';
   }
 }
 
@@ -81,7 +73,7 @@ export function capabilityDisplayName(capability: WalletCapability): string {
 export function signingModeWording(signingMode: 'injected' | 'watch-only'): string {
   return signingMode === 'injected'
     ? 'Signs in your browser'
-    : 'You sign in your own wallet (Sparrow, Coldcard, Ledger, ...)';
+    : 'You sign in your own wallet (Sparrow, Coldcard, Ledger, …)';
 }
 
 /**
@@ -98,8 +90,3 @@ export const CAPABILITY_DISPLAY_ORDER: readonly WalletCapability[] = [
   WalletCapability.InscriptionParentChild,
   WalletCapability.SignMessage,
 ];
-
-/** Uppercase the first letter of a matrix caveat so it reads as a sentence. */
-function capitalizeSentence(s: string): string {
-  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
-}

@@ -143,16 +143,17 @@ describe('actionCapabilityLineFor', () => {
     const line = actionCapabilityLineFor(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate);
     expect(line!.name).toBe('Sell (create an offer)');
     expect(line!.icon).toBe('✕');
-    expect(line!.wording).toContain('Not available with this wallet');
-    expect(line!.wording).toContain('cannot create offers');
+    expect(line!.wording).toBe('Not available with this wallet');
+    // Caveat is a SEPARATE field (cross-site canonical), not concatenated.
+    expect(line!.caveat).toContain('cannot create offers');
   });
 
-  it('UniSat + Collections → Proven with the Taproot caveat appended', () => {
+  it('UniSat + Collections → Proven, with the Taproot caveat as its own field', () => {
     const line = actionCapabilityLineFor(KnownOrdinalWalletType.unisat, WalletCapability.InscriptionParentChild);
     expect(line!.icon).toBe('✓');
     expect(line!.name).toBe('Collections (parent/child)');
-    expect(line!.wording).toContain('Verified end-to-end on our test network');
-    expect(line!.wording).toContain('Taproot');
+    expect(line!.wording).toBe('Verified end-to-end on our test network');
+    expect(line!.caveat).toContain('Taproot');
   });
 });
 
