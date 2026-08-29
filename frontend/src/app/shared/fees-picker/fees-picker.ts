@@ -2,7 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Cat21MintOrchestrator, RecommendedFees } from 'ordpool-sdk';
+import { BITCOIN_MIN_RELAY_FEE_SAT_PER_VBYTE, Cat21MintOrchestrator, RecommendedFees } from 'ordpool-sdk';
 
 type Tier = 'fastest' | 'halfHour' | 'hour' | 'economy';
 
@@ -41,15 +41,14 @@ export class FeesPicker {
   private orchestrator = inject(Cat21MintOrchestrator);
 
   /**
-   * Minimum sat/vB the manual input will accept. Defaults to 0.1, which
-   * matches Bitcoin Core's default `-minrelaytxfee`. Core lowered
-   * `DEFAULT_MIN_RELAY_TX_FEE` from 1000 to 100 sat/kvB (1 -> 0.1 sat/vB)
-   * in commit `6da5de58cabc`, first shipped in v29.1 (2025-09-03) and
-   * carried by all v30.x; our node runs v30.2. Set higher via
-   * [minFeeRate]="N" on the caller if the page wants a harder floor;
-   * anything below 0.1 won't relay on a default-config node.
+   * Minimum sat/vB the manual input will accept. Defaults to the SDK's
+   * sourced `BITCOIN_MIN_RELAY_FEE_SAT_PER_VBYTE` (Bitcoin Core's
+   * `-minrelaytxfee` floor; the constant's own JSDoc carries the version
+   * sourcing, so there is no drift-prone number or attribution here). Set
+   * higher via [minFeeRate]="N" on the caller if a page wants a harder
+   * floor; anything below it won't relay on a default-config node.
    */
-  readonly minFeeRate = input<number>(0.1);
+  readonly minFeeRate = input<number>(BITCOIN_MIN_RELAY_FEE_SAT_PER_VBYTE);
 
   /**
    * Current fee rate from the parent's orchestrator. The picker

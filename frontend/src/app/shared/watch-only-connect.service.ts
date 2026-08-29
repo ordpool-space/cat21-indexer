@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { WalletInfo, WalletService, WatchOnlyScriptType, cat21Config, makeWatchOnlyProbe } from 'ordpool-sdk';
+import { WalletInfo, WalletService, WatchOnlyDeriveError, WatchOnlyScriptType, cat21Config, makeWatchOnlyProbe } from 'ordpool-sdk';
 
 import { esploraApiBase } from './esplora-base';
 
@@ -39,10 +39,14 @@ export class WatchOnlyConnectService {
     cat21OrdApiUrl: this.cfg.cat21OrdApiUrl,          // cat21-ord (cats)
   });
 
-  /** True when the SDK rejected a plain xpub/tpub for missing script type. */
+  /**
+   * True when the SDK rejected a plain xpub/tpub for missing script type.
+   * Keys on the SDK's stable typed `WatchOnlyDeriveError.code`, not the
+   * human-readable message (a reworded message would silently break the
+   * account-type prompt otherwise).
+   */
   static isScriptTypeAmbiguous(err: unknown): boolean {
-    const msg = err instanceof Error ? err.message : String(err);
-    return /script-type-ambiguous/.test(msg);
+    return err instanceof WatchOnlyDeriveError && err.code === 'script-type-ambiguous';
   }
 
   /**

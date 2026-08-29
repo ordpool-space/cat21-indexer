@@ -120,7 +120,7 @@
 
     <section class="transfer-section" data-testid="transfer-fee-section">
       <h2 class="transfer-section-heading">3. Pick a fee rate</h2>
-      <app-fees-picker [minFeeRate]="0.1" [feeRate]="feeRate()" (feeRateChange)="onFeeRateChange($event)" />
+      <app-fees-picker [feeRate]="feeRate()" (feeRateChange)="onFeeRateChange($event)" />
     </section>
 
     <section class="transfer-section" data-testid="transfer-funding-picker-section">

@@ -1,7 +1,7 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
-import { WalletService, cat21Config } from 'ordpool-sdk';
+import { WalletService, WatchOnlyDeriveError, cat21Config } from 'ordpool-sdk';
 
 import { WatchOnlyConnectService } from './watch-only-connect.service';
 
@@ -36,11 +36,20 @@ describe('WatchOnlyConnectService', () => {
   });
 
   describe('isScriptTypeAmbiguous', () => {
-    it('true only for the SDK script-type-ambiguous error', () => {
+    it('true only for a WatchOnlyDeriveError carrying code "script-type-ambiguous"', () => {
       expect(WatchOnlyConnectService.isScriptTypeAmbiguous(
-        new Error('Watch-only: this key prefix (xpub/tpub) is script-type-ambiguous; pass scriptType'),
+        new WatchOnlyDeriveError('script-type-ambiguous', 'plain xpub/tpub; pass scriptType'),
       )).toBe(true);
-      expect(WatchOnlyConnectService.isScriptTypeAmbiguous(new Error('some other error'))).toBe(false);
+      // A different WatchOnlyDeriveError code is not the ambiguous case.
+      expect(WatchOnlyConnectService.isScriptTypeAmbiguous(
+        new WatchOnlyDeriveError('invalid-key', 'bad key'),
+      )).toBe(false);
+      // A plain Error whose MESSAGE contains the phrase is NOT matched — the
+      // whole point of keying on the typed `code` is dropping the substring
+      // match, so a reworded SDK message can't break the prompt.
+      expect(WatchOnlyConnectService.isScriptTypeAmbiguous(
+        new Error('this key prefix is script-type-ambiguous; pass scriptType'),
+      )).toBe(false);
       expect(WatchOnlyConnectService.isScriptTypeAmbiguous('not an error object')).toBe(false);
     });
   });
