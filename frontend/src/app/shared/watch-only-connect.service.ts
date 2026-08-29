@@ -2,6 +2,8 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { WalletInfo, WalletService, WatchOnlyScriptType, cat21Config, makeWatchOnlyProbe } from 'ordpool-sdk';
 
+import { esploraApiBase } from './esplora-base';
+
 /**
  * Watch-only (xpub) connect for cat21.space.
  *
@@ -32,7 +34,7 @@ export class WatchOnlyConnectService {
    * and cat21-ord for cats.
    */
   private readonly probe = makeWatchOnlyProbe({
-    esploraApiUrl: this.cfg.mempoolApiUrl + '/api',  // electrs -> /address/:a/utxo
+    esploraApiUrl: esploraApiBase(this.cfg),  // electrs -> /address/:a/utxo
     ordApiUrl: this.cfg.ordApiUrl,                   // full ord (inscriptions + runes + rare sats)
     cat21OrdApiUrl: this.cfg.cat21OrdApiUrl,          // cat21-ord (cats)
   });

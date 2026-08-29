@@ -5,6 +5,7 @@ import { hex } from '@scure/base';
 import { BuyOfferTargetCat, Cat21Holding, cat21Config } from 'ordpool-sdk';
 
 import { ApiService } from './cat21-api/api/api.service';
+import { esploraApiBase } from './esplora-base';
 import { OrdApiService, OrdInscriptionResponse, OrdOutputResponse } from './ord-api.service';
 
 /**
@@ -72,7 +73,7 @@ export class CatUtxoLookupService {
   // — the single URL source the app already provides (and the regtest harness
   // patches to the local electrs shim). Using it here keeps every esplora call
   // on the same host the SDK uses, instead of a parallel `environment` value.
-  private readonly esploraApi = inject(cat21Config).mempoolApiUrl + '/api';
+  private readonly esploraApi = esploraApiBase(inject(cat21Config));
 
   /**
    * For each cat at the supplied ordinals address (typically the
@@ -122,6 +123,11 @@ export class CatUtxoLookupService {
                 }),
               );
             }),
+            // One cat's lookup failing (an ord or electrs hiccup on a single
+            // inscription/tx) drops THAT cat to null, so the picker still shows
+            // the cats whose lookups succeeded instead of emptying the whole
+            // list on a partial failure.
+            catchError(() => of(null as MyCatHolding | null)),
           ),
         );
         return forkJoin(lookups).pipe(
@@ -145,6 +151,13 @@ export class CatUtxoLookupService {
    * in a separate trust domain from ord-proxy (electrs = our own
    * Bitcoin Core indexer; ord-proxy = scrape of ordinals.com), so a
    * compromise of one does not silently affect the other.
+   *
+   * `null` here means "resolved but rejected" (cat not found, at
+   * OP_RETURN, or an oracle mismatch). A transport/network error on any
+   * of the round-trips PROPAGATES instead (the observable errors), so
+   * the make-offer page can distinguish "no such offerable cat" from
+   * "couldn't reach the indexers, retry" rather than mislabelling an
+   * outage as a missing cat.
    *
    * Four round-trips: indexer for cat number → mint txHash;
    * ord for inscription → current satpoint; ord for output →

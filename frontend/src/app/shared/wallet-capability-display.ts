@@ -76,10 +76,16 @@ export function signingModeWording(signingMode: 'injected' | 'watch-only'): stri
   // The external-wallet example list is sourced from the SDK matrix
   // (`KnownOrdinalWallets[xpub].subLabel`) — single source of truth,
   // agreed cross-session so the three sites can't drift. Only the
-  // sentence frame is local UI copy.
-  return signingMode === 'injected'
-    ? 'Signs in your browser'
-    : `You sign in your own wallet (${KnownOrdinalWallets[KnownOrdinalWalletType.xpub].subLabel})`;
+  // sentence frame is local UI copy. `subLabel` is optional in the SDK
+  // type, so drop the parenthetical entirely when it is absent rather
+  // than printing "(undefined)".
+  if (signingMode === 'injected') {
+    return 'Signs in your browser';
+  }
+  const examples = KnownOrdinalWallets[KnownOrdinalWalletType.xpub].subLabel;
+  return examples
+    ? `You sign in your own wallet (${examples})`
+    : 'You sign in your own wallet';
 }
 
 /**

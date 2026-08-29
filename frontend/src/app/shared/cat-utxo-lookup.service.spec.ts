@@ -225,6 +225,41 @@ describe('CatUtxoLookupService', () => {
         expect.objectContaining({ catNumber: 1, txid: cleanTxid }),
       ]);
     });
+
+    it('drops a cat whose electrs value lookup errors, keeping the rest (partial outage does not empty the picker)', async () => {
+      const okTxid = 'a'.repeat(64);
+      const failTxid = 'b'.repeat(64);
+      const okInsc = `${okTxid}i0`;
+      const failInsc = `${failTxid}i0`;
+
+      ordApi.getAddress.mockReturnValue(of<OrdAddressResponse>({
+        outputs: [],
+        cats: [okInsc, failInsc],
+        cat_numbers: [1, 2],
+        sat_balance: 1092,
+      }));
+      ordApi.getInscription.mockImplementation((id: unknown) =>
+        of<OrdInscriptionResponse>({
+          id: id === okInsc ? okInsc : failInsc,
+          number: id === okInsc ? 1 : 2,
+          address: 'bc1pSeller',
+          satpoint: `${id === okInsc ? okTxid : failTxid}:0:0`,
+          sat: 1,
+        }),
+      );
+      // electrs returns the value for the OK tx but 502s for the other one.
+      http.get.mockImplementation((url: unknown) =>
+        String(url).includes(okTxid)
+          ? of({ txid: okTxid, vout: [{ scriptpubkey: '51', value: 546 }] })
+          : throwError(() => new Error('502')),
+      );
+
+      const result = await firstValueFrom(service.getMyHoldings('bc1pSeller'));
+      // The failed cat is dropped; the successful one still shows (list not emptied).
+      expect(result).toEqual([
+        expect.objectContaining({ catNumber: 1, txid: okTxid }),
+      ]);
+    });
   });
 
   describe('getTargetByNumber', () => {

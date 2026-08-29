@@ -54,12 +54,25 @@
     <section class="transfer-section" data-testid="transfer-cat-section">
       <h2 class="transfer-section-heading">1. Pick the cat you want to send</h2>
       @if (urlCatOutpoint(); as fromUrl) {
-        <!-- Deep-link supplied the cat outpoint; no picker needed. Show
-             it as read-only info so the seller sees what's queued. -->
-        <p class="text-muted small" data-testid="transfer-cat-from-url">
-          Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>
-          pre-selected from the deep-link.
-        </p>
+        <!-- Deep-link supplied the cat outpoint; no picker needed. The
+             value is resolved from electrs, so reflect that resolution:
+             a spent / invalid outpoint resolves to null and must SAY so
+             rather than leave the Transfer button silently disabled. -->
+        @if (urlCatUtxoResource.value()) {
+          <p class="text-muted small" data-testid="transfer-cat-from-url">
+            Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>
+            pre-selected from the deep-link.
+          </p>
+        } @else if (urlCatUtxoResource.isLoading()) {
+          <p class="text-muted small" data-testid="transfer-cat-url-loading">
+            Resolving cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>&hellip;
+          </p>
+        } @else {
+          <p class="text-danger small" data-testid="transfer-cat-url-notfound">
+            Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code> could not
+            be resolved on-chain. The transaction may not exist, or the link is invalid.
+          </p>
+        }
       } @else if (myHoldings().length === 0) {
         <p class="text-muted small" data-testid="transfer-no-cats">
           We didn't find any cats at this wallet's ordinals address.
