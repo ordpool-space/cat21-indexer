@@ -1,0 +1,37 @@
+name: Test Frontend
+
+# The build-cat21-frontend workflow only runs on stage_prod and only compiles;
+# it never ran the Jest unit suite, so a frontend regression could land on main
+# and reach a deploy without any unit test firing in CI. This workflow gates
+# every frontend push (main + stage_prod) and PR on both the production build
+# AND the full Jest suite, so "unit tests green" is a CI fact, not a local one.
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [ main, stage_prod ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/test-frontend.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci --legacy-peer-deps
+
+    - name: Unit tests (Jest)
+      working-directory: frontend
+      run: npm test
+
+    - name: Production build
+      working-directory: frontend
+      run: npm run build
