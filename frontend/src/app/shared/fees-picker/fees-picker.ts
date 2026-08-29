@@ -41,11 +41,13 @@ export class FeesPicker {
   private orchestrator = inject(Cat21MintOrchestrator);
 
   /**
-   * Minimum sat/vB the manual input will accept. Defaults to 0.1 —
-   * which matches Bitcoin Core's default `-minrelaytxfee` since v27.0
-   * (April 2024 lowered it from 1 sat/vB to 0.1 sat/vB). Set higher
-   * via [minFeeRate]="N" on the caller if the page wants a harder
-   * floor; anything below 0.1 won't relay on a default-config node.
+   * Minimum sat/vB the manual input will accept. Defaults to 0.1, which
+   * matches Bitcoin Core's default `-minrelaytxfee`. Core lowered
+   * `DEFAULT_MIN_RELAY_TX_FEE` from 1000 to 100 sat/kvB (1 -> 0.1 sat/vB)
+   * in commit `6da5de58cabc`, first shipped in v29.1 (2025-09-03) and
+   * carried by all v30.x; our node runs v30.2. Set higher via
+   * [minFeeRate]="N" on the caller if the page wants a harder floor;
+   * anything below 0.1 won't relay on a default-config node.
    */
   readonly minFeeRate = input<number>(0.1);
 
