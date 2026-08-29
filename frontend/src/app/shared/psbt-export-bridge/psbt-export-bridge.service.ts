@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
-import { Observable, from } from 'rxjs';
+import { Observable } from 'rxjs';
 
 import { PsbtExportBridge } from './psbt-export-bridge';
 
@@ -40,18 +40,29 @@ export class PsbtExportBridgeService {
   }
 
   private openBridge(unsigned: { base64: string; hex: string }, actionLabel?: string): Observable<string> {
-    const ref = this.modalService.open(PsbtExportBridge, {
-      ariaLabelledBy: 'psbt-export-bridge-title',
-      centered: true,
-      backdrop: 'static',
-      keyboard: false,
+    return new Observable<string>((subscriber) => {
+      const ref = this.modalService.open(PsbtExportBridge, {
+        ariaLabelledBy: 'psbt-export-bridge-title',
+        centered: true,
+        backdrop: 'static',
+        keyboard: false,
+      });
+      const instance = ref.componentInstance as PsbtExportBridge;
+      instance.unsignedBase64 = unsigned.base64;
+      if (actionLabel !== undefined) instance.actionLabel = actionLabel;
+      // `ref.result` resolves with the pasted signed PSBT on submit, or
+      // rejects on dismiss (Cancel) — the orchestrator surfaces that as a
+      // cancelled action.
+      (ref.result as Promise<string>).then(
+        (signed) => { subscriber.next(signed); subscriber.complete(); },
+        (reason) => subscriber.error(reason),
+      );
+      // Teardown: if the orchestrator pipeline is torn down (unsubscribed)
+      // before the user submits or cancels, dismiss the modal. With
+      // backdrop:'static' + keyboard:false the user cannot close it
+      // themselves, so without this it strands with dead buttons.
+      // `dismiss()` is a no-op once the modal has already closed.
+      return () => ref.dismiss();
     });
-    const instance = ref.componentInstance as PsbtExportBridge;
-    instance.unsignedBase64 = unsigned.base64;
-    if (actionLabel !== undefined) instance.actionLabel = actionLabel;
-    // `ref.result` resolves with the pasted signed PSBT on submit, or
-    // rejects on dismiss. `from` turns that promise into a one-shot
-    // observable the SDK subscribes to.
-    return from(ref.result as Promise<string>);
   }
 }

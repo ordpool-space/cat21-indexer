@@ -29,6 +29,13 @@ export function supportIcon(support: CapabilitySupport): string {
       return '○';
     case CapabilitySupport.Unsupported:
       return '✕';
+    default: {
+      // Exhaustiveness guard: if the SDK widens CapabilitySupport, this
+      // fails to compile (never assignment) AND throws at runtime instead
+      // of returning undefined into the icon column.
+      const unhandled: never = support;
+      throw new Error(`Unhandled CapabilitySupport: ${String(unhandled)}`);
+    }
   }
 }
 
@@ -48,6 +55,13 @@ export function supportWording(support: CapabilitySupport): string {
       return 'Supported, not yet verified end-to-end';
     case CapabilitySupport.Unsupported:
       return 'Not available with this wallet';
+    default: {
+      // Exhaustiveness guard: a widened CapabilitySupport fails to compile
+      // here AND throws at runtime rather than returning undefined into
+      // `capabilityLine` (which would crash on the spread).
+      const unhandled: never = support;
+      throw new Error(`Unhandled CapabilitySupport: ${String(unhandled)}`);
+    }
   }
 }
 

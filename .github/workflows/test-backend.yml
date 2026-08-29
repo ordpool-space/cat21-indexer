@@ -1,0 +1,36 @@
+name: Test Backend
+
+# build-backend runs the Jest suite, but only on stage_prod, so a backend
+# regression can land on main and only be caught at deploy time. This gates
+# every backend push (main + stage_prod) and PR on the Jest suite + build, so
+# main is protected symmetrically with the frontend (test-frontend.yml).
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [ main, stage_prod ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/test-backend.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+
+    - name: Install dependencies
+      working-directory: backend
+      run: npm ci
+
+    - name: Unit tests (Jest)
+      working-directory: backend
+      run: npm test
+
+    - name: Build
+      working-directory: backend
+      run: npm run build

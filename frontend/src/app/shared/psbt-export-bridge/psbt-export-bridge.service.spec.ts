@@ -14,13 +14,15 @@ import { PsbtExportBridgeService } from './psbt-export-bridge.service';
 describe('PsbtExportBridgeService', () => {
   let service: PsbtExportBridgeService;
   let open: jest.Mock;
+  let dismiss: jest.Mock;
   let componentInstance: PsbtExportBridge;
 
   function setup(result: Promise<string>) {
     // Mirror the real component's default primary-button copy so we can
     // assert positively whether a given prompt path overrode it.
     componentInstance = { actionLabel: 'Broadcast signed transaction' } as PsbtExportBridge;
-    open = jest.fn().mockReturnValue({ componentInstance, result });
+    dismiss = jest.fn();
+    open = jest.fn().mockReturnValue({ componentInstance, result, dismiss });
     TestBed.configureTestingModule({
       providers: [
         PsbtExportBridgeService,
@@ -62,5 +64,14 @@ describe('PsbtExportBridgeService', () => {
     await expect(
       firstValueFrom(service.promptForSignedPsbt({ base64: 'X', hex: 'Y' })),
     ).rejects.toThrow('cancel');
+  });
+
+  it('dismisses the modal when the caller unsubscribes before the user acts (no zombie modal)', () => {
+    // Never-settling result: the user has NOT submitted or cancelled, so the
+    // only thing that can close the modal is the unsubscribe teardown.
+    setup(new Promise<string>(() => { /* pending forever */ }));
+    const sub = service.promptForSignedPsbt({ base64: 'X', hex: 'Y' }).subscribe();
+    sub.unsubscribe();
+    expect(dismiss).toHaveBeenCalledTimes(1);
   });
 });
