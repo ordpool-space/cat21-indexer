@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { EMPTY } from 'rxjs';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -33,6 +33,7 @@ export class AcceptOffer implements OnInit {
   private walletService = inject(WalletService);
   private lookup = inject(CatUtxoLookupService);
   private route = inject(ActivatedRoute);
+  private destroyRef = inject(DestroyRef);
 
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
@@ -219,9 +220,13 @@ export class AcceptOffer implements OnInit {
   onAcceptClick(): void {
     // Pass the export/paste bridge unconditionally: injected wallets
     // ignore it, a watch-only (xpub) wallet signs through it.
-    this.orchestrator.acceptOffer(this.psbtBridge.promptForSignedPsbt).subscribe({
-      error: () => undefined,
-    });
+    // takeUntilDestroyed aborts an in-flight accept on component destroy, which
+    // dismisses the bridge's export/paste modal instead of stranding it open.
+    this.orchestrator.acceptOffer(this.psbtBridge.promptForSignedPsbt)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        error: () => undefined,
+      });
   }
 
   onResetClick(): void {

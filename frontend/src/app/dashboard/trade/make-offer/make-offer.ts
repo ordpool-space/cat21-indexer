@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
   BuyOfferTargetCat,
@@ -45,6 +45,7 @@ export class MakeOffer {
   private lookup = inject(CatUtxoLookupService);
   private ordApi = inject(OrdApiService);
   private bidsService = inject(Cat21BidsService);
+  private destroyRef = inject(DestroyRef);
 
   // ---------- Deep-link prefill (via router withComponentInputBinding) ----------
   //
@@ -378,9 +379,11 @@ export class MakeOffer {
     // bridge's primary button "Build the offer": create-offer returns a
     // partial-signed artifact, it does NOT broadcast (unlike mint /
     // transfer / accept, which keep the default "Broadcast" copy).
-    this.orchestrator.createOffer(this.psbtBridge.promptForSignedPsbtWithLabel('Build the offer')).subscribe({
-      error: () => undefined,
-    });
+    this.orchestrator.createOffer(this.psbtBridge.promptForSignedPsbtWithLabel('Build the offer'))
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        error: () => undefined,
+      });
   }
 
   /** "Copied!" flash state per Copy button (two-second timer). */

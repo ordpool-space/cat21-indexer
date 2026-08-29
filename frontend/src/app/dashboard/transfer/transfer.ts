@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { EMPTY } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import * as btc from '@scure/btc-signer';
@@ -33,6 +33,7 @@ export class Transfer {
   private orchestrator = inject(Cat21TransferOrchestrator);
   private psbtBridge = inject(PsbtExportBridgeService);
   private lookup = inject(CatUtxoLookupService);
+  private destroyRef = inject(DestroyRef);
 
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
@@ -295,11 +296,16 @@ export class Transfer {
   onTransferClick(): void {
     // Pass the export/paste bridge unconditionally: injected wallets
     // ignore it, a watch-only (xpub) wallet signs through it.
-    this.orchestrator.transfer(this.psbtBridge.promptForSignedPsbt).subscribe({
-      // Tap + catchError inside the orchestrator already manage state +
-      // error + success signals; this is just a fire-and-forget kick.
-      error: () => undefined,
-    });
+    // `takeUntilDestroyed` aborts an in-flight transfer if the component is
+    // destroyed (navigate away mid-signing) — which unsubscribes the bridge
+    // and dismisses its export/paste modal, so it can't strand open.
+    this.orchestrator.transfer(this.psbtBridge.promptForSignedPsbt)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        // Tap + catchError inside the orchestrator already manage state +
+        // error + success signals; this is just a fire-and-forget kick.
+        error: () => undefined,
+      });
   }
 
   onResetClick(): void {

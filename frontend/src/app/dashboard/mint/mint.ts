@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
   AUTO_SCAN_MAX_VALUE_SAT,
@@ -45,6 +45,7 @@ export class Mint {
   private scanner = inject(UtxoContentScanner);
   private wallet = inject(WalletService);
   private config = inject(cat21Config);
+  private destroyRef = inject(DestroyRef);
 
   /** Where successfully minted tx ids link out (ordpool owns the tx-detail page). */
   readonly txLinkBase = 'https://ordpool.space/tx/';
@@ -220,9 +221,13 @@ export class Mint {
     this.mintAttempted.set(true);
     // Pass the export/paste bridge unconditionally: injected wallets
     // ignore it, a watch-only (xpub) wallet signs through it.
-    this.orchestrator.mint(this.psbtBridge.promptForSignedPsbt).subscribe({
-      error: () => {/* error fields are already populated by the orchestrator */},
-    });
+    // takeUntilDestroyed aborts an in-flight mint on component destroy, which
+    // dismisses the bridge's export/paste modal instead of stranding it open.
+    this.orchestrator.mint(this.psbtBridge.promptForSignedPsbt)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        error: () => {/* error fields are already populated by the orchestrator */},
+      });
   }
 
   mintAnother(): void {
