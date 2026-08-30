@@ -9,8 +9,8 @@
   [attr.data-has-cat]="!!catUtxo()"
   [attr.data-has-recipient]="!!recipientAddress()"
   [attr.data-fee]="feeRate() ?? ''"
-  [attr.data-sim-ready]="!!simulationOutcome()?.simulation"
-  [attr.data-sim-insufficient]="!!simulationOutcome()?.insufficient"
+  [attr.data-sim-ready]="!!simulation()"
+  [attr.data-sim-insufficient]="insufficient()"
   [attr.data-wallet-ord-address]="connectedWallet()?.ordinalsAddress ?? ''"
   [attr.data-wallet-ord-pubkey]="connectedWallet()?.ordinalsPublicKey ?? ''"
   [attr.data-wallet-pay-address]="connectedWallet()?.paymentAddress ?? ''"
@@ -153,7 +153,7 @@
       </details>
     </section>
 
-    @if (simulationOutcome()?.simulation; as sim) {
+    @if (simulation(); as sim) {
       <section class="transfer-section" data-testid="transfer-summary-section">
         <h2 class="transfer-section-heading">4. Confirm</h2>
         <div class="transfer-summary">
@@ -173,7 +173,7 @@
           </div>
           <div class="transfer-summary-row">
             <span class="lbl">Miner fee</span>
-            <span class="val">{{ sim.feeSats | number }} sat ({{ sim.vsize }} vB)</span>
+            <span class="val">{{ sim.feeSats | number }} sat</span>
           </div>
           <div class="transfer-summary-row">
             <span class="lbl">Change back to you</span>
@@ -181,7 +181,7 @@
           </div>
         </div>
       </section>
-    } @else if (simulationOutcome()?.insufficient) {
+    } @else if (insufficient()) {
       <p class="text-warning small mt-3" data-testid="transfer-insufficient">
         Not enough funds in your payment address to cover the fee at this rate.
       </p>

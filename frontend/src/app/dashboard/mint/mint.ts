@@ -1,11 +1,13 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { firstValueFrom } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import {
   AUTO_SCAN_MAX_VALUE_SAT,
   Cat21MintOrchestrator,
-  cat21Config,
+  Cat21Service,
+  MintSnapshot,
   SMALL_UTXO_WARNING_THRESHOLD_SAT,
   SimulateTransactionResult,
   TxnOutput,
@@ -13,13 +15,16 @@ import {
   UtxoContentScanner,
   UtxoScanBucket,
   UtxoScanState,
-  UtxoSimulation,
+  UtxoSimulationRow,
   WalletService,
+  bitcoinNetwork,
   bucketOf,
   calculateRecommendedFundingSats,
+  cat21Config,
   runeNamesFromContent,
 } from 'ordpool-sdk';
 
+import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
@@ -39,12 +44,31 @@ interface ViableUtxoRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Mint {
-  private orchestrator = inject(Cat21MintOrchestrator);
   private psbtBridge = inject(PsbtExportBridgeService);
   private scanner = inject(UtxoContentScanner);
-  private wallet = inject(WalletService);
+  private walletService = inject(WalletService);
   private config = inject(cat21Config);
   private destroyRef = inject(DestroyRef);
+
+  /**
+   * The framework-agnostic mint orchestrator, CONSTRUCTED (not injected — the
+   * SDK's Angular @Injectable orchestrators are gone). It owns the
+   * select -> fee -> build -> sign -> broadcast pipeline with signing wired
+   * internally; we only wire the four shared ports + read its snapshot.
+   *
+   * The `inject(..., { optional: true }) ??` prefix is the unit-test seam: in
+   * production nothing provides the SDK class, so it resolves to `null` and the
+   * real orchestrator is `new`-constructed here. A spec provides a drivable
+   * stub via `{ provide: Cat21MintOrchestrator, useValue }`, which short-
+   * circuits the `new` (and its `inject`ed deps) entirely.
+   */
+  private orch = inject(Cat21MintOrchestrator, { optional: true })
+    ?? new Cat21MintOrchestrator(
+      cat21OrchestratorPorts(inject(Cat21Service), this.config.ordApiUrl, this.config.cat21OrdApiUrl, inject(bitcoinNetwork)),
+    );
+
+  /** Reactive mirror of the orchestrator's snapshot; bound once in the constructor. */
+  private snap = signal<MintSnapshot>(this.orch.getSnapshot());
 
   /** Where successfully minted tx ids link out (ordpool owns the tx-detail page). */
   readonly txLinkBase = 'https://ordpool.space/tx/';
@@ -66,16 +90,20 @@ export class Mint {
   /** Auto-scan threshold passed through to the template for the "Scan anyway" label. */
   readonly autoScanThreshold = AUTO_SCAN_MAX_VALUE_SAT;
 
-  // ---------- Live state from the orchestrator ----------
+  // ---------- Live state ----------
 
-  readonly connectedWallet = this.orchestrator.connectedWallet;
-  readonly state = this.orchestrator.state;
-  readonly errorMessage = this.orchestrator.errorMessage;
-  readonly successTxId = this.orchestrator.successTxId;
-  readonly feeRate = this.orchestrator.feeRate;
-  readonly selectedUtxo = this.orchestrator.selectedUtxo;
+  /**
+   * Connected wallet from WalletService. The orchestrator no longer owns the
+   * wallet; we push it in via `setWallet` (see the constructor effect).
+   */
+  readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
+  readonly state = computed(() => this.snap().state);
+  readonly errorMessage = computed(() => this.snap().errorMessage);
+  readonly successTxId = computed(() => this.snap().successTxId);
+  readonly feeRate = computed(() => this.snap().feeRate);
+  readonly selectedUtxo = computed(() => this.snap().selectedUtxo);
 
-  private readonly simulations = toSignal(this.orchestrator.simulations$, { initialValue: [] as UtxoSimulation[] });
+  private readonly simulations = computed<UtxoSimulationRow[]>(() => this.snap().simulations);
   private readonly scanStates = toSignal(this.scanner.states$, { initialValue: new Map<string, UtxoScanState>() as ReadonlyMap<string, UtxoScanState> });
 
   /**
@@ -86,7 +114,7 @@ export class Mint {
    * auto-adopt an unscanned or scan-failed coin). One implementation in the
    * SDK so ordpool + cat21.space + the wallet can't drift.
    */
-  private readonly fundingRecommendation = toSignal(this.orchestrator.fundingRecommendation$, { initialValue: null });
+  private readonly fundingRecommendation = computed(() => this.snap().fundingRecommendation);
 
   /** True when no content-clean coin covers the mint (only asset / scan-failed
    *  coins do), so the picker must surface for a deliberate override. */
@@ -190,6 +218,27 @@ export class Mint {
   // ---------- Lifecycle ----------
 
   constructor() {
+    // Bind the orchestrator snapshot to a signal (fires immediately + on every
+    // change). Unsubscribe on destroy.
+    this.destroyRef.onDestroy(this.orch.subscribe((s) => this.snap.set(s)));
+
+    // Push wallet changes into the orchestrator; it (re)fetches the wallet's
+    // UTXOs and recomputes. `setWallet` is async + dedupes internally, so a
+    // BehaviorSubject re-emission of the same wallet is a no-op there.
+    effect(() => {
+      const w = this.connectedWallet();
+      void this.orch.setWallet(
+        w
+          ? {
+              type: w.type,
+              ordinalsAddress: w.ordinalsAddress,
+              paymentAddress: w.paymentAddress,
+              paymentPublicKey: w.paymentPublicKey,
+            }
+          : null,
+      );
+    });
+
     // Wipe the scanner cache when one wallet swaps out for another —
     // the previous wallet's UTXO outpoints aren't relevant to the new
     // one and would otherwise accumulate forever on a long-lived
@@ -234,36 +283,40 @@ export class Mint {
       const match = recommended
         ? rows.find((r) => r.utxo.txid === recommended.txid && r.utxo.vout === recommended.vout)
         : null;
-      this.orchestrator.setSelectedUtxo(match ? match.utxo : null);
+      this.orch.setSelectedUtxo(match ? match.utxo : null);
     });
   }
 
   // ---------- Commands ----------
 
   selectUtxo(row: ViableUtxoRow): void {
-    this.orchestrator.setSelectedUtxo(row.utxo);
+    this.orch.setSelectedUtxo(row.utxo);
   }
 
   scanRow(row: ViableUtxoRow): void {
     this.scanner.scan(`${row.utxo.txid}:${row.utxo.vout}`).subscribe();
   }
 
-  mint(): void {
+  async mint(): Promise<void> {
     this.mintAttempted.set(true);
-    // Pass the export/paste bridge unconditionally: injected wallets
-    // ignore it, a watch-only (xpub) wallet signs through it.
-    // takeUntilDestroyed aborts an in-flight mint on component destroy, which
-    // dismisses the bridge's export/paste modal instead of stranding it open.
-    this.orchestrator.mint(this.psbtBridge.promptForSignedPsbt)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        error: () => {/* error fields are already populated by the orchestrator */},
-      });
+    try {
+      // Pass the export/paste bridge unconditionally: injected wallets ignore
+      // it, a watch-only (xpub) wallet signs through it. The bridge is
+      // Observable-based; the orchestrator wants a Promise, so bridge it. The
+      // orchestrator signs+broadcasts internally and updates its snapshot
+      // (state/errorMessage/successTxId), so there is nothing to bind here.
+      await this.orch.mint((unsigned) => firstValueFrom(this.psbtBridge.promptForSignedPsbt(unsigned)));
+    } catch {
+      // On a real failure (sign / broadcast) the orchestrator has already
+      // populated its snapshot error fields, which mintError() surfaces. The
+      // orchestrator's pre-patch early guards (no wallet / no fee / no UTXO)
+      // can't reach here: canMint() gates the button on exactly those.
+    }
   }
 
   mintAnother(): void {
     this.mintAttempted.set(false);
-    this.orchestrator.reset();
+    this.orch.reset();
   }
 
   // ---------- Template helpers ----------
@@ -292,6 +345,6 @@ export class Mint {
 
   /** FeesPicker's feeRateChange forwarded into this page's orchestrator. */
   onFeeRateChange(rate: number): void {
-    this.orchestrator.setFeeRate(rate);
+    this.orch.setFeeRate(rate);
   }
 }

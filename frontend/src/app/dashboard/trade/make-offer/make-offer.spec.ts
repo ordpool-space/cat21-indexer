@@ -1,17 +1,14 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
-import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { BehaviorSubject, Observable, of, Subject, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 
 import {
   AnnotatedFundingUtxo,
   BuyOfferTargetCat,
   Cat21CreateOfferOrchestrator,
-  CreateOfferSimulationOutcome,
   FundingRecommendation,
-  RecommendedFees,
   TxnOutput,
   UtxoContentScanner,
   UtxoScanState,
@@ -80,47 +77,79 @@ function target(over: Partial<BuyOfferTargetCat> = {}): BuyOfferTargetCat {
   };
 }
 
+interface CreateOfferStubSnap {
+  state: 'idle' | 'loading-utxos' | 'ready' | 'creating' | 'success' | 'error';
+  targetCat: BuyOfferTargetCat | null;
+  priceSats: number | null;
+  sellerPaymentAddress: string | null;
+  buyerReceiveAddress: string | null;
+  feeRate: number | null;
+  selectedFundingUtxo: TxnOutput | null;
+  fundingRecommendation: FundingRecommendation<TxnOutput & AnnotatedFundingUtxo>;
+  simulation: unknown;
+  bid: { base64: string; hex: string } | null;
+  errorMessage: string | null;
+}
+
+/**
+ * Snapshot-driven stand-in for the framework-agnostic
+ * Cat21CreateOfferOrchestrator. The migrated component CONSTRUCTS its
+ * orchestrator (`new`); the spec substitutes this stub via
+ * `{ provide: Cat21CreateOfferOrchestrator, useValue }` and the component's
+ * `inject(..., { optional: true }) ??` seam picks it up. Exposes the real
+ * `getSnapshot()`/`subscribe()` surface plus signal/subject-shaped SHIMS
+ * (`targetCat.set`, `priceSats.set`, `offerArtifact.set`,
+ * `buyerFundingRecommendationSubject.next`, …) that funnel into `_patch`, so
+ * the test bodies drive the snapshot the same way they drove the old injected
+ * stub. Wallet is NOT here (the component reads it from WalletService), so
+ * tests push it via `walletService.connectedWalletSubject.next(...)`.
+ */
 class OrchestratorStub {
-  readonly connectedWallet: WritableSignal<WalletInfo | null> = signal(null);
-  readonly state: WritableSignal<'idle' | 'loading-utxos' | 'ready' | 'signing' | 'success' | 'error'> = signal('idle');
-  readonly errorMessage: WritableSignal<string | null> = signal(null);
-  readonly offerArtifact: WritableSignal<{ base64: string; hex: string } | null> = signal(null);
-  readonly feeRate: WritableSignal<number | null> = signal(null);
-  readonly targetCat: WritableSignal<BuyOfferTargetCat | null> = signal(null);
-  readonly sellerPaymentAddress: WritableSignal<string | null> = signal(null);
-  readonly priceSats: WritableSignal<number | null> = signal(null);
-  readonly buyerReceiveAddress: WritableSignal<string | null> = signal(null);
-  readonly selectedFundingUtxo: WritableSignal<TxnOutput | null> = signal(null);
+  private _snap: CreateOfferStubSnap = {
+    state: 'idle',
+    targetCat: null,
+    priceSats: null,
+    sellerPaymentAddress: null,
+    buyerReceiveAddress: null,
+    feeRate: null,
+    selectedFundingUtxo: null,
+    // Default 'auto' so the expert-required picker path stays off unless a test drives it.
+    fundingRecommendation: { status: 'auto', recommended: null, candidates: [] },
+    simulation: null,
+    bid: null,
+    errorMessage: null,
+  };
+  private _listeners: Array<(s: CreateOfferStubSnap) => void> = [];
 
-  readonly simulationSubject = new BehaviorSubject<CreateOfferSimulationOutcome | null>(null);
-  readonly simulation$ = this.simulationSubject.asObservable();
+  getSnapshot(): CreateOfferStubSnap { return this._snap; }
+  subscribe(l: (s: CreateOfferStubSnap) => void): () => void {
+    this._listeners.push(l);
+    l(this._snap);
+    return () => { this._listeners = this._listeners.filter((x) => x !== l); };
+  }
+  private _patch(p: Partial<CreateOfferStubSnap>): void {
+    this._snap = { ...this._snap, ...p };
+    this._listeners.slice().forEach((l) => l(this._snap));
+  }
 
-  readonly recommendedFeesSubject = new Subject<RecommendedFees>();
-  readonly recommendedFees$ = this.recommendedFeesSubject.asObservable();
-
-  readonly buyerFundingUtxosSubject = new BehaviorSubject<TxnOutput[]>([]);
-  readonly buyerFundingUtxos$ = this.buyerFundingUtxosSubject.asObservable();
-
-  // Safe-auto funding recommendation (SDK 198d970). Default 'auto' so the
-  // expert-required picker path stays off unless a test drives it.
-  readonly buyerFundingRecommendationSubject =
-    new BehaviorSubject<FundingRecommendation<TxnOutput & AnnotatedFundingUtxo>>({
-      status: 'auto',
-      recommended: null,
-      candidates: [],
-    });
-  readonly buyerFundingRecommendation$ = this.buyerFundingRecommendationSubject.asObservable();
-
-  readonly createOfferReturn$ = new Subject<{ base64: string; hex: string }>();
-
-  setTargetCat = jest.fn((c: BuyOfferTargetCat | null) => this.targetCat.set(c));
-  setSellerPaymentAddress = jest.fn((addr: string | null) => this.sellerPaymentAddress.set(addr));
-  setPriceSats = jest.fn((p: number) => this.priceSats.set(p));
-  setBuyerReceiveAddress = jest.fn((a: string | null) => this.buyerReceiveAddress.set(a));
-  setFeeRate = jest.fn((r: number) => this.feeRate.set(r));
-  setSelectedFundingUtxo = jest.fn((u: TxnOutput | null) => this.selectedFundingUtxo.set(u));
-  createOffer = jest.fn((): Observable<{ base64: string; hex: string }> => this.createOfferReturn$.asObservable());
+  // Command surface the component calls (spies that also drive the snapshot).
+  setWallet = jest.fn(async (_w: unknown) => {});
+  setTargetCat = jest.fn((c: BuyOfferTargetCat | null) => this._patch({ targetCat: c }));
+  setSellerPaymentAddress = jest.fn((addr: string | null) => this._patch({ sellerPaymentAddress: addr }));
+  setPriceSats = jest.fn((p: number) => this._patch({ priceSats: p }));
+  setBuyerReceiveAddress = jest.fn((a: string | null) => this._patch({ buyerReceiveAddress: a }));
+  setFeeRate = jest.fn((r: number) => this._patch({ feeRate: r }));
+  setSelectedFundingUtxo = jest.fn((u: TxnOutput | null) => this._patch({ selectedFundingUtxo: u }));
+  createOffer = jest.fn(async (_prompt?: unknown) => ({ base64: '', hex: '' }));
   reset = jest.fn();
+
+  // Signal/subject-shaped SHIMS the test bodies drive → `_patch`.
+  readonly targetCat = { set: (v: BuyOfferTargetCat | null) => this._patch({ targetCat: v }) };
+  readonly priceSats = { set: (v: number | null) => this._patch({ priceSats: v }) };
+  readonly offerArtifact = { set: (v: { base64: string; hex: string } | null) => this._patch({ bid: v }) };
+  readonly buyerFundingRecommendationSubject = {
+    next: (v: FundingRecommendation<TxnOutput & AnnotatedFundingUtxo>) => this._patch({ fundingRecommendation: v }),
+  };
 }
 
 class ScannerStub {
@@ -226,10 +255,10 @@ describe('MakeOffer regression — sellerPaymentAddress never derived from on-ch
     // orchestrator so the bug fix doesn't cut off the intended flow.
     fixture.componentRef.setInput('catNumber', '42');
     fixture.componentRef.setInput('payTo', WALLET_PAYMENT_ADDRESS);
-    // The prefill effect reads `this.connectedWallet()`, which points at
-    // `orchestrator.connectedWallet` (NOT WalletService). Set on the
-    // orchestrator's signal so the effect's dependency actually fires.
-    orchestrator.connectedWallet.set(wallet());
+    // The prefill effect reads `this.connectedWallet()`, sourced from
+    // WalletService.connectedWallet$. Push the wallet there so the effect's
+    // dependency fires.
+    walletService.connectedWalletSubject.next(wallet());
     fixture.detectChanges();
     // Effects run async — await a microtask so the prefill effect fires.
     await Promise.resolve();
@@ -466,11 +495,9 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
 
     const fixture = TestBed.createComponent(MakeOffer);
     const component = fixture.componentInstance;
-    // Populate BOTH the walletService subject AND the orchestrator's
-    // connectedWallet signal — MakeOffer's `this.connectedWallet` reads
-    // the orchestrator's signal, not the walletService's subject.
+    // MakeOffer's `this.connectedWallet` is sourced from
+    // WalletService.connectedWallet$; push the wallet there.
     walletService.connectedWalletSubject.next(wallet());
-    orchestrator.connectedWallet.set(wallet());
     fixture.detectChanges();
 
     if (opts.withOffer !== false) {

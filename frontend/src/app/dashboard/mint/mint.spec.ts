@@ -1,13 +1,13 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
-import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import {
   BehaviorSubject,
   Observable,
-  of,
   Subject,
+  firstValueFrom,
+  of,
   throwError,
 } from 'rxjs';
 
@@ -15,13 +15,11 @@ import {
   AUTO_SCAN_MAX_VALUE_SAT,
   CAT21_POSTAGE_SATS,
   Cat21MintOrchestrator,
-  RecommendedFees,
   SimulateTransactionResult,
   TxnOutput,
   UtxoContentScanner,
   UtxoScanState,
-  UtxoSimulation,
-  WalletInfo,
+  UtxoSimulationRow,
   WalletService,
   cat21Config,
 } from 'ordpool-sdk';
@@ -62,47 +60,79 @@ function simulation(over: Partial<SimulateTransactionResult> = {}): SimulateTran
 
 const wallet = makeWallet;
 
+interface MintStubSnap {
+  state: 'idle' | 'loading-utxos' | 'ready' | 'minting' | 'success' | 'error';
+  feeRate: number | null;
+  selectedUtxo: TxnOutput | null;
+  fundingRecommendation: { status: string; recommended: TxnOutput | null; candidates: readonly unknown[] };
+  simulations: UtxoSimulationRow[];
+  errorMessage: string | null;
+  successTxId: string | null;
+}
+
 /**
- * Lightweight stand-in for Cat21MintOrchestrator. Every reactive field
- * the Mint component reads is mutable from a test (signals.set,
- * subject.next) so we can drive the full state machine without ever
- * touching the real orchestrator's RxJS chain.
+ * Snapshot-driven stand-in for the framework-agnostic Cat21MintOrchestrator.
+ * The migrated component CONSTRUCTS its orchestrator (`new`); the spec
+ * substitutes this stub via `{ provide: Cat21MintOrchestrator, useValue }` and
+ * the component's `inject(..., { optional: true }) ??` seam picks it up. It
+ * exposes the real `getSnapshot()`/`subscribe()` surface the component binds
+ * to, plus signal/subject-shaped SHIMS (`state.set`, `feeRate.set`,
+ * `simulationsSubject.next`, …) that funnel into `_patch`, so the test bodies
+ * drive the snapshot the same way they drove the old injected stub. Wallet is
+ * NOT here — the component reads it from WalletService, so tests push it via
+ * `wallets.connectedWalletSubject.next(...)`.
  */
 class OrchestratorStub {
-  readonly connectedWallet: WritableSignal<WalletInfo | null> = signal(null);
-  readonly state: WritableSignal<'idle' | 'loading-utxos' | 'ready' | 'minting' | 'success' | 'error'> = signal('idle');
-  readonly errorMessage: WritableSignal<string | null> = signal(null);
-  readonly successTxId: WritableSignal<string | null> = signal(null);
-  readonly feeRate: WritableSignal<number | null> = signal(null);
-  readonly selectedUtxo: WritableSignal<TxnOutput | null> = signal(null);
+  private _snap: MintStubSnap = {
+    state: 'idle',
+    feeRate: null,
+    selectedUtxo: null,
+    fundingRecommendation: { status: 'scanning', recommended: null, candidates: [] },
+    simulations: [],
+    errorMessage: null,
+    successTxId: null,
+  };
+  private _listeners: Array<(s: MintStubSnap) => void> = [];
 
-  readonly simulationsSubject = new BehaviorSubject<UtxoSimulation[]>([]);
-  readonly simulations$ = this.simulationsSubject.asObservable();
+  getSnapshot(): MintStubSnap { return this._snap; }
+  subscribe(l: (s: MintStubSnap) => void): () => void {
+    this._listeners.push(l);
+    l(this._snap);
+    return () => { this._listeners = this._listeners.filter((x) => x !== l); };
+  }
+  private _patch(p: Partial<MintStubSnap>): void {
+    this._snap = { ...this._snap, ...p };
+    this._listeners.slice().forEach((l) => l(this._snap));
+  }
 
-  // SDK safe-auto funding recommendation (loosely typed: the component only
-  // reads `.status` + `.recommended`). Drives the mint's auto-pick, replacing
-  // the old raw value-based pre-pick.
-  readonly fundingRecommendationSubject =
-    new BehaviorSubject<{ status: string; recommended: TxnOutput | null; candidates: readonly unknown[] } | null>(null);
-  readonly fundingRecommendation$ = this.fundingRecommendationSubject.asObservable();
-
-  readonly recommendedFeesSubject = new Subject<RecommendedFees>();
-  readonly recommendedFees$ = this.recommendedFeesSubject.asObservable();
-
+  /** Return control for the component's `await orch.mint(prompt)`. */
   readonly mintReturn$ = new Subject<{ txId: string }>();
-  readonly mintCalls: number = 0;
   mintImpl: () => Observable<{ txId: string }> = () => this.mintReturn$.asObservable();
 
-  setFeeRate = jest.fn((r: number) => this.feeRate.set(r));
-  setSelectedUtxo = jest.fn((u: TxnOutput | null) => this.selectedUtxo.set(u));
-  mint = jest.fn(() => this.mintImpl());
-  reset = jest.fn(() => {
-    this.feeRate.set(null);
-    this.selectedUtxo.set(null);
-    this.errorMessage.set(null);
-    this.successTxId.set(null);
-    this.state.set(this.connectedWallet() ? 'ready' : 'idle');
+  // Real orchestrator command surface the component calls.
+  setWallet = jest.fn(async (_w: unknown) => {});
+  setFeeRate = jest.fn((r: number) => this._patch({ feeRate: r }));
+  // Idempotent: the component's auto-pick effect re-invokes this on every
+  // snapshot change; patching only on a real change keeps the effect from
+  // looping on a null → null (or same-coin) re-selection.
+  setSelectedUtxo = jest.fn((u: TxnOutput | null) => {
+    if (this._snap.selectedUtxo !== u) this._patch({ selectedUtxo: u });
   });
+  mint = jest.fn((_prompt?: unknown) => firstValueFrom(this.mintImpl()));
+  reset = jest.fn(() => this._patch({
+    feeRate: null, selectedUtxo: null, errorMessage: null, successTxId: null, state: 'ready',
+  }));
+
+  // Signal/subject-shaped SHIMS the test bodies drive → `_patch`.
+  readonly feeRate = { set: (v: number | null) => this._patch({ feeRate: v }) };
+  readonly state = { set: (v: MintStubSnap['state']) => this._patch({ state: v }) };
+  readonly successTxId = { set: (v: string | null) => this._patch({ successTxId: v }) };
+  readonly errorMessage = { set: (v: string | null) => this._patch({ errorMessage: v }) };
+  readonly simulationsSubject = { next: (v: UtxoSimulationRow[]) => this._patch({ simulations: v }) };
+  readonly fundingRecommendationSubject = {
+    next: (v: MintStubSnap['fundingRecommendation']) => this._patch({ fundingRecommendation: v }),
+  };
+  selectedUtxo(): TxnOutput | null { return this._snap.selectedUtxo; }
 }
 
 /**
@@ -252,7 +282,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('B. wallet connected, loading UTXOs', () => {
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('loading-utxos');
       fixture.detectChanges();
     });
@@ -271,7 +301,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('C. error attribution (utxo-load vs mint)', () => {
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('error');
       orch.errorMessage.set('boom');
       fixture.detectChanges();
@@ -307,7 +337,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('D. recommendedFundingSats — component contract (value from the SDK)', () => {
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       fixture.detectChanges();
     });
@@ -349,7 +379,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('E. auto-pick ADOPTS the SDK recommendation (no raw value-based pre-pick)', () => {
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
       fixture.detectChanges();
@@ -438,7 +468,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('F. scanner integration', () => {
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
       fixture.detectChanges();
@@ -468,7 +498,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('G. bucket label on selectedRow', () => {
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
       fixture.detectChanges();
@@ -511,7 +541,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('H. canMint gating', () => {
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
     });
 
@@ -563,7 +593,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('I1: split-address wallet → never shows, even for tiny UTXOs', () => {
-      orch.connectedWallet.set(wallet({
+      wallets.connectedWalletSubject.next(wallet({
         ordinalsAddress: 'bc1p-ord',
         paymentAddress: '3-pay',
       }));
@@ -572,7 +602,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('I2: single-address + sub-10k + unscanned → shows', () => {
-      orch.connectedWallet.set(wallet({
+      wallets.connectedWalletSubject.next(wallet({
         ordinalsAddress: 'same-addr',
         paymentAddress: 'same-addr',
       }));
@@ -586,7 +616,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('I3: single-address + sub-10k + clean → suppressed (clean takes over)', () => {
-      orch.connectedWallet.set(wallet({
+      wallets.connectedWalletSubject.next(wallet({
         ordinalsAddress: 'same-addr',
         paymentAddress: 'same-addr',
       }));
@@ -595,7 +625,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('I4: single-address + sub-10k + assets → suppressed (assets-found takes over)', () => {
-      orch.connectedWallet.set(wallet({
+      wallets.connectedWalletSubject.next(wallet({
         ordinalsAddress: 'same-addr',
         paymentAddress: 'same-addr',
       }));
@@ -607,7 +637,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('I5: single-address + >10k UTXO → suppressed (above threshold)', () => {
-      orch.connectedWallet.set(wallet({
+      wallets.connectedWalletSubject.next(wallet({
         ordinalsAddress: 'same-addr',
         paymentAddress: 'same-addr',
       }));
@@ -622,19 +652,19 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('J. isSingleAddressWallet', () => {
     it('J1: same addresses → true', () => {
-      orch.connectedWallet.set(wallet({ ordinalsAddress: 'x', paymentAddress: 'x' }));
+      wallets.connectedWalletSubject.next(wallet({ ordinalsAddress: 'x', paymentAddress: 'x' }));
       fixture.detectChanges();
       expect(component.isSingleAddressWallet()).toBe(true);
     });
 
     it('J2: different addresses → false', () => {
-      orch.connectedWallet.set(wallet({ ordinalsAddress: 'bc1p-x', paymentAddress: '3-y' }));
+      wallets.connectedWalletSubject.next(wallet({ ordinalsAddress: 'bc1p-x', paymentAddress: '3-y' }));
       fixture.detectChanges();
       expect(component.isSingleAddressWallet()).toBe(false);
     });
 
     it('J3: no wallet → false', () => {
-      orch.connectedWallet.set(null);
+      wallets.connectedWalletSubject.next(null);
       fixture.detectChanges();
       expect(component.isSingleAddressWallet()).toBe(false);
     });
@@ -646,7 +676,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('K. mint() / mintAnother()', () => {
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
       pushRows([{ u: utxo(), scan: { kind: 'scanned-clean' } }]);
@@ -694,7 +724,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   describe('L. selectUtxo (expert override)', () => {
     it('L1: clicking a row delegates to orchestrator.setSelectedUtxo', () => {
       const u = utxo({ value: 60_000 });
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
       pushRows([{ u, scan: { kind: 'scanned-clean' } }]);
@@ -705,7 +735,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
     it('L2: user can explicitly pick an assets-bearing row (override path)', () => {
       const u = utxo({ value: 5_000 });
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
       const assetsScan: UtxoScanState = { kind: 'scanned-with-assets', content: { outpoint: `${u.txid}:0`, inscriptionIds: ['inscription-id'], runes: null, catIds: [], catSat: null, rareSat: null } };
@@ -745,7 +775,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('N. success state', () => {
     it('N1: state=success shows the success marker with the broadcast txid', () => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('success');
       orch.successTxId.set('deadbeef'.repeat(8));
       fixture.detectChanges();
@@ -768,27 +798,27 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       const w1 = wallet({ ordinalsAddress: 'addr-1', paymentAddress: 'pay-1' });
       const w2 = wallet({ ordinalsAddress: 'addr-2', paymentAddress: 'pay-2' });
       // First connect → no reset (initial null → wallet)
-      orch.connectedWallet.set(w1);
+      wallets.connectedWalletSubject.next(w1);
       fixture.detectChanges();
       scanner.reset.mockClear();
       // Swap → reset fires
-      orch.connectedWallet.set(w2);
+      wallets.connectedWalletSubject.next(w2);
       fixture.detectChanges();
       expect(scanner.reset).toHaveBeenCalledTimes(1);
     });
 
     it('MATRIX-A6(B): initial null → wallet emission does NOT reset the scanner', () => {
       scanner.reset.mockClear();
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       fixture.detectChanges();
       expect(scanner.reset).not.toHaveBeenCalled();
     });
 
     it('MATRIX-A9(B): disconnect returns to idle state', () => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       fixture.detectChanges();
-      orch.connectedWallet.set(null);
+      wallets.connectedWalletSubject.next(null);
       orch.state.set('idle');
       fixture.detectChanges();
       const el: HTMLElement = fixture.nativeElement;
@@ -799,7 +829,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
   describe('MATRIX-B. fee-rate-driven viability', () => {
     it('MATRIX-B14(B): recommendedFundingSats increases strictly across 1/5/50/100 sat/vB', () => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       // Pin the component contract (strictly rising with the fee rate), not the
       // SDK's exact vsize output — same reasoning as the D-block.
@@ -814,7 +844,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('MATRIX-B15(B): feeRate=null yields the same funding as feeRate=1 (the `?? 1` fallback)', () => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(1);
       fixture.detectChanges();
@@ -829,7 +859,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     const big = (v: number) => utxo({ txid: String(v).repeat(64).slice(0, 64), value: v });
 
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
     });
@@ -858,7 +888,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     const big = (v: number) => utxo({ txid: String(v).repeat(64).slice(0, 64), value: v });
 
     beforeEach(() => {
-      orch.connectedWallet.set(wallet());
+      wallets.connectedWalletSubject.next(wallet());
       orch.state.set('ready');
       orch.feeRate.set(5);
     });

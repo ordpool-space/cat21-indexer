@@ -278,7 +278,7 @@
       </details>
     </section>
 
-    @if (simulationOutcome()?.simulation; as sim) {
+    @if (simulation(); as sim) {
       <section class="make-offer-section make-offer-confirm" data-testid="make-offer-summary-section">
         <h2 class="make-offer-section-heading">4. Confirm</h2>
         <p class="text-warning small mb-2">
@@ -318,7 +318,7 @@
           }
           <div class="make-offer-summary-row">
             <span class="lbl">Miner fee</span>
-            <span class="val">{{ sim.feeSats | number }} sat ({{ sim.vsize }} vB)</span>
+            <span class="val">{{ sim.feeSats | number }} sat</span>
           </div>
           <div class="make-offer-summary-row">
             <span class="lbl">Cat lands at</span>
@@ -330,7 +330,7 @@
           </div>
         </div>
       </section>
-    } @else if (simulationOutcome()?.insufficient) {
+    } @else if (insufficient()) {
       <p class="text-warning small mt-3" data-testid="make-offer-insufficient">
         Not enough funds in your payment address to cover the price + fee at this rate.
       </p>
@@ -344,10 +344,10 @@
       type="button"
       class="btn btn-primary mt-3"
       data-testid="make-offer-cta"
-      [disabled]="!canCreateOffer() || state() === 'signing'"
-      [attr.aria-busy]="state() === 'signing'"
+      [disabled]="!canCreateOffer() || state() === 'creating'"
+      [attr.aria-busy]="state() === 'creating'"
       (click)="onCreateOfferClick()">
-      @if (state() === 'signing') {
+      @if (state() === 'creating') {
         Signing offer…
       } @else {
         Sign and create offer

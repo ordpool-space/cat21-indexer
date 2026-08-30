@@ -1,15 +1,13 @@
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { jest, describe, it, expect } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
-import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { of } from 'rxjs';
 
 import {
   Cat21AcceptOfferOrchestrator,
   Cat21OfferValidation,
   CatOutpoint,
-  ParsedOffer,
   WalletInfo,
   WalletService,
   cat21Config,
@@ -29,25 +27,65 @@ const wallet = (over: Partial<WalletInfo> = {}): WalletInfo =>
     ...over,
   });
 
-class OrchestratorStub {
-  readonly connectedWallet: WritableSignal<WalletInfo | null> = signal(null);
-  readonly state: WritableSignal<'idle' | 'parsed' | 'invalid' | 'accepting' | 'success' | 'error'> = signal('idle');
-  readonly errorMessage: WritableSignal<string | null> = signal(null);
-  readonly successTxId: WritableSignal<string | null> = signal(null);
-  readonly parsedOffer: WritableSignal<ParsedOffer | null> = signal(null);
-  readonly validationResult: WritableSignal<Cat21OfferValidation | null> = signal(null);
-  readonly pastedOffer: WritableSignal<string | null> = signal(null);
-  readonly expectedCatUtxo: WritableSignal<CatOutpoint | null> = signal(null);
-  readonly floorPriceSats: WritableSignal<number | null> = signal(null);
-  readonly canAccept = signal(false);
+interface AcceptStubSnap {
+  state: 'idle' | 'parsed' | 'invalid' | 'accepting' | 'success' | 'error';
+  errorMessage: string | null;
+  successTxId: string | null;
+  preview: unknown;
+  validationResult: Cat21OfferValidation | null;
+  pastedOffer: string | null;
+  expectedCatUtxo: CatOutpoint | null;
+  floorPriceSats: number | null;
+}
 
+/**
+ * Snapshot-driven stand-in for the framework-agnostic
+ * Cat21AcceptOfferOrchestrator. The migrated component CONSTRUCTS its
+ * orchestrator (`new`); the spec substitutes this stub via
+ * `{ provide: Cat21AcceptOfferOrchestrator, useValue }` and the component's
+ * `inject(..., { optional: true }) ??` seam picks it up. Exposes the real
+ * `getSnapshot()`/`subscribe()` surface plus a `validationResult.set` shim that
+ * funnels into `_patch`. Wallet is NOT here (the component reads it from
+ * WalletService), so tests push it via `walletService.connectedWalletSubject`.
+ */
+class OrchestratorStub {
+  private _snap: AcceptStubSnap = {
+    state: 'idle',
+    errorMessage: null,
+    successTxId: null,
+    preview: null,
+    validationResult: null,
+    pastedOffer: null,
+    expectedCatUtxo: null,
+    floorPriceSats: null,
+  };
+  private _listeners: Array<(s: AcceptStubSnap) => void> = [];
+
+  getSnapshot(): AcceptStubSnap { return this._snap; }
+  subscribe(l: (s: AcceptStubSnap) => void): () => void {
+    this._listeners.push(l);
+    l(this._snap);
+    return () => { this._listeners = this._listeners.filter((x) => x !== l); };
+  }
+  private _patch(p: Partial<AcceptStubSnap>): void {
+    this._snap = { ...this._snap, ...p };
+    this._listeners.slice().forEach((l) => l(this._snap));
+  }
+
+  // Command surface the component calls.
+  setWallet = jest.fn((_w: unknown) => undefined);
   disableFloorGate = jest.fn();
-  setPastedOffer = jest.fn((p: string | null) => this.pastedOffer.set(p));
-  setExpectedCatUtxo = jest.fn((u: CatOutpoint | null) => this.expectedCatUtxo.set(u));
+  setPastedOffer = jest.fn((p: string | null) => this._patch({ pastedOffer: p }));
+  setExpectedCatUtxo = jest.fn((u: CatOutpoint | null) => this._patch({ expectedCatUtxo: u }));
   setExpectedSellerPaymentAddress = jest.fn();
-  setFloorPriceSats = jest.fn((n: number) => this.floorPriceSats.set(n));
-  acceptOffer = jest.fn((): Observable<{ txid: string }> => of({ txid: 'broadcast-txid' }));
+  setFloorPriceSats = jest.fn((n: number) => this._patch({ floorPriceSats: n }));
+  acceptOffer = jest.fn(async (_prompt?: unknown) => ({ txid: 'broadcast-txid' }));
   reset = jest.fn();
+
+  // Signal-shaped shim the test bodies drive → `_patch`.
+  readonly validationResult = {
+    set: (v: Cat21OfferValidation | null) => this._patch({ validationResult: v }),
+  };
 }
 
 class LookupStub {
@@ -107,7 +145,8 @@ describe('AcceptOffer — validator rejections surface to UI', () => {
       reason: 'payment-output-wrong-address',
       detail: 'expected bc1qEXPECTED got bc1pWRONG',
     });
-    orchestrator.canAccept.set(false);
+    // canAccept is now a component-derived computed (snap().state === 'parsed');
+    // state stays 'idle' on an invalid result, so it is false without a setter.
     expect(component.humanRejection()).toBe(
       'The seller-payment output is going to a different address than expected. expected bc1qEXPECTED got bc1pWRONG',
     );
@@ -188,7 +227,7 @@ describe('AcceptOffer — URL prefill via ?offer=&catTxid=&catVout=', () => {
     const { component, orchestrator } = await setup();
     expect(component.urlCatOutpoint()).toBeNull();
     expect(orchestrator.setPastedOffer).not.toHaveBeenCalled();
-    expect(orchestrator.state()).toBe('idle');
+    expect(component.state()).toBe('idle');
   });
 
   it('disableFloorGate is called on init (opts out of the SDK safety-net)', async () => {

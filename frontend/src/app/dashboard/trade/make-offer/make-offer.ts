@@ -1,20 +1,25 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, signal } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { firstValueFrom } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import {
-  BuyOfferTargetCat,
   buildAcceptOfferQueryParams,
   CapabilitySupport,
   Cat21CreateOfferOrchestrator,
-  CreateOfferSimulationOutcome,
+  Cat21Service,
+  CreateOfferSnapshot,
   WalletCapability,
+  WalletService,
+  bitcoinNetwork,
   capabilityOf,
+  cat21Config,
   parseBuyOfferQueryParams,
   toPaymentAddress,
   TxnOutput,
 } from 'ordpool-sdk';
 
+import { cat21OrchestratorPorts } from '../../../shared/cat21-orchestrator-ports';
 import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { PsbtExportBridgeService } from '../../../shared/psbt-export-bridge/psbt-export-bridge.service';
@@ -40,12 +45,28 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MakeOffer {
-  private orchestrator = inject(Cat21CreateOfferOrchestrator);
   private psbtBridge = inject(PsbtExportBridgeService);
   private lookup = inject(CatUtxoLookupService);
   private ordApi = inject(OrdApiService);
   private bidsService = inject(Cat21BidsService);
+  private walletService = inject(WalletService);
   private destroyRef = inject(DestroyRef);
+
+  /**
+   * Constructed create-offer orchestrator (shared ports; buyer-signing
+   * internal). The `inject(..., { optional: true }) ??` prefix is the unit-test
+   * seam: in production nothing provides the SDK class, so it resolves to `null`
+   * and the real orchestrator is `new`-constructed here (deps `inject`ed inside
+   * the fallback, so a spec that provides a drivable stub short-circuits them).
+   */
+  private orch = inject(Cat21CreateOfferOrchestrator, { optional: true })
+    ?? ((): Cat21CreateOfferOrchestrator => {
+      const cfg = inject(cat21Config);
+      return new Cat21CreateOfferOrchestrator(
+        cat21OrchestratorPorts(inject(Cat21Service), cfg.ordApiUrl, cfg.cat21OrdApiUrl, inject(bitcoinNetwork)),
+      );
+    })();
+  private snap = signal<CreateOfferSnapshot>(this.orch.getSnapshot());
 
   // ---------- Deep-link prefill (via router withComponentInputBinding) ----------
   //
@@ -108,9 +129,10 @@ export class MakeOffer {
     return target.txid !== linked.txid || target.vout !== linked.vout;
   });
 
-  // ---------- Live state from the orchestrator ----------
+  // ---------- Live state ----------
 
-  readonly connectedWallet = this.orchestrator.connectedWallet;
+  /** Connected wallet from WalletService (pushed into the orchestrator via setWallet). */
+  readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
 
   /** The matrix capability this page drives; feeds the disabled-action notice. */
   readonly offerCreateCapability = WalletCapability.Cat21OfferCreate;
@@ -125,25 +147,15 @@ export class MakeOffer {
     return !!w && capabilityOf(w.type, WalletCapability.Cat21OfferCreate).support === CapabilitySupport.Unsupported;
   });
 
-  readonly state = this.orchestrator.state;
-  readonly errorMessage = this.orchestrator.errorMessage;
-  readonly offerArtifact = this.orchestrator.offerArtifact;
-  readonly feeRate = this.orchestrator.feeRate;
-  readonly targetCat = this.orchestrator.targetCat;
-  readonly sellerPaymentAddress = this.orchestrator.sellerPaymentAddress;
-  readonly priceSats = this.orchestrator.priceSats;
-  readonly buyerReceiveAddress = this.orchestrator.buyerReceiveAddress;
-  readonly selectedFundingUtxo = this.orchestrator.selectedFundingUtxo;
-
-  /** Live buyer-funding-UTXO list for the picker. Empty until wallet loads. */
-  readonly fundingUtxos = toSignal(this.orchestrator.buyerFundingUtxos$, {
-    initialValue: [] as TxnOutput[],
-  });
-
-  readonly simulationOutcome = toSignal<CreateOfferSimulationOutcome | null>(
-    this.orchestrator.simulation$,
-    { initialValue: null },
-  );
+  readonly state = computed(() => this.snap().state);
+  readonly errorMessage = computed(() => this.snap().errorMessage);
+  readonly offerArtifact = computed(() => this.snap().bid);
+  readonly feeRate = computed(() => this.snap().feeRate);
+  readonly targetCat = computed(() => this.snap().targetCat);
+  readonly sellerPaymentAddress = computed(() => this.snap().sellerPaymentAddress);
+  readonly priceSats = computed(() => this.snap().priceSats);
+  readonly buyerReceiveAddress = computed(() => this.snap().buyerReceiveAddress);
+  readonly selectedFundingUtxo = computed(() => this.snap().selectedFundingUtxo);
 
   /**
    * The SDK's safe-auto funding recommendation for the buyer's side.
@@ -153,15 +165,22 @@ export class MakeOffer {
    * surfaces the funding picker (auto-opened + a warning) in that state
    * so the form isn't silently stuck. `auto`/`scanning`/`insufficient`
    * need no special picker treatment (the picker's own safe auto-pick +
-   * the insufficient message cover them).
+   * the insufficient message cover them). Its `candidates` are lifted to a
+   * `TxnOutput`-superset (status + bucket), so they feed the UtxoPicker directly.
    */
-  readonly buyerFundingRecommendation = toSignal(
-    this.orchestrator.buyerFundingRecommendation$,
-    { initialValue: null },
-  );
+  readonly buyerFundingRecommendation = computed(() => this.snap().fundingRecommendation);
+
+  /** Live buyer-funding-UTXO list for the picker = the recommendation's candidates. */
+  readonly fundingUtxos = computed<readonly TxnOutput[]>(() => this.buyerFundingRecommendation().candidates);
+
+  /** The create-offer simulation (buyer funding coin + fee + change), or null. */
+  readonly simulation = computed(() => this.snap().simulation);
+
+  /** No content-clean coin covers `price + cat value + fee` at this rate. */
+  readonly insufficient = computed(() => this.buyerFundingRecommendation().status === 'insufficient');
 
   readonly buyerFundingExpertRequired = computed(
-    () => this.buyerFundingRecommendation()?.status === 'expert-required',
+    () => this.buyerFundingRecommendation().status === 'expert-required',
   );
 
   /**
@@ -206,8 +225,7 @@ export class MakeOffer {
     if (!this.sellerPaymentAddress()) return false;
     if (!this.priceSats()) return false;
     if (!this.feeRate()) return false;
-    const outcome = this.simulationOutcome();
-    return !!outcome && !outcome.insufficient && !!outcome.simulation;
+    return !!this.simulation() && !this.insufficient();
   });
 
   /**
@@ -243,6 +261,26 @@ export class MakeOffer {
   private prefilledFor: string | null = null;
 
   constructor() {
+    // Bind the orchestrator snapshot to a signal; unsubscribe on destroy.
+    this.destroyRef.onDestroy(this.orch.subscribe((s) => this.snap.set(s)));
+
+    // Push the connected wallet into the orchestrator (it fetches funding UTXOs,
+    // recomputes, and seeds buyerReceiveAddress from the ordinals address). Async.
+    effect(() => {
+      const w = this.connectedWallet();
+      void this.orch.setWallet(
+        w
+          ? {
+              type: w.type,
+              ordinalsAddress: w.ordinalsAddress,
+              paymentAddress: w.paymentAddress,
+              paymentPublicKey: w.paymentPublicKey,
+            }
+          : null,
+      );
+    });
+
+    // Wallet-swap form reset (audit M5).
     effect(() => {
       const w = this.connectedWallet();
       const current = w?.ordinalsAddress ?? null;
@@ -290,7 +328,7 @@ export class MakeOffer {
 
       if (parsed.askSats !== null) {
         this.draft.update((d) => ({ ...d, priceSatsInput: String(parsed.askSats) }));
-        this.orchestrator.setPriceSats(parsed.askSats);
+        this.orch.setPriceSats(parsed.askSats);
       }
       if (parsed.sellerPaymentAddress !== null) {
         // Prefill the seller-payment field from the URL. This is the
@@ -303,7 +341,7 @@ export class MakeOffer {
           ...d,
           sellerPaymentAddressInput: parsed.sellerPaymentAddress!,
         }));
-        this.orchestrator.setSellerPaymentAddress(parsed.sellerPaymentAddress);
+        this.orch.setSellerPaymentAddress(parsed.sellerPaymentAddress);
       }
     });
   }
@@ -339,7 +377,7 @@ export class MakeOffer {
     const myToken = ++this.lookupRequestId;
     this.lookupState.set('loading');
     this.lookupError.set(null);
-    this.orchestrator.setTargetCat(null);
+    this.orch.setTargetCat(null);
     this.resolvedSellerAddress.set(null);
     this.lookup.getTargetByNumber(n).subscribe({
       next: (result) => {
@@ -349,7 +387,7 @@ export class MakeOffer {
           this.lookupState.set('error');
           return;
         }
-        this.orchestrator.setTargetCat(result.target);
+        this.orch.setTargetCat(result.target);
         // `result.sellerAddress` is the cat's on-chain owner — the
         // seller's ORDINALS address (that's where cats live per
         // ordinal theory). It is NEVER the right value for the
@@ -379,7 +417,7 @@ export class MakeOffer {
     this.lookupState.set('idle');
     this.lookupError.set(null);
     this.resolvedSellerAddress.set(null);
-    this.orchestrator.setTargetCat(null);
+    this.orch.setTargetCat(null);
   }
 
   onSellerPaymentAddressChange(value: string): void {
@@ -389,11 +427,11 @@ export class MakeOffer {
     // reaches the orchestrator. Empty / whitespace → clear the field.
     const trimmed = value.trim();
     if (!trimmed) {
-      this.orchestrator.setSellerPaymentAddress(null);
+      this.orch.setSellerPaymentAddress(null);
       return;
     }
     try {
-      this.orchestrator.setSellerPaymentAddress(toPaymentAddress(trimmed));
+      this.orch.setSellerPaymentAddress(toPaymentAddress(trimmed));
     } catch {
       // Malformed address as the buyer's typing — leave the orchestrator
       // in its previous state; the input's own validation surfaces the
@@ -405,21 +443,25 @@ export class MakeOffer {
     this.draft.update((d) => ({ ...d, priceSatsInput: value }));
     const n = Number.parseInt(value, 10);
     if (Number.isFinite(n) && n > 0) {
-      this.orchestrator.setPriceSats(n);
+      this.orch.setPriceSats(n);
     }
   }
 
-  onCreateOfferClick(): void {
+  async onCreateOfferClick(): Promise<void> {
     // Pass the export/paste bridge unconditionally: injected wallets
     // ignore it, a watch-only (xpub) wallet signs through it. Label the
     // bridge's primary button "Build the offer": create-offer returns a
     // partial-signed artifact, it does NOT broadcast (unlike mint /
-    // transfer / accept, which keep the default "Broadcast" copy).
-    this.orchestrator.createOffer(this.psbtBridge.promptForSignedPsbtWithLabel('Build the offer'))
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        error: () => undefined,
-      });
+    // transfer / accept, which keep the default "Broadcast" copy). The
+    // bridge is Observable-based; the orchestrator wants a Promise, so
+    // bridge it. The orchestrator buyer-signs internally and updates its
+    // snapshot, so there is nothing to bind here.
+    const prompt = this.psbtBridge.promptForSignedPsbtWithLabel('Build the offer');
+    try {
+      await this.orch.createOffer((unsigned) => firstValueFrom(prompt(unsigned)));
+    } catch {
+      // Error fields are already populated in the orchestrator snapshot.
+    }
   }
 
   /** "Copied!" flash state per Copy button (two-second timer). */
@@ -457,7 +499,7 @@ export class MakeOffer {
   }
 
   onResetClick(): void {
-    this.orchestrator.reset();
+    this.orch.reset();
     this.draft.set({
       catNumberInput: '',
       sellerPaymentAddressInput: '',
@@ -566,11 +608,11 @@ export class MakeOffer {
 
   /** FeesPicker's feeRateChange forwarded into the create-offer orchestrator. */
   onFeeRateChange(rate: number): void {
-    this.orchestrator.setFeeRate(rate);
+    this.orch.setFeeRate(rate);
   }
 
   /** UtxoPicker's selectionChange forwarded into the create-offer orchestrator. */
   onFundingUtxoSelectionChange(utxo: TxnOutput): void {
-    this.orchestrator.setSelectedFundingUtxo(utxo);
+    this.orch.setSelectedFundingUtxo(utxo);
   }
 }

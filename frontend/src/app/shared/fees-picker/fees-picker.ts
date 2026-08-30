@@ -2,7 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { BITCOIN_MIN_RELAY_FEE_SAT_PER_VBYTE, Cat21MintOrchestrator, RecommendedFees } from 'ordpool-sdk';
+import { BITCOIN_MIN_RELAY_FEE_SAT_PER_VBYTE, Cat21Service, RecommendedFees } from 'ordpool-sdk';
 
 type Tier = 'fastest' | 'halfHour' | 'hour' | 'economy';
 
@@ -20,12 +20,11 @@ const TIERS: readonly TierOption[] = [
 ] as const;
 
 /**
- * Pixel-themed fee picker. Three tier buttons fed by the SDK's polled
- * `recommendedFees$`, plus a manual sat/vB input. Selecting a tier or
- * editing the input emits `feeRateChange` and pushes the value into
- * the orchestrator via `setFeeRate` — the orchestrator is the
- * canonical source of truth for the active fee rate; this component
- * is a thin UI binding.
+ * Pixel-themed fee picker. Three tier buttons fed by `Cat21Service`'s polled
+ * `recommendedFees$`, plus a manual sat/vB input. Selecting a tier or editing
+ * the input emits `feeRateChange`, which the parent forwards into its
+ * orchestrator's `setFeeRate` — the orchestrator is the canonical source of
+ * truth for the active fee rate; this component is a thin UI binding.
  *
  * Norton-shadow underline on the active tier matches the rest of the
  * cat21.space navigation language.
@@ -38,7 +37,7 @@ const TIERS: readonly TierOption[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FeesPicker {
-  private orchestrator = inject(Cat21MintOrchestrator);
+  private cat21 = inject(Cat21Service);
 
   /**
    * Minimum sat/vB the manual input will accept. Defaults to the SDK's
@@ -58,9 +57,9 @@ export class FeesPicker {
    * orchestrator-agnostic (it's used from mint, transfer, make-offer,
    * accept-offer, all with different orchestrators).
    *
-   * `recommendedFees$` (the polled tier values) stays sourced from
-   * `Cat21MintOrchestrator` because those values are network-global,
-   * not per-cat-operation — one orchestrator polls, everyone reads.
+   * `recommendedFees$` (the polled tier values) is sourced from
+   * `Cat21Service` because those values are network-global, not
+   * per-cat-operation — one poller, everyone reads.
    */
   readonly feeRate = input<number | null>(null);
 
@@ -68,7 +67,7 @@ export class FeesPicker {
   readonly feeRateChange = output<number>();
 
   /** Polled tier values from the SDK. `undefined` until the first emission. */
-  readonly fees = toSignal(this.orchestrator.recommendedFees$);
+  readonly fees = toSignal(this.cat21.recommendedFees$);
 
   readonly tiers = TIERS;
 

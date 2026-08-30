@@ -1,18 +1,22 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, signal } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { EMPTY } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { EMPTY, firstValueFrom } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import * as btc from '@scure/btc-signer';
 import {
-  bitcoinNetwork,
+  Cat21Service,
   Cat21TransferOrchestrator,
+  TransferSnapshot,
+  TxnOutput,
+  WalletService,
+  bitcoinNetwork,
+  cat21Config,
   parseTransferQueryParams,
   toScureNetwork,
-  TransferSimulationOutcome,
-  TxnOutput,
 } from 'ordpool-sdk';
 
+import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
@@ -30,10 +34,19 @@ const TXID_RE = /^[0-9a-f]{64}$/i;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Transfer {
-  private orchestrator = inject(Cat21TransferOrchestrator);
   private psbtBridge = inject(PsbtExportBridgeService);
   private lookup = inject(CatUtxoLookupService);
+  private walletService = inject(WalletService);
+  private cat21 = inject(Cat21Service);
+  private config = inject(cat21Config);
+  private network = inject(bitcoinNetwork);
   private destroyRef = inject(DestroyRef);
+
+  /** Constructed transfer orchestrator (shared ports; signing internal). */
+  private orch = new Cat21TransferOrchestrator(
+    cat21OrchestratorPorts(this.cat21, this.config.ordApiUrl, this.config.cat21OrdApiUrl, this.network),
+  );
+  private snap = signal<TransferSnapshot>(this.orch.getSnapshot());
 
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
@@ -66,46 +79,37 @@ export class Transfer {
    */
   private readonly bitcoinNetwork = inject(bitcoinNetwork);
 
-  // ---------- Live state from the orchestrator ----------
+  // ---------- Live state ----------
 
-  readonly connectedWallet = this.orchestrator.connectedWallet;
-  readonly state = this.orchestrator.state;
-  readonly errorMessage = this.orchestrator.errorMessage;
-  readonly successTxId = this.orchestrator.successTxId;
-  readonly feeRate = this.orchestrator.feeRate;
-  readonly catUtxo = this.orchestrator.catUtxo;
-  readonly recipientAddress = this.orchestrator.recipientAddress;
-  readonly selectedFundingUtxo = this.orchestrator.selectedFundingUtxo;
-
-  /** Live funding-UTXO list for the picker; empty array until wallet loads. */
-  readonly fundingUtxos = toSignal(this.orchestrator.fundingUtxos$, {
-    initialValue: [] as TxnOutput[],
-  });
-
-  readonly simulationOutcome = toSignal<TransferSimulationOutcome | null>(
-    this.orchestrator.simulation$,
-    { initialValue: null },
-  );
+  /** Connected wallet from WalletService (pushed into the orchestrator via setWallet). */
+  readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
+  readonly state = computed(() => this.snap().state);
+  readonly errorMessage = computed(() => this.snap().errorMessage);
+  readonly successTxId = computed(() => this.snap().successTxId);
+  readonly feeRate = computed(() => this.snap().feeRate);
+  readonly catUtxo = computed(() => this.snap().catUtxo);
+  readonly recipientAddress = computed(() => this.snap().recipientAddress);
+  readonly selectedFundingUtxo = computed(() => this.snap().selectedFundingUtxo);
 
   /**
-   * The SDK's safe-auto funding recommendation. `expert-required` means
-   * no content-clean coin covers the fee; only asset-bearing coins do,
-   * so the orchestrator refuses to auto-spend one and yields no
-   * simulation. The template surfaces the funding picker (auto-opened +
-   * a warning) in that state so the form isn't silently stuck.
-   * `auto`/`scanning`/`insufficient` need no special picker treatment
-   * (the picker's own safe auto-pick + the insufficient message cover
-   * them). The transfer builder now REQUIRES separate funding for the
-   * fee: a cat can no longer self-fund a transfer (that would resize
-   * it), so a wallet with no clean funding coin lands here.
+   * The SDK's safe-auto funding recommendation. `expert-required` means no
+   * content-clean coin covers the fee (only asset coins do), so the picker
+   * must surface for a deliberate override. Its `candidates` are lifted to a
+   * `TxnOutput`-superset (status + bucket), so they feed the UtxoPicker directly.
    */
-  readonly fundingRecommendation = toSignal(
-    this.orchestrator.fundingRecommendation$,
-    { initialValue: null },
-  );
+  readonly fundingRecommendation = computed(() => this.snap().fundingRecommendation);
+
+  /** Funding-UTXO list for the picker = the recommendation's candidates. */
+  readonly fundingUtxos = computed<readonly TxnOutput[]>(() => this.fundingRecommendation().candidates);
+
+  /** The transfer simulation (funding coin + fee + change), or null. */
+  readonly simulation = computed(() => this.snap().simulation);
+
+  /** No coin can fund the fee at this rate (nothing covers). */
+  readonly insufficient = computed(() => this.fundingRecommendation().status === 'insufficient');
 
   readonly fundingExpertRequired = computed(
-    () => this.fundingRecommendation()?.status === 'expert-required',
+    () => this.fundingRecommendation().status === 'expert-required',
   );
 
   // ---------- My cats — async load ----------
@@ -172,8 +176,7 @@ export class Transfer {
     if (!this.recipientAddress()) return false;
     if (this.recipientStatus() !== 'valid') return false;
     if (!this.feeRate()) return false;
-    const outcome = this.simulationOutcome();
-    return !!outcome && !outcome.insufficient && !!outcome.simulation;
+    return !!this.simulation() && !this.insufficient();
   });
 
   /**
@@ -187,6 +190,26 @@ export class Transfer {
   private lastSeenOrdinalsAddress: string | null = null;
 
   constructor() {
+    // Bind the orchestrator snapshot to a signal; unsubscribe on destroy.
+    this.destroyRef.onDestroy(this.orch.subscribe((s) => this.snap.set(s)));
+
+    // Push the connected wallet into the orchestrator (it fetches funding UTXOs
+    // + recomputes). Async + dedupes internally.
+    effect(() => {
+      const w = this.connectedWallet();
+      void this.orch.setWallet(
+        w
+          ? {
+              type: w.type,
+              ordinalsAddress: w.ordinalsAddress,
+              ordinalsPublicKey: w.ordinalsPublicKey,
+              paymentAddress: w.paymentAddress,
+              paymentPublicKey: w.paymentPublicKey,
+            }
+          : null,
+      );
+    });
+
     // When the user picks a cat from the dropdown, push it to the
     // orchestrator as the Cat21Holding it expects. Picker takes
     // precedence; URL override is the fallback (deep-links that
@@ -195,16 +218,16 @@ export class Transfer {
       const fromPicker = this.selectedHolding();
       const fromUrl = this.urlCatUtxoResource.value() ?? null;
       if (fromPicker) {
-        this.orchestrator.setCatUtxo({
+        this.orch.setCatUtxo({
           catNumber: fromPicker.catNumber,
           txid: fromPicker.txid,
           vout: fromPicker.vout,
           value: fromPicker.value,
         });
       } else if (fromUrl) {
-        this.orchestrator.setCatUtxo(fromUrl);
+        this.orch.setCatUtxo(fromUrl);
       } else {
-        this.orchestrator.setCatUtxo(null);
+        this.orch.setCatUtxo(null);
       }
     });
 
@@ -303,34 +326,32 @@ export class Transfer {
     // Audit H4: the wallet popup is no longer the last line of defense.
     const trimmed = value.trim();
     if (!trimmed) {
-      this.orchestrator.setRecipientAddress(null);
+      this.orch.setRecipientAddress(null);
       return;
     }
     try {
       btc.Address(toScureNetwork(this.bitcoinNetwork)).decode(trimmed);
-      this.orchestrator.setRecipientAddress(trimmed);
+      this.orch.setRecipientAddress(trimmed);
     } catch {
-      this.orchestrator.setRecipientAddress(null);
+      this.orch.setRecipientAddress(null);
     }
   }
 
-  onTransferClick(): void {
-    // Pass the export/paste bridge unconditionally: injected wallets
-    // ignore it, a watch-only (xpub) wallet signs through it.
-    // `takeUntilDestroyed` aborts an in-flight transfer if the component is
-    // destroyed (navigate away mid-signing) — which unsubscribes the bridge
-    // and dismisses its export/paste modal, so it can't strand open.
-    this.orchestrator.transfer(this.psbtBridge.promptForSignedPsbt)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        // Tap + catchError inside the orchestrator already manage state +
-        // error + success signals; this is just a fire-and-forget kick.
-        error: () => undefined,
-      });
+  async onTransferClick(): Promise<void> {
+    // Pass the export/paste bridge unconditionally: injected wallets ignore it,
+    // a watch-only (xpub) wallet signs through it. The bridge is
+    // Observable-based; the orchestrator wants a Promise, so bridge it. The
+    // orchestrator signs+broadcasts internally and updates its snapshot, so
+    // there is nothing to bind here.
+    try {
+      await this.orch.transfer((unsigned) => firstValueFrom(this.psbtBridge.promptForSignedPsbt(unsigned)));
+    } catch {
+      // Error fields are already populated in the orchestrator snapshot.
+    }
   }
 
   onResetClick(): void {
-    this.orchestrator.reset();
+    this.orch.reset();
     this.selectedInscriptionId.set(null);
     this.recipientInput.set('');
     this.holdingsResource.reload();
@@ -338,11 +359,11 @@ export class Transfer {
 
   /** FeesPicker's feeRateChange forwarded into the transfer orchestrator. */
   onFeeRateChange(rate: number): void {
-    this.orchestrator.setFeeRate(rate);
+    this.orch.setFeeRate(rate);
   }
 
   /** UtxoPicker's selectionChange forwarded into the transfer orchestrator. */
   onFundingUtxoSelectionChange(utxo: TxnOutput): void {
-    this.orchestrator.setSelectedFundingUtxo(utxo);
+    this.orch.setSelectedFundingUtxo(utxo);
   }
 }
