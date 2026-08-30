@@ -157,8 +157,8 @@ jobs:
           sed -i \
             -e "s|'https://api\.ordpool\.space'|'http://localhost:8999'|g" \
             -e "s|'https://backend2\.cat21\.space'|'http://localhost:9998'|g" \
-            -e "s|'https://ord\.ordpool\.space'|'http://localhost:9999'|g" \
-            -e "s|'https://ord\.cat21\.space'|'http://localhost:9999'|g" \
+            -e "s|'https://ord\.ordpool\.space'|'http://localhost:8999'|g" \
+            -e "s|'https://ord\.cat21\.space'|'http://localhost:8999'|g" \
             -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
             src/app/app.config.ts
 
@@ -210,7 +210,8 @@ jobs:
       # is regtest so bids POSTed with `network: 'regtest'` pass the
       # network-mismatch gate. DATABASE_URL points at the MariaDB the
       # consumer-environment already provisioned; ORD_API_URL points at
-      # the regtest ord instance ranger-served on 9999.
+      # the :8999 fees/electrs stub, which also answers ord
+      # /output/<outpoint> with a clean body for the content scanner.
       - name: Install indexer backend deps + build
         working-directory: backend
         run: |

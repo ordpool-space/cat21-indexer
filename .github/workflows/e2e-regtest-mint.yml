@@ -164,10 +164,16 @@ jobs:
       #                                              catchError to neutral
       #                                              defaults, so a 404 is
       #                                              fine)
-      #   ordApiUrl       → http://localhost:9999   (scanner gracefully
-      #   cat21OrdApiUrl  → http://localhost:9999    falls through on
-      #                                              scan-failed; the mint
-      #                                              itself doesn't need ord)
+      #   ordApiUrl       → http://localhost:8999   (the fees/electrs stub
+      #   cat21OrdApiUrl  → http://localhost:8999    also answers ord
+      #                                              /output/<outpoint> with a
+      #                                              clean body, so the SDK's
+      #                                              content force-scan of the
+      #                                              funding UTXO classifies it
+      #                                              clean. A dead port here
+      #                                              would flip the bucket to
+      #                                              scan-failed and hide the
+      #                                              mint-found-funds message.)
       #
       # `sed -i` in place so the ng serve picks the patched values up.
 
@@ -181,8 +187,8 @@ jobs:
           sed -i \
             -e "s|'https://api\.ordpool\.space'|'http://localhost:8999'|g" \
             -e "s|'https://backend2\.cat21\.space'|'http://localhost:9998'|g" \
-            -e "s|'https://ord\.ordpool\.space'|'http://localhost:9999'|g" \
-            -e "s|'https://ord\.cat21\.space'|'http://localhost:9999'|g" \
+            -e "s|'https://ord\.ordpool\.space'|'http://localhost:8999'|g" \
+            -e "s|'https://ord\.cat21\.space'|'http://localhost:8999'|g" \
             -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
             src/app/app.config.ts
           echo "--- patched cat21Config + network ---"
