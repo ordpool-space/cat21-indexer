@@ -24,7 +24,7 @@
     <p class="mb-3">
       A cat is transferred by sending its UTXO as the first input of a
       new transaction with <code>nLockTime = 21</code>. The cat's UTXO
-      travels intact to the first sat of the first output — the
+      travels intact to the first sat of the first output, the
       recipient's address (its sats stay with the cat, whatever its
       size). A separate funding UTXO from your payment address covers
       the miner fee.
@@ -127,7 +127,7 @@
     <section class="transfer-section" data-testid="transfer-funding-picker-section">
       @if (fundingExpertRequired()) {
         <p class="text-warning small" data-testid="transfer-funding-expert-required">
-          ⚠ None of your content-clean coins can cover the miner fee —
+          ⚠ None of your content-clean coins can cover the miner fee:
           every covering coin carries an inscription, rune, cat, or rare
           sat. Expand <strong>Funding source</strong> below and pick one
           deliberately (its asset goes to the miner as fee), or add a

@@ -73,7 +73,7 @@ export class BidsController {
       '- `psbt-output0-mismatch` — PSBT output 0 address doesn\'t match buyerOrdinalsAddress\n' +
       '- `psbt-output1-mismatch` — PSBT output 1 address doesn\'t match sellerPaymentAddress\n' +
       '- `psbt-output2-mismatch` — PSBT change output address doesn\'t match buyerPaymentAddress\n' +
-      '- `psbt-wrong-price-exact` — PSBT output 1 amount ≠ bidSats + the cat\'s own UTXO value (ord preserves the cat\'s value on output 0; output 1 carries that value back to the seller alongside the price)\n' +
+      '- `psbt-wrong-price-exact`: PSBT output 1 amount not equal to bidSats + the cat\'s own UTXO value (ord preserves the cat\'s value on output 0; output 1 carries that value back to the seller alongside the price)\n' +
       '- `psbt-*` — other SDK-layer offer-validator rejections\n' +
       '- `ord-lookup-failed` — upstream ord unreachable\n' +
       '- `cat-not-found` — UTXO empty of cats on ord (spent, unknown)\n' +

@@ -266,7 +266,7 @@ function rejectionToHuman(reason: Cat21OfferRejectionReason, detail?: string): s
     case 'payment-output-wrong-address':
       return `The seller-payment output is going to a different address than expected. ${detail ?? ''}`.trim();
     case 'cat-output-not-spendable':
-      return `The cat output has no valid address — it would be unspendable. ${detail ?? ''}`.trim();
+      return `The cat output has no valid address, so it would be unspendable. ${detail ?? ''}`.trim();
     case 'cat-output-wrong-address':
       return `The cat output is going to a different address than the buyer's receive address. ${detail ?? ''}`.trim();
     case 'change-output-wrong-address':

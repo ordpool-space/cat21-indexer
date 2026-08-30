@@ -148,7 +148,7 @@ export class MakeOffer {
   /**
    * The SDK's safe-auto funding recommendation for the buyer's side.
    * `expert-required` means no content-clean coin covers `price + cat
-   * value + fee` — only asset-bearing coins do, so the orchestrator
+   * value + fee`; only asset-bearing coins do, so the orchestrator
    * refuses to auto-spend one and yields no simulation. The template
    * surfaces the funding picker (auto-opened + a warning) in that state
    * so the form isn't silently stuck. `auto`/`scanning`/`insufficient`
@@ -170,7 +170,7 @@ export class MakeOffer {
    * cat's sats with the cat, so ord's offer accounting routes
    * `priceSats + sellerInput.value` to the seller's payment output (see
    * the SDK offer builder and ord `wallet offer create`; output 1 =
-   * `amount + postage`). Never assumes 546 — the cat rides any-size UTXO
+   * `amount + postage`). Never assumes 546; the cat rides any-size UTXO
    * and `targetCat().value` is its real on-chain value. Null until both
    * the price and the cat lookup have resolved.
    */

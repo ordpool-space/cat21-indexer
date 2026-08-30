@@ -128,7 +128,7 @@ describe('AcceptOffer — validator rejections surface to UI', () => {
     ['buyer-input-unsigned', "The buyer hasn't signed all their funding inputs yet."],
     ['missing-seller-payment-output', "The offer's payment output is missing."],
     ['payment-output-wrong-address', 'The seller-payment output is going to a different address than expected.'],
-    ['cat-output-not-spendable', 'The cat output has no valid address — it would be unspendable.'],
+    ['cat-output-not-spendable', 'The cat output has no valid address, so it would be unspendable.'],
     ['cat-output-wrong-address', "The cat output is going to a different address than the buyer's receive address."],
     ['change-output-wrong-address', "The buyer's change output is going to an unexpected address."],
   ];

@@ -594,7 +594,7 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
   });
 });
 
-describe('MakeOffer — offer accounting is preserve-V (never 546) + expert-required funding', () => {
+describe('MakeOffer: offer accounting is preserve-V (never 546) + expert-required funding', () => {
 
   async function mount() {
     const orchestrator = new OrchestratorStub();
@@ -621,7 +621,7 @@ describe('MakeOffer — offer accounting is preserve-V (never 546) + expert-requ
 
   it('sellerReceivesSats = price + the cat\'s REAL value (9000), never price + 546', async () => {
     const { component, orchestrator } = await mount();
-    // A cat riding a 9000-sat UTXO — the exact non-546 case the 546-hardcode
+    // A cat riding a 9000-sat UTXO, the exact non-546 case the 546-hardcode
     // hid. ord routes `priceSats + sellerInput.value` to the seller's payment
     // output, so the seller receives price + V, not price + 546.
     orchestrator.targetCat.set(target({ value: 9_000 }));
