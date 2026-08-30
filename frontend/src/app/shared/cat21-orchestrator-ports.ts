@@ -34,10 +34,30 @@ export function cat21OrchestratorPorts(
   network: Network,
 ): Cat21OrchestratorPorts {
   return {
-    getUtxos: (paymentAddress) => firstValueFrom(cat21.getUtxos(paymentAddress)),
+    getUtxos: async (paymentAddress) => {
+      const utxos = await firstValueFrom(cat21.getUtxos(paymentAddress));
+      // TEMP-FUNDINGDBG (revert): dump the pool feeding selectFunding so the
+      // regtest shows whether the fresh headroom coin arrives (conf status + value).
+      // eslint-disable-next-line no-console
+      console.log('[fundingdbg] getUtxos ' + paymentAddress + ' ' + JSON.stringify(
+        utxos.map((u) => ({ v: u.value, conf: u.status?.confirmed, o: `${u.txid.slice(0, 8)}:${u.vout}` })),
+      ));
+      return utxos;
+    },
     scan: {
-      classify: async (outpoint) =>
-        (await classifyOutpoint(outpoint, { ordApiUrl, cat21OrdApiUrl })).clean ? 'clean' : 'has-assets',
+      classify: async (outpoint) => {
+        // TEMP-FUNDINGDBG (revert): log each covering-coin scan verdict / throw.
+        try {
+          const clean = (await classifyOutpoint(outpoint, { ordApiUrl, cat21OrdApiUrl })).clean;
+          // eslint-disable-next-line no-console
+          console.log('[fundingdbg] classify ' + outpoint + ' -> ' + (clean ? 'clean' : 'has-assets'));
+          return clean ? 'clean' : 'has-assets';
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.log('[fundingdbg] classify ' + outpoint + ' THREW ' + (e instanceof Error ? e.message : String(e)));
+          throw e;
+        }
+      },
     },
     broadcast: (signedTxHex) => firstValueFrom(cat21.postTransaction(signedTxHex)),
     network,
