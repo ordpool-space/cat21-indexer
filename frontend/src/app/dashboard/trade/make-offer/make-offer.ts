@@ -145,6 +145,42 @@ export class MakeOffer {
     { initialValue: null },
   );
 
+  /**
+   * The SDK's safe-auto funding recommendation for the buyer's side.
+   * `expert-required` means no content-clean coin covers `price + cat
+   * value + fee` — only asset-bearing coins do, so the orchestrator
+   * refuses to auto-spend one and yields no simulation. The template
+   * surfaces the funding picker (auto-opened + a warning) in that state
+   * so the form isn't silently stuck. `auto`/`scanning`/`insufficient`
+   * need no special picker treatment (the picker's own safe auto-pick +
+   * the insufficient message cover them).
+   */
+  readonly buyerFundingRecommendation = toSignal(
+    this.orchestrator.buyerFundingRecommendation$,
+    { initialValue: null },
+  );
+
+  readonly buyerFundingExpertRequired = computed(
+    () => this.buyerFundingRecommendation()?.status === 'expert-required',
+  );
+
+  /**
+   * What the seller actually receives if this offer is accepted: the
+   * asking price PLUS the cat's own UTXO value. Ordinal theory keeps the
+   * cat's sats with the cat, so ord's offer accounting routes
+   * `priceSats + sellerInput.value` to the seller's payment output (see
+   * the SDK offer builder and ord `wallet offer create`; output 1 =
+   * `amount + postage`). Never assumes 546 — the cat rides any-size UTXO
+   * and `targetCat().value` is its real on-chain value. Null until both
+   * the price and the cat lookup have resolved.
+   */
+  readonly sellerReceivesSats = computed<number | null>(() => {
+    const price = this.priceSats();
+    const target = this.targetCat();
+    if (price === null || !target) return null;
+    return price + target.value;
+  });
+
   // ---------- Local form state ----------
 
   readonly draft = signal<MakeOfferDraft>({

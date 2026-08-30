@@ -115,12 +115,22 @@ describe('AcceptOffer — validator rejections surface to UI', () => {
   });
 
   const REJECTION_CASES: Array<[string, string]> = [
+    ['malformed-offer-psbt', "The offer isn't a valid PSBT (bad magic bytes, parse failure, or no inputs)."],
     ['missing-seller-input', "The offer's input 0 doesn't reference your cat."],
-    ['wrong-postage', 'The cat output postage is wrong (expected 546 sats).'],
+    // wrong-postage no longer pins 546: ord preserves the cat's real UTXO
+    // value on output 0, so the only invariant is the dust floor.
+    ['wrong-postage', 'The cat output value is below the dust floor.'],
     ['wrong-price', 'The seller-payment output is below your floor price.'],
+    ['wrong-price-exact', "The offer's price doesn't exactly match the expected amount."],
+    ['wrong-seller-input-value', "The offer's declared seller-input value doesn't match your cat's on-chain value."],
     ['sighash-not-all', 'The offer commits with a sighash other than SIGHASH_ALL — not accepting that.'],
+    ['sighash-flag-byte-not-all', 'A signature in the offer uses a sighash flag byte other than SIGHASH_ALL (0x01).'],
     ['buyer-input-unsigned', "The buyer hasn't signed all their funding inputs yet."],
     ['missing-seller-payment-output', "The offer's payment output is missing."],
+    ['payment-output-wrong-address', 'The seller-payment output is going to a different address than expected.'],
+    ['cat-output-not-spendable', 'The cat output has no valid address — it would be unspendable.'],
+    ['cat-output-wrong-address', "The cat output is going to a different address than the buyer's receive address."],
+    ['change-output-wrong-address', "The buyer's change output is going to an unexpected address."],
   ];
 
   it.each(REJECTION_CASES)('rejection reason %s maps to the expected human string', async (reason, expected) => {

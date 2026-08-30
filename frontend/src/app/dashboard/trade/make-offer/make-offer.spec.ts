@@ -6,9 +6,11 @@ import { provideRouter } from '@angular/router';
 import { BehaviorSubject, Observable, of, Subject, throwError } from 'rxjs';
 
 import {
+  AnnotatedFundingUtxo,
   BuyOfferTargetCat,
   Cat21CreateOfferOrchestrator,
   CreateOfferSimulationOutcome,
+  FundingRecommendation,
   RecommendedFees,
   TxnOutput,
   UtxoContentScanner,
@@ -98,6 +100,16 @@ class OrchestratorStub {
 
   readonly buyerFundingUtxosSubject = new BehaviorSubject<TxnOutput[]>([]);
   readonly buyerFundingUtxos$ = this.buyerFundingUtxosSubject.asObservable();
+
+  // Safe-auto funding recommendation (SDK 198d970). Default 'auto' so the
+  // expert-required picker path stays off unless a test drives it.
+  readonly buyerFundingRecommendationSubject =
+    new BehaviorSubject<FundingRecommendation<TxnOutput & AnnotatedFundingUtxo>>({
+      status: 'auto',
+      recommended: null,
+      candidates: [],
+    });
+  readonly buyerFundingRecommendation$ = this.buyerFundingRecommendationSubject.asObservable();
 
   readonly createOfferReturn$ = new Subject<{ base64: string; hex: string }>();
 
@@ -579,5 +591,72 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
     expect(component.bidPublishState()).toBe('idle');
     expect(component.bidPublishError()).toBeNull();
     expect(component.bidPublishedRow()).toBeNull();
+  });
+});
+
+describe('MakeOffer — offer accounting is preserve-V (never 546) + expert-required funding', () => {
+
+  async function mount() {
+    const orchestrator = new OrchestratorStub();
+    await TestBed.configureTestingModule({
+      imports: [MakeOffer],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
+        { provide: UtxoContentScanner, useValue: new ScannerStub() },
+        { provide: WalletService, useValue: new WalletServiceStub() },
+        { provide: CatUtxoLookupService, useValue: new LookupStub() },
+        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
+        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
+        { provide: cat21Config, useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' } },
+      ],
+    })
+      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
+      .compileComponents();
+    const fixture = TestBed.createComponent(MakeOffer);
+    fixture.detectChanges();
+    return { fixture, component: fixture.componentInstance, orchestrator };
+  }
+
+  it('sellerReceivesSats = price + the cat\'s REAL value (9000), never price + 546', async () => {
+    const { component, orchestrator } = await mount();
+    // A cat riding a 9000-sat UTXO — the exact non-546 case the 546-hardcode
+    // hid. ord routes `priceSats + sellerInput.value` to the seller's payment
+    // output, so the seller receives price + V, not price + 546.
+    orchestrator.targetCat.set(target({ value: 9_000 }));
+    orchestrator.priceSats.set(100_000);
+    expect(component.sellerReceivesSats()).toBe(109_000);
+    // Guard the exact bug: it must NOT be the old price + 546 answer.
+    expect(component.sellerReceivesSats()).not.toBe(100_546);
+  });
+
+  it('sellerReceivesSats is null until BOTH price and the cat lookup resolve', async () => {
+    const { component, orchestrator } = await mount();
+    expect(component.sellerReceivesSats()).toBeNull();
+    orchestrator.targetCat.set(target({ value: 9_000 }));
+    expect(component.sellerReceivesSats()).toBeNull(); // price still missing
+    orchestrator.priceSats.set(50_000);
+    expect(component.sellerReceivesSats()).toBe(59_000);
+  });
+
+  it('buyerFundingExpertRequired mirrors the SDK recommendation status', async () => {
+    const { component, orchestrator } = await mount();
+    // Default stub emits 'auto' → no expert picker.
+    expect(component.buyerFundingExpertRequired()).toBe(false);
+    // Only asset-bearing coins cover → the picker must surface.
+    orchestrator.buyerFundingRecommendationSubject.next({
+      status: 'expert-required',
+      recommended: null,
+      candidates: [],
+    });
+    expect(component.buyerFundingExpertRequired()).toBe(true);
+    // 'scanning' / 'insufficient' are NOT the expert-picker trigger.
+    orchestrator.buyerFundingRecommendationSubject.next({
+      status: 'scanning',
+      recommended: null,
+      candidates: [],
+    });
+    expect(component.buyerFundingExpertRequired()).toBe(false);
   });
 });

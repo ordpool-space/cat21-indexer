@@ -239,21 +239,43 @@ export class AcceptOffer implements OnInit {
 
 function rejectionToHuman(reason: Cat21OfferRejectionReason, detail?: string): string {
   switch (reason) {
+    case 'malformed-offer-psbt':
+      return `The offer isn't a valid PSBT (bad magic bytes, parse failure, or no inputs). ${detail ?? ''}`.trim();
     case 'missing-seller-input':
       return `The offer's input 0 doesn't reference your cat. ${detail ?? ''}`.trim();
     case 'wrong-postage':
-      return `The cat output postage is wrong (expected 546 sats). ${detail ?? ''}`.trim();
+      // The cat output value must be at least the dust floor. It is NOT
+      // pinned to 546: ord preserves the cat's real UTXO value on the
+      // offer's output 0 (see the SDK offer builder / ord `offer create`),
+      // so any-size cat is legal as long as it clears dust.
+      return `The cat output value is below the dust floor. ${detail ?? ''}`.trim();
     case 'wrong-price':
       return `The seller-payment output is below your floor price. ${detail ?? ''}`.trim();
+    case 'wrong-price-exact':
+      return `The offer's price doesn't exactly match the expected amount. ${detail ?? ''}`.trim();
+    case 'wrong-seller-input-value':
+      return `The offer's declared seller-input value doesn't match your cat's on-chain value. ${detail ?? ''}`.trim();
     case 'sighash-not-all':
       return `The offer commits with a sighash other than SIGHASH_ALL — not accepting that. ${detail ?? ''}`.trim();
+    case 'sighash-flag-byte-not-all':
+      return `A signature in the offer uses a sighash flag byte other than SIGHASH_ALL (0x01). ${detail ?? ''}`.trim();
     case 'buyer-input-unsigned':
       return `The buyer hasn't signed all their funding inputs yet. ${detail ?? ''}`.trim();
     case 'missing-seller-payment-output':
       return `The offer's payment output is missing. ${detail ?? ''}`.trim();
     case 'payment-output-wrong-address':
       return `The seller-payment output is going to a different address than expected. ${detail ?? ''}`.trim();
-    default:
-      return `Rejected: ${reason} ${detail ?? ''}`.trim();
+    case 'cat-output-not-spendable':
+      return `The cat output has no valid address — it would be unspendable. ${detail ?? ''}`.trim();
+    case 'cat-output-wrong-address':
+      return `The cat output is going to a different address than the buyer's receive address. ${detail ?? ''}`.trim();
+    case 'change-output-wrong-address':
+      return `The buyer's change output is going to an unexpected address. ${detail ?? ''}`.trim();
+    default: {
+      // Compile-time exhaustiveness: a new Cat21OfferRejectionReason in the
+      // SDK fails the build here instead of silently hitting a generic string.
+      const unhandled: never = reason;
+      return `Rejected: ${String(unhandled)} ${detail ?? ''}`.trim();
+    }
   }
 }

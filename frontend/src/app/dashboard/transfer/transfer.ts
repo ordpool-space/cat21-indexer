@@ -87,6 +87,27 @@ export class Transfer {
     { initialValue: null },
   );
 
+  /**
+   * The SDK's safe-auto funding recommendation. `expert-required` means
+   * no content-clean coin covers the fee — only asset-bearing coins do,
+   * so the orchestrator refuses to auto-spend one and yields no
+   * simulation. The template surfaces the funding picker (auto-opened +
+   * a warning) in that state so the form isn't silently stuck.
+   * `auto`/`scanning`/`insufficient` need no special picker treatment
+   * (the picker's own safe auto-pick + the insufficient message cover
+   * them). The transfer builder now REQUIRES separate funding for the
+   * fee — a cat can no longer self-fund a transfer (that would resize
+   * it), so a wallet with no clean funding coin lands here.
+   */
+  readonly fundingRecommendation = toSignal(
+    this.orchestrator.fundingRecommendation$,
+    { initialValue: null },
+  );
+
+  readonly fundingExpertRequired = computed(
+    () => this.fundingRecommendation()?.status === 'expert-required',
+  );
+
   // ---------- My cats — async load ----------
 
   /**
