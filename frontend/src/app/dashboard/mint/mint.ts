@@ -17,7 +17,6 @@ import {
   WalletService,
   bucketOf,
   calculateRecommendedFundingSats,
-  findAutoPickCandidate,
   runeNamesFromContent,
 } from 'ordpool-sdk';
 
@@ -79,8 +78,28 @@ export class Mint {
   private readonly simulations = toSignal(this.orchestrator.simulations$, { initialValue: [] as UtxoSimulation[] });
   private readonly scanStates = toSignal(this.scanner.states$, { initialValue: new Map<string, UtxoScanState>() as ReadonlyMap<string, UtxoScanState> });
 
-  /** Viable rows only — insufficient UTXOs are dropped, sorted desc by UTXO value, capped at 10, annotated with scan state + bucket. */
-  readonly viableRows = computed<ViableUtxoRow[]>(() => {
+  /**
+   * The SDK's safe-auto funding recommendation: a content-clean covering coin
+   * (`status: 'auto'`), or a non-auto status when only asset-bearing / still-
+   * scanning / insufficient coins cover. This is the single source of the
+   * mint's auto-pick, replacing the old raw value-based pre-pick (which would
+   * auto-adopt an unscanned or scan-failed coin). One implementation in the
+   * SDK so ordpool + cat21.space + the wallet can't drift.
+   */
+  private readonly fundingRecommendation = toSignal(this.orchestrator.fundingRecommendation$, { initialValue: null });
+
+  /** True when no content-clean coin covers the mint (only asset / scan-failed
+   *  coins do), so the picker must surface for a deliberate override. */
+  readonly fundingExpertRequired = computed(() => this.fundingRecommendation()?.status === 'expert-required');
+
+  /**
+   * Every viable (sufficient) UTXO annotated with scan state + bucket, sorted
+   * desc by value. Uncapped: the SDK's best-fit recommendation is the SMALLEST
+   * covering coin, which can fall outside the top-10-by-value display list, so
+   * the selected-row lookup + the auto-pick effect resolve against this full
+   * set, not the capped display list.
+   */
+  readonly allViableRows = computed<ViableUtxoRow[]>(() => {
     const rows = this.simulations();
     const scanMap = this.scanStates();
     return rows
@@ -88,7 +107,6 @@ export class Mint {
         !r.insufficient && r.simulation !== null,
       )
       .sort((a, b) => b.utxo.value - a.utxo.value)
-      .slice(0, 10)
       .map((r): ViableUtxoRow => {
         const outpoint = `${r.utxo.txid}:${r.utxo.vout}`;
         const scan = scanMap.get(outpoint) ?? { kind: 'not-scanned' };
@@ -96,14 +114,20 @@ export class Mint {
       });
   });
 
-  /** Whether the form has at least one viable UTXO + a fee rate set. */
-  readonly canMint = computed(() => this.viableRows().length > 0 && this.feeRate() !== null && this.selectedUtxo() !== null && this.state() === 'ready');
+  /** The "choose a different source" display list: the viable rows capped at 10
+   *  (highest-value first) to keep the expert picker readable. */
+  readonly viableRows = computed<ViableUtxoRow[]>(() => this.allViableRows().slice(0, 10));
 
-  /** The simulation entry currently picked, for the summary panel. */
+  /** Whether the form has at least one viable UTXO + a fee rate set. */
+  readonly canMint = computed(() => this.allViableRows().length > 0 && this.feeRate() !== null && this.selectedUtxo() !== null && this.state() === 'ready');
+
+  /** The simulation entry currently picked, for the summary panel. Resolved
+   *  against the full viable set so an auto-picked best-fit coin outside the
+   *  top-10 display list still renders its summary. */
   readonly selectedRow = computed<ViableUtxoRow | null>(() => {
     const picked = this.selectedUtxo();
     if (!picked) return null;
-    return this.viableRows().find(
+    return this.allViableRows().find(
       (r) => r.utxo.txid === picked.txid && r.utxo.vout === picked.vout,
     ) ?? null;
   });
@@ -188,22 +212,29 @@ export class Mint {
       this.scanner.autoScan(rows.map((r) => ({ txid: r.utxo.txid, vout: r.utxo.vout, value: r.utxo.value })));
     });
 
-    // Auto-pick the largest "safe-enough" UTXO whenever the row list
-    // changes. Priority lives in the SDK (findAutoPickCandidate) so
-    // ordpool and cat21.space can't drift.
+    // Auto-select ONLY the SDK's safe recommendation: a content-clean covering
+    // coin (fundingRecommendation$ status 'auto'). Never a raw value-based
+    // pre-pick, so an asset-bearing, unscanned, or scan-failed coin is never
+    // auto-spent. When only asset / scanning / insufficient coins cover, the
+    // selection is left null and the expert picker surfaces
+    // (fundingExpertRequired) for a deliberate override.
     effect(() => {
-      const rows = this.viableRows();
-      if (rows.length === 0) {
-        if (this.selectedUtxo()) this.orchestrator.setSelectedUtxo(null);
-        return;
-      }
+      const rows = this.allViableRows();
       const current = this.selectedUtxo();
+      // Keep an explicit user pick that is still viable.
       const stillThere = current && rows.find(
         (r) => r.utxo.txid === current.txid && r.utxo.vout === current.vout,
       );
       if (stillThere) return;
-      const pick = findAutoPickCandidate(rows);
-      this.orchestrator.setSelectedUtxo(pick ? pick.utxo : null);
+      const rec = this.fundingRecommendation();
+      const recommended = rec?.status === 'auto' ? rec.recommended : null;
+      // Adopt the recommendation only when it's actually a viable row (covers
+      // postage + fee at the current rate); otherwise clear so canMint gates
+      // on a deliberate pick.
+      const match = recommended
+        ? rows.find((r) => r.utxo.txid === recommended.txid && r.utxo.vout === recommended.vout)
+        : null;
+      this.orchestrator.setSelectedUtxo(match ? match.utxo : null);
     });
   }
 

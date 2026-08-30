@@ -4,7 +4,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import {
   AUTO_SCAN_MAX_VALUE_SAT,
   bucketOf,
-  findAutoPickCandidate,
   runeNamesFromContent,
   TxnOutput,
   UtxoContent,
@@ -96,13 +95,12 @@ export class UtxoPicker {
       this.scanner.autoScan(this.utxos().map((u) => ({ txid: u.txid, vout: u.vout, value: u.value })));
     });
 
-    // Auto-pick the safest row when the consumer hasn't picked one.
-    effect(() => {
-      const rows = this.rows();
-      if (this.selected()) return;
-      const pick = findAutoPickCandidate(rows);
-      if (pick) this.selectionChange.emit(pick.utxo);
-    });
+    // No auto-pick here: the consumer's orchestrator auto-selects a
+    // content-clean covering coin via the SDK's `fundingRecommendation$`
+    // (safe-auto), so this shared picker is purely display + click-to-select
+    // (the expert-mode override). Emitting a raw value-based pre-pick here
+    // would fight the SDK's safe recommendation and could auto-adopt an
+    // unscanned coin the SDK would have gated behind expert mode.
   }
 
   onPick(row: UtxoPickerRow): void {

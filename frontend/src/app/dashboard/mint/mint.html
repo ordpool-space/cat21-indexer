@@ -28,6 +28,15 @@
       <app-fees-picker [feeRate]="feeRate()" (feeRateChange)="onFeeRateChange($event)" />
     </section>
 
+    @if (fundingExpertRequired()) {
+      <p class="mint-alert mint-alert-warning" data-testid="mint-funding-expert-required">
+        ⚠ None of your content-clean coins can cover the mint. Every covering
+        coin carries an inscription, rune, cat, or rare sat. Pick one below to
+        spend it deliberately (its asset goes to the miner as fee), or add a
+        plain payment UTXO to your wallet.
+      </p>
+    }
+
     @if (viableRows().length === 0 && state() === 'ready') {
       <div class="mint-no-utxos" data-testid="mint-no-utxos">
         <p>

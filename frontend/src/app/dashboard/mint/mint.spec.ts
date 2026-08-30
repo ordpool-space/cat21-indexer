@@ -79,6 +79,13 @@ class OrchestratorStub {
   readonly simulationsSubject = new BehaviorSubject<UtxoSimulation[]>([]);
   readonly simulations$ = this.simulationsSubject.asObservable();
 
+  // SDK safe-auto funding recommendation (loosely typed: the component only
+  // reads `.status` + `.recommended`). Drives the mint's auto-pick, replacing
+  // the old raw value-based pre-pick.
+  readonly fundingRecommendationSubject =
+    new BehaviorSubject<{ status: string; recommended: TxnOutput | null; candidates: readonly unknown[] } | null>(null);
+  readonly fundingRecommendation$ = this.fundingRecommendationSubject.asObservable();
+
   readonly recommendedFeesSubject = new Subject<RecommendedFees>();
   readonly recommendedFees$ = this.recommendedFeesSubject.asObservable();
 
@@ -199,6 +206,26 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   function pushRows(rows: { u: TxnOutput; scan: UtxoScanState }[]): void {
     scanner.setStates(rows.map((r) => [`${r.u.txid}:${r.u.vout}`, r.scan]));
     orch.simulationsSubject.next(rows.map((r) => ({ utxo: r.u, simulation: simulation(), insufficient: false })));
+    // Stand in for the SDK's safe-auto recommendation so blocks that rely on
+    // the auto-pick get a selection: the first content-clean covering coin
+    // (status 'auto'), else a non-auto status (never auto-picks unscanned /
+    // scanning / asset / failed coins). E-block overrides this via recommend().
+    const clean = rows.find((r) => r.scan.kind === 'scanned-clean');
+    orch.fundingRecommendationSubject.next(
+      clean
+        ? { status: 'auto', recommended: clean.u, candidates: [] }
+        : rows.some((r) => r.scan.kind === 'not-scanned' || r.scan.kind === 'scanning')
+          ? { status: 'scanning', recommended: null, candidates: [] }
+          : rows.length
+            ? { status: 'expert-required', recommended: null, candidates: [] }
+            : { status: 'insufficient', recommended: null, candidates: [] },
+    );
+    fixture.detectChanges();
+  }
+
+  /** Override the SDK recommendation explicitly (E-block adoption tests). */
+  function recommend(status: string, recommended: TxnOutput | null): void {
+    orch.fundingRecommendationSubject.next({ status, recommended, candidates: [] });
     fixture.detectChanges();
   }
 
@@ -320,7 +347,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   // E. Bucket-driven auto-pick
   // -------------------------------------------------------------------
 
-  describe('E. auto-pick priority (clean → unscanned → failed; never assets)', () => {
+  describe('E. auto-pick ADOPTS the SDK recommendation (no raw value-based pre-pick)', () => {
     beforeEach(() => {
       orch.connectedWallet.set(wallet());
       orch.state.set('ready');
@@ -330,72 +357,53 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
     const big = (v: number) => utxo({ txid: String(v).repeat(64).slice(0, 64), value: v });
 
-    it('E1: all clean → picks the largest clean', () => {
+    it('E1: adopts the SDK-recommended clean coin, NOT the largest by value', () => {
+      // The SDK best-fit recommends the SMALLER covering coin (listed first,
+      // so pushRows recommends it). The consumer must adopt exactly that; the
+      // old raw value-based pre-pick would have taken the 80k (largest).
       pushRows([
+        { u: big(20_000), scan: { kind: 'scanned-clean' } },
         { u: big(80_000), scan: { kind: 'scanned-clean' } },
-        { u: big(20_000), scan: { kind: 'scanned-clean' } },
-      ]);
-      expect(orch.selectedUtxo()!.value).toBe(80_000);
-    });
-
-    it('E2: largest is assets, second is clean → picks the clean', () => {
-      pushRows([
-        { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } },
-        { u: big(20_000), scan: { kind: 'scanned-clean' } },
       ]);
       expect(orch.selectedUtxo()!.value).toBe(20_000);
+      expect(orch.selectedUtxo()!.value).not.toBe(80_000);
+      expect(component.fundingExpertRequired()).toBe(false);
     });
 
-    it('E3: all unscanned → picks largest unscanned', () => {
-      pushRows([
-        { u: big(80_000), scan: { kind: 'not-scanned' } },
-        { u: big(20_000), scan: { kind: 'not-scanned' } },
-      ]);
-      expect(orch.selectedUtxo()!.value).toBe(80_000);
-    });
-
-    it('E4: mixed clean+unscanned+assets → clean wins regardless of size', () => {
-      pushRows([
-        { u: big(90_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } },
-        { u: big(70_000), scan: { kind: 'not-scanned' } },
-        { u: big(5_000), scan: { kind: 'scanned-clean' } },
-      ]);
-      expect(orch.selectedUtxo()!.value).toBe(5_000);
-    });
-
-    it('E5: all assets → no auto-pick (selectedUtxo cleared)', () => {
+    it('E2: only asset-bearing coins cover (status expert-required) → NO auto-pick', () => {
       pushRows([
         { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } },
-        { u: big(20_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'b:0', inscriptionIds: [], runes: { RUNE: {} }, catIds: [], catSat: null, rareSat: null } } },
       ]);
+      expect(orch.selectedUtxo()).toBeNull();
+      expect(component.fundingExpertRequired()).toBe(true);
+    });
+
+    it('E3: unscanned coin (status scanning) → NO auto-pick (the footgun fix)', () => {
+      // The old pre-pick auto-adopted an unscanned coin; the SDK never does.
+      pushRows([{ u: big(80_000), scan: { kind: 'not-scanned' } }]);
       expect(orch.selectedUtxo()).toBeNull();
     });
 
-    it('E6: failed + unscanned → unscanned wins (higher priority)', () => {
-      pushRows([
-        { u: big(80_000), scan: { kind: 'scan-failed', message: 'oops' } },
-        { u: big(20_000), scan: { kind: 'not-scanned' } },
-      ]);
-      expect(orch.selectedUtxo()!.value).toBe(20_000);
+    it('E4: scan-failed coin → NO auto-pick (the footgun fix)', () => {
+      pushRows([{ u: big(80_000), scan: { kind: 'scan-failed', message: 'oops' } }]);
+      expect(orch.selectedUtxo()).toBeNull();
     });
 
-    it('E7: only failed → picks the largest failed', () => {
-      pushRows([
-        { u: big(80_000), scan: { kind: 'scan-failed', message: 'a' } },
-        { u: big(20_000), scan: { kind: 'scan-failed', message: 'b' } },
-      ]);
-      expect(orch.selectedUtxo()!.value).toBe(80_000);
+    it('E5: status auto but the recommended coin is absent from the viable rows → NO auto-pick (guard)', () => {
+      // Rows have no clean coin (so pushRows recommends nothing), then the SDK
+      // recommends a coin not present in this component's viable set.
+      pushRows([{ u: big(80_000), scan: { kind: 'not-scanned' } }]);
+      recommend('auto', big(999));
+      expect(orch.selectedUtxo()).toBeNull();
     });
 
-    it('E8: user-explicit pick survives a row re-emit if still present', () => {
+    it('E6: an explicit user pick survives a row re-emit if still viable', () => {
       const smaller = big(20_000);
       pushRows([
         { u: big(80_000), scan: { kind: 'scanned-clean' } },
         { u: smaller, scan: { kind: 'scanned-clean' } },
       ]);
-      // user picks the smaller one
       orch.setSelectedUtxo(smaller);
-      // re-emit same list
       pushRows([
         { u: big(80_000), scan: { kind: 'scanned-clean' } },
         { u: smaller, scan: { kind: 'scanned-clean' } },
@@ -403,21 +411,22 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(orch.selectedUtxo()!.value).toBe(20_000);
     });
 
-    it('E9: user pick disappears from the list → re-picks per priority', () => {
+    it('E7: user pick disappears from the list → re-adopts the current recommendation', () => {
       const gone = big(20_000);
       pushRows([
         { u: big(80_000), scan: { kind: 'scanned-clean' } },
         { u: gone, scan: { kind: 'scanned-clean' } },
       ]);
       orch.setSelectedUtxo(gone);
-      // re-emit WITHOUT the gone one
+      // Re-emit WITHOUT the gone one; pushRows now recommends the clean 80k.
       pushRows([{ u: big(80_000), scan: { kind: 'scanned-clean' } }]);
       expect(orch.selectedUtxo()!.value).toBe(80_000);
     });
 
-    it('E10: empty row list → selectedUtxo cleared', () => {
+    it('E8: empty row list → selectedUtxo cleared', () => {
       pushRows([{ u: big(80_000), scan: { kind: 'scanned-clean' } }]);
       orch.simulationsSubject.next([]);
+      orch.fundingRecommendationSubject.next({ status: 'insufficient', recommended: null, candidates: [] });
       fixture.detectChanges();
       expect(orch.selectedUtxo()).toBeNull();
     });
@@ -477,10 +486,10 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
         ? { kind: 'scan-failed' as const, message: 'x' }
         : { kind } as UtxoScanState;
       pushRows([{ u, scan }]);
-      // 'scanning' is intentionally NOT auto-picked (we don't know
-      // yet whether assets will land); force-select to inspect the
-      // bucket on a selected row.
-      if (kind === 'scanning') {
+      // Only a content-clean coin is auto-picked now (via the SDK's
+      // fundingRecommendation$); every non-clean kind is left for a deliberate
+      // pick, so force-select to inspect the bucket on a selected row.
+      if (kind !== 'scanned-clean') {
         orch.setSelectedUtxo(u);
         fixture.detectChanges();
       }
@@ -567,7 +576,12 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
         ordinalsAddress: 'same-addr',
         paymentAddress: 'same-addr',
       }));
-      pushRows([{ u: utxo({ value: 5_000 }), scan: { kind: 'not-scanned' } }]);
+      const u = utxo({ value: 5_000 });
+      pushRows([{ u, scan: { kind: 'not-scanned' } }]);
+      // Unscanned coins are no longer auto-picked; the user picks it (expert
+      // mode) and only then does the small-UTXO safety warning apply.
+      orch.setSelectedUtxo(u);
+      fixture.detectChanges();
       expect(component.showSmallUtxoWarning()).toBe(true);
     });
 
@@ -911,7 +925,11 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('MATRIX-E6(C): pickerOpenByDefault is true when selected bucket is "failed"', () => {
-      pushRows([{ u: big(50_000), scan: { kind: 'scan-failed', message: 'oops' } }]);
+      const u = big(50_000);
+      pushRows([{ u, scan: { kind: 'scan-failed', message: 'oops' } }]);
+      // scan-failed coins are not auto-picked; the user picks it (expert mode).
+      orch.setSelectedUtxo(u);
+      fixture.detectChanges();
       expect(component.selectedRow()!.bucket).toBe('failed');
       expect(component.pickerOpenByDefault()).toBe(true);
     });
@@ -923,7 +941,11 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     });
 
     it('MATRIX-E8(C): pickerOpenByDefault is false when selected bucket is "unscanned" (probably-safe path)', () => {
-      pushRows([{ u: big(80_000), scan: { kind: 'not-scanned' } }]);
+      const u = big(80_000);
+      pushRows([{ u, scan: { kind: 'not-scanned' } }]);
+      // Unscanned coins are not auto-picked; the user picks it (expert mode).
+      orch.setSelectedUtxo(u);
+      fixture.detectChanges();
       expect(component.selectedRow()!.bucket).toBe('unscanned');
       expect(component.pickerOpenByDefault()).toBe(false);
     });
