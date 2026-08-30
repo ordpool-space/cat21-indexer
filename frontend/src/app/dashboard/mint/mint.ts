@@ -283,6 +283,14 @@ export class Mint {
       const match = recommended
         ? rows.find((r) => r.utxo.txid === recommended.txid && r.utxo.vout === recommended.vout)
         : null;
+      // TEMP-FUNDINGDBG (revert): pin SDK-recommendation vs consumer-adoption —
+      // shows what the SDK recommendFunding returned + the candidates it weighed.
+      // eslint-disable-next-line no-console
+      console.log('[fundingdbg] rec status=' + (rec?.status ?? 'null')
+        + ' recommended=' + (recommended ? `${recommended.value}` : 'null')
+        + ' candidates=' + JSON.stringify((rec?.candidates ?? []).map((c) => ({ v: c.value, b: c.bucket })))
+        + ' rows=' + JSON.stringify(rows.map((r) => r.utxo.value))
+        + ' picked=' + (match ? match.utxo.value : 'null'));
       this.orch.setSelectedUtxo(match ? match.utxo : null);
     });
   }
