@@ -132,6 +132,24 @@ test.beforeAll(async () => {
     viewport: { width: 1280, height: 900 },
   });
 
+  // Default every BROWSER-side ord `/output/<outpoint>` scan to a clean body.
+  // The SDK's safe-auto funding recommendation force-scans the funding UTXO
+  // regardless of size, and the :8999 stub answers /output with a static
+  // `cats:[0]` (correct only for the bid flow's real cat outpoint), which would
+  // falsely flag a plain funding coin as carrying cat #0 and hide
+  // `mint-found-funds`. The asset-scanner test overrides this per page with its
+  // own page.route for a specific cat outpoint (page routes win over context
+  // routes). The node-side cat-verification fetch is not a page request, so it
+  // still reaches the stub's `cats:[0]` directly.
+  await context.route('**/output/*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ inscriptions: [], runes: {}, cats: [] }),
+    });
+  });
+
   let [worker] = context.serviceWorkers();
   if (!worker) {
     worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
