@@ -46,7 +46,16 @@ jobs:
 
       - name: Install frontend deps (brings ordpool-sdk into node_modules)
         working-directory: frontend
-        run: npm ci --legacy-peer-deps
+        # `npm cache clean --force` FIRST: on an ordpool-sdk SHA bump the lockfile
+        # hash changes, so setup-node's `cache: npm` misses its exact key and
+        # restore-keys pulls a PRIOR run's ~/.npm — whose cached ordpool-sdk git
+        # clone is the PRE-bump SHA. `npm ci` then silently builds the frontend
+        # against stale SDK bytes (the mint-fee false-red of 2026-08-31). Cleaning
+        # forces `npm ci` to refetch the lockfile-pinned commit fresh.
+        run: |
+          npm cache clean --force
+          npm ci --legacy-peer-deps
+          node -p "'installed ordpool-sdk gitHead: ' + (require('./node_modules/ordpool-sdk/package.json').gitHead || 'unknown')"
 
       - name: Make SDK consumer-environment scripts executable
         run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
