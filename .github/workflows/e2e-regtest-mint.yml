@@ -68,7 +68,9 @@ jobs:
         run: |
           npm cache clean --force
           npm ci --legacy-peer-deps
-          node -p "'installed ordpool-sdk gitHead: ' + (require('./node_modules/ordpool-sdk/package.json').gitHead || 'unknown')"
+          echo -n "ordpool-sdk dist/ preferredTarget hits (10=fresh, 0=stale): "; grep -c preferredTarget node_modules/ordpool-sdk/dist/fesm2022/ordpool-sdk.mjs || true
+          node -p "JSON.stringify({from:require('./node_modules/ordpool-sdk/package.json')._from,resolved:require('./node_modules/ordpool-sdk/package.json')._resolved})" || true
+          grep -A2 ordpool-sdk package-lock.json | grep resolved | head -1 || true
 
       - name: Make SDK consumer-environment scripts executable
         run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
