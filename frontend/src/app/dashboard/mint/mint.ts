@@ -215,6 +215,14 @@ export class Mint {
   private mintAttempted = signal(false);
   private lastWalletAddress: string | null = null;
 
+  /**
+   * Outpoint (`txid:vout`) of the coin the user DELIBERATELY picked via
+   * `selectUtxo`. Distinguishes a user override (preserved across fee-rate /
+   * recommendation changes) from an auto-pick (which must follow the SDK's
+   * current-rate recommendation). Null when the selection is auto-driven.
+   */
+  private userPickedKey = signal<string | null>(null);
+
   // ---------- Lifecycle ----------
 
   constructor() {
@@ -249,6 +257,7 @@ export class Mint {
       const addr = this.connectedWallet()?.ordinalsAddress ?? null;
       if (this.lastWalletAddress !== null && addr !== this.lastWalletAddress) {
         this.scanner.reset();
+        this.userPickedKey.set(null); // the new wallet's coins aren't the old user's pick
       }
       this.lastWalletAddress = addr;
     });
@@ -270,11 +279,19 @@ export class Mint {
     effect(() => {
       const rows = this.allViableRows();
       const current = this.selectedUtxo();
-      // Keep an explicit user pick that is still viable.
-      const stillThere = current && rows.find(
-        (r) => r.utxo.txid === current.txid && r.utxo.vout === current.vout,
-      );
-      if (stillThere) return;
+      // Keep a DELIBERATE user pick that is still viable — but never a stale
+      // AUTO-pick. The picker auto-seeds a fee rate (fastestFee) before the user
+      // sets one, so the SDK's first recommendation can be the smallest headroom
+      // coin AT THAT SEED RATE — a dust-cliff coin once the user raises the rate.
+      // When the rate (hence recommendation) changes, the auto-pick must FOLLOW
+      // the new recommendation to the headroom coin; keeping the seed-rate pick
+      // over-pays (the 2026-08-31 regtest false-red: seed 5 -> pick 13689 -> type
+      // 100 -> mint at 107.7 sat/vB). Only an explicit `selectUtxo` survives.
+      const userKey = this.userPickedKey();
+      const userStillThere = !!current
+        && userKey === `${current.txid}:${current.vout}`
+        && rows.some((r) => r.utxo.txid === current.txid && r.utxo.vout === current.vout);
+      if (userStillThere) return;
       const rec = this.fundingRecommendation();
       const recommended = rec?.status === 'auto' ? rec.recommended : null;
       // Adopt the recommendation only when it's actually a viable row (covers
@@ -283,14 +300,6 @@ export class Mint {
       const match = recommended
         ? rows.find((r) => r.utxo.txid === recommended.txid && r.utxo.vout === recommended.vout)
         : null;
-      // TEMP-FUNDINGDBG (revert): pin SDK-recommendation vs consumer-adoption —
-      // shows what the SDK recommendFunding returned + the candidates it weighed.
-      // eslint-disable-next-line no-console
-      console.log('[fundingdbg] rec status=' + (rec?.status ?? 'null')
-        + ' recommended=' + (recommended ? `${recommended.value}` : 'null')
-        + ' candidates=' + JSON.stringify((rec?.candidates ?? []).map((c) => ({ v: c.value, b: c.bucket })))
-        + ' rows=' + JSON.stringify(rows.map((r) => r.utxo.value))
-        + ' picked=' + (match ? match.utxo.value : 'null'));
       this.orch.setSelectedUtxo(match ? match.utxo : null);
     });
   }
@@ -298,6 +307,9 @@ export class Mint {
   // ---------- Commands ----------
 
   selectUtxo(row: ViableUtxoRow): void {
+    // Mark this as a DELIBERATE user override so the auto-pick effect preserves
+    // it across fee-rate / recommendation changes.
+    this.userPickedKey.set(`${row.utxo.txid}:${row.utxo.vout}`);
     this.orch.setSelectedUtxo(row.utxo);
   }
 
@@ -324,6 +336,7 @@ export class Mint {
 
   mintAnother(): void {
     this.mintAttempted.set(false);
+    this.userPickedKey.set(null);
     this.orch.reset();
   }
 

@@ -59,18 +59,7 @@ jobs:
         # direct deps in cat21-indexer/frontend/package.json (unlike
         # ordpool where they're transitive peer deps), so no install
         # surface is lost by skipping peer-dep resolution.
-        #
-        # `npm cache clean --force` FIRST: on an ordpool-sdk SHA bump the lockfile
-        # hash changes, so setup-node's `cache: npm` restore-keys pulls a PRIOR
-        # run's ~/.npm — whose cached ordpool-sdk git clone is the PRE-bump SHA —
-        # and `npm ci` builds against stale SDK bytes (the mint-fee false-red of
-        # 2026-08-31). Cleaning forces a fresh refetch of the pinned commit.
-        run: |
-          npm cache clean --force
-          npm ci --legacy-peer-deps
-          echo -n "ordpool-sdk dist/ preferredTarget hits (10=fresh, 0=stale): "; grep -c preferredTarget node_modules/ordpool-sdk/dist/fesm2022/ordpool-sdk.mjs || true
-          node -p "JSON.stringify({from:require('./node_modules/ordpool-sdk/package.json')._from,resolved:require('./node_modules/ordpool-sdk/package.json')._resolved})" || true
-          grep -A2 ordpool-sdk package-lock.json | grep resolved | head -1 || true
+        run: npm ci --legacy-peer-deps
 
       - name: Make SDK consumer-environment scripts executable
         run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh

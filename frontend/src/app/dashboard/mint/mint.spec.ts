@@ -259,6 +259,16 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     fixture.detectChanges();
   }
 
+  /**
+   * Simulate a DELIBERATE user pick via the real `selectUtxo` path (which marks
+   * it as a user override so the auto-pick effect preserves it across
+   * recommendation changes). `selectUtxo` only reads `.utxo`; the other row
+   * fields are structural placeholders.
+   */
+  function userPick(u: TxnOutput): void {
+    component.selectUtxo({ utxo: u, simulation: simulation(), scan: { kind: 'scanned-clean' }, bucket: 'clean' });
+  }
+
   beforeEach(async () => {
     await configure();
   });
@@ -433,7 +443,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
         { u: big(80_000), scan: { kind: 'scanned-clean' } },
         { u: smaller, scan: { kind: 'scanned-clean' } },
       ]);
-      orch.setSelectedUtxo(smaller);
+      userPick(smaller);
       pushRows([
         { u: big(80_000), scan: { kind: 'scanned-clean' } },
         { u: smaller, scan: { kind: 'scanned-clean' } },
@@ -447,7 +457,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
         { u: big(80_000), scan: { kind: 'scanned-clean' } },
         { u: gone, scan: { kind: 'scanned-clean' } },
       ]);
-      orch.setSelectedUtxo(gone);
+      userPick(gone);
       // Re-emit WITHOUT the gone one; pushRows now recommends the clean 80k.
       pushRows([{ u: big(80_000), scan: { kind: 'scanned-clean' } }]);
       expect(orch.selectedUtxo()!.value).toBe(80_000);
@@ -459,6 +469,29 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       orch.fundingRecommendationSubject.next({ status: 'insufficient', recommended: null, candidates: [] });
       fixture.detectChanges();
       expect(orch.selectedUtxo()).toBeNull();
+    });
+
+    it('E9: fee-rate change RE-ADOPTS the recommendation, never keeps a stale AUTO-pick (the 2026-08-31 regtest false-red)', () => {
+      // The regtest picker auto-seeds fastestFee=5, then the user types 100. At the
+      // seed rate the SDK recommends the smallest headroom coin (13689 — a dust-cliff
+      // coin at rate 100); at rate 100 it recommends a real headroom coin (99301).
+      // The component must follow the rate-100 recommendation, not keep the stale
+      // rate-5 AUTO-pick (which mints at 107.7 sat/vB for a typed 100). An explicit
+      // user pick still survives (E6); an auto-pick does not.
+      const c100k = big(100_000), c99301 = big(99_301), c13689 = big(13_689);
+      orch.feeRate.set(5); // auto-seed
+      // 13689 listed first so pushRows' first-clean recommendation is the SDK's
+      // rate-5 pick (the smallest headroom coin).
+      pushRows([
+        { u: c13689, scan: { kind: 'scanned-clean' } },
+        { u: c99301, scan: { kind: 'scanned-clean' } },
+        { u: c100k, scan: { kind: 'scanned-clean' } },
+      ]);
+      expect(orch.selectedUtxo()!.value).toBe(13_689);
+      // user types 100 -> SDK re-recommends the headroom coin
+      orch.feeRate.set(100);
+      recommend('auto', c99301);
+      expect(orch.selectedUtxo()!.value).toBe(99_301);
     });
   });
 
@@ -520,7 +553,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       // fundingRecommendation$); every non-clean kind is left for a deliberate
       // pick, so force-select to inspect the bucket on a selected row.
       if (kind !== 'scanned-clean') {
-        orch.setSelectedUtxo(u);
+        userPick(u);
         fixture.detectChanges();
       }
       expect(component.selectedRow()!.bucket).toBe(bucket);
@@ -529,7 +562,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     it('G2: scanned-with-assets → bucket "assets"', () => {
       pushRows([{ u, scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['x'], runes: null, catIds: [], catSat: null, rareSat: null } } }]);
       // assets is never auto-picked; the user has to pick it themselves
-      orch.setSelectedUtxo(u);
+      userPick(u);
       fixture.detectChanges();
       expect(component.selectedRow()!.bucket).toBe('assets');
     });
@@ -610,7 +643,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       pushRows([{ u, scan: { kind: 'not-scanned' } }]);
       // Unscanned coins are no longer auto-picked; the user picks it (expert
       // mode) and only then does the small-UTXO safety warning apply.
-      orch.setSelectedUtxo(u);
+      userPick(u);
       fixture.detectChanges();
       expect(component.showSmallUtxoWarning()).toBe(true);
     });
@@ -631,7 +664,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       }));
       const u = utxo({ value: 5_000 });
       pushRows([{ u, scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } }]);
-      orch.setSelectedUtxo(u);
+      userPick(u);
       fixture.detectChanges();
       expect(component.showSmallUtxoWarning()).toBe(false);
     });
@@ -948,7 +981,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
         content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null },
       };
       pushRows([{ u: u1, scan: assetsScan }]);
-      orch.setSelectedUtxo(u1);
+      userPick(u1);
       fixture.detectChanges();
       expect(component.selectedRow()!.bucket).toBe('assets');
       expect(component.pickerOpenByDefault()).toBe(true);
@@ -958,7 +991,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       const u = big(50_000);
       pushRows([{ u, scan: { kind: 'scan-failed', message: 'oops' } }]);
       // scan-failed coins are not auto-picked; the user picks it (expert mode).
-      orch.setSelectedUtxo(u);
+      userPick(u);
       fixture.detectChanges();
       expect(component.selectedRow()!.bucket).toBe('failed');
       expect(component.pickerOpenByDefault()).toBe(true);
@@ -974,7 +1007,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       const u = big(80_000);
       pushRows([{ u, scan: { kind: 'not-scanned' } }]);
       // Unscanned coins are not auto-picked; the user picks it (expert mode).
-      orch.setSelectedUtxo(u);
+      userPick(u);
       fixture.detectChanges();
       expect(component.selectedRow()!.bucket).toBe('unscanned');
       expect(component.pickerOpenByDefault()).toBe(false);

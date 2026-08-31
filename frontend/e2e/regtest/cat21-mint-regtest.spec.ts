@@ -804,13 +804,6 @@ async function mintAtRateAndVerify(opts: {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const page = await context.newPage();
-  // TEMP-FUNDINGDBG (revert): surface the funding-pool + scan verdicts the
-  // orchestrator's selectFunding sees, to settle 0-conf-filter vs classify-fail.
-  page.on('console', (msg) => {
-    const t = msg.text();
-    // eslint-disable-next-line no-console
-    if (t.includes('[fundingdbg]')) console.log(`[${opts.scenarioLabel}] ${t}`);
-  });
   if (opts.mockFeesAsHigh) {
     await page.route('**/api/v1/fees/recommended', async (route) => {
       await route.fulfill({
