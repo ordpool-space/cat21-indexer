@@ -64,7 +64,19 @@ jobs:
       - name: Make SDK consumer-environment scripts executable
         run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
 
+      # OUR electrs. consumer-environment.yml builds the electrs service
+      # from the ordpool-electrs fork (not the upstream mempool/electrs
+      # image); ELECTRS_SRC points its build context at this checkout.
+      - name: Checkout ordpool-electrs (for the electrs container)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/ordpool-electrs
+          ref: ordpool
+          path: ordpool-electrs
+
       - name: Bring up consumer-environment (bitcoind + electrs + mariadb)
+        env:
+          ELECTRS_SRC: ${{ github.workspace }}/ordpool-electrs
         run: |
           frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh \
             > stack.json
