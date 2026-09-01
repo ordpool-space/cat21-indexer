@@ -900,12 +900,13 @@ async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress
       }),
     });
   });
-  // ord's owner endpoint is a bare `/cat/<N>`, which is also a SUFFIX of
-  // the indexer's `/api/cat/<N>` above. The negative lookbehind
-  // `(?<!api)` keeps this pattern from swallowing that /api/cat/<N> call
-  // (which the first route owns) — it only matches a standalone
-  // `/cat/<N>`, host-agnostic.
-  await page.route(new RegExp(`(?<!api)/cat/${catNumber}(\\?|$)`), (route) => {
+  // ord's owner endpoint is a bare `/cat/<N>` on the ORD host. Anchor to that
+  // host (prod ord.cat21.space, or localhost:8999 when the build seds it) —
+  // NOT a bare host-agnostic `/cat/<N>`, because the frontend's own SPA route
+  // is also `<frontend-host>/cat/<N>`, so a host-agnostic pattern intercepts
+  // the page navigation itself and the cat page never renders. (This still
+  // excludes the indexer's `/api/cat/<N>`, owned by the first route.)
+  await page.route(new RegExp(`(ord\\.cat21\\.space|localhost:8999)/cat/${catNumber}(\\?|$)`), (route) => {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
