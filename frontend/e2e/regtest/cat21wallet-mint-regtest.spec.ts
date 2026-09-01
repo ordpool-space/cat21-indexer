@@ -864,16 +864,23 @@ function mockCatDto(catNumber: number): unknown {
 }
 
 /**
- * Route interceptors for the cat detail flow. Mocks:
- *   - GET backend2.cat21.space/api/cat/:N   → synthesised cat #N owned by `owner`
- *   - GET backend2.cat21.space/api/status   → totalCats large enough that /cat/N is "synced"
- *   - GET ord.cat21.space/cat/:N            → { address: owner }
+ * Route interceptors for the cat detail flow. Matched on PATH only
+ * (HOST-AGNOSTIC) so the mock fires whichever host the build baked
+ * into these calls — the cat-detail flow reads getCat / getStatus via
+ * the OpenAPI client (`environment.api`) and the owner via
+ * `environment.ordExplorer`, both of which the production `ng build`
+ * pins to prod hosts (backend2.cat21.space / ord.cat21.space) that the
+ * app.config.ts `sed` never touches. Path-only matching intercepts
+ * them regardless, so no cat-api call ever escapes to production:
+ *   - GET /api/cat/:N   → synthesised cat #N owned by `owner`
+ *   - GET /api/status   → totalCats large enough that /cat/N is "synced"
+ *   - GET /cat/:N        → { address: owner }  (ord owner lookup)
  * Everything else is left to hit its normal target (which in e2e is
  * either the fees-stub on :8999 or an unbound localhost port that
  * naturally fails — the tests don't depend on those calls).
  */
 async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress: string): Promise<void> {
-  await page.route(new RegExp(`^https://backend2\\.cat21\\.space/api/cat/${catNumber}(\\?|$)`), (route) => {
+  await page.route(new RegExp(`/api/cat/${catNumber}(\\?|$)`), (route) => {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -881,7 +888,7 @@ async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress
       body: JSON.stringify(mockCatDto(catNumber)),
     });
   });
-  await page.route(/^https:\/\/backend2\.cat21\.space\/api\/status(\?|$)/, (route) => {
+  await page.route(/\/api\/status(\?|$)/, (route) => {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -893,7 +900,12 @@ async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress
       }),
     });
   });
-  await page.route(new RegExp(`^https://ord\\.cat21\\.space/cat/${catNumber}(\\?|$)`), (route) => {
+  // ord's owner endpoint is a bare `/cat/<N>`, which is also a SUFFIX of
+  // the indexer's `/api/cat/<N>` above. The negative lookbehind
+  // `(?<!api)` keeps this pattern from swallowing that /api/cat/<N> call
+  // (which the first route owns) — it only matches a standalone
+  // `/cat/<N>`, host-agnostic.
+  await page.route(new RegExp(`(?<!api)/cat/${catNumber}(\\?|$)`), (route) => {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -1515,6 +1527,29 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   const sellerCatValue = Math.round(catOut.value * 1e8);
   expect(sellerCatValue).toBe(546);
 
+  // ─── Step 2b: Register the REAL cat number for THIS mint outpoint on
+  //             the ord stub, so this test's /output read AND the
+  //             backend's getCatsAtOutput both see a DISTINCT cat number
+  //             instead of the stub's constant [0] fallback. Without it
+  //             the cat-integrity check is circular: test and backend
+  //             read the same constant, so a wrong-outpoint / bad-parse
+  //             getCatsAtOutput regression still "agrees". 4242 is an
+  //             arbitrary non-zero regtest sentinel; vout 0 = the fresh
+  //             cat output. ───
+  const REGISTERED_CAT_NUMBER = 4242;
+  const ordApiUrl = process.env.ORD_API_URL ?? 'http://localhost:8999';
+  const registerRes = await fetch(`${ordApiUrl}/admin/output`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      outpoint: `${freshMintTxid}:0`,
+      cats: [REGISTERED_CAT_NUMBER],
+      value: 546,
+    }),
+  });
+  expect(registerRes.ok, `stub /admin/output register failed: ${registerRes.status}`).toBe(true);
+  console.log(`[bid-mkt] registered cat #${REGISTERED_CAT_NUMBER} at ${freshMintTxid}:0 on the ord stub`);
+
   // ─── Step 3: Synthesize buyer via bitcoin-cli's ordpool-e2e wallet
   //             (separate P2WPKH/P2TR addresses = separate roles). ───
   const BID_PRICE_SATS = 25000;
@@ -1592,22 +1627,28 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   //
   // On regtest CI, the SDK's consumer-environment doesn't ship a real
   // ord instance — the workflow serves a `/output/*` stub via
-  // `fees-electrs-stub.mjs` that returns a fixed `{cats: [0]}` body
-  // for any outpoint. The backend's ord client is pointed at the same
-  // stub via ORD_API_URL, so both this test and the backend's own
-  // validator agree on the bundle. For local dev / a future full-ord
-  // CI variant, ORD_API_URL just needs to point at a real ord — the
-  // test flow is identical.
-  const ordApiUrl = process.env.ORD_API_URL ?? 'http://localhost:8999';
+  // `fees-electrs-stub.mjs`. Step 2b registered the real cat number for
+  // THIS outpoint via /admin/output, so the stub answers with it here
+  // (unregistered outpoints keep the [0] fallback). The backend's ord
+  // client is pointed at the same stub via ORD_API_URL and reads the
+  // same override, so both this test and the backend's validator agree
+  // on the bundle — now on a DISTINCT number, not a shared constant.
+  // For local dev / a future full-ord CI variant, ORD_API_URL just
+  // needs to point at a real ord — the test flow is identical.
   const ordOutputRes = await fetch(`${ordApiUrl}/output/${freshMintTxid}:0`, {
     headers: { Accept: 'application/json' },
   });
   expect(ordOutputRes.ok, `ord /output must respond OK, got ${ordOutputRes.status}`).toBe(true);
   const ordOutput = await ordOutputRes.json() as { cats: number[] };
   expect(Array.isArray(ordOutput.cats)).toBe(true);
-  expect(ordOutput.cats.length).toBeGreaterThanOrEqual(1);
+  // The stub returns the cat we registered for THIS outpoint. If
+  // getCatsAtOutput (here OR the backend validator at POST) regressed to
+  // a wrong outpoint / bad parse, the stub falls back to [0] and this
+  // equality — plus the backend's cats-bundle check — fails.
+  expect(ordOutput.cats).toEqual([REGISTERED_CAT_NUMBER]);
   const cats = [...new Set(ordOutput.cats)].sort((a, b) => a - b);
   const headlineCatNumber = cats[0];
+  expect(headlineCatNumber).toBe(REGISTERED_CAT_NUMBER);
   console.log(`[bid-mkt] cats on UTXO = [${cats.join(',')}], headline = #${headlineCatNumber}`);
 
   // ─── Step 7: POST /api/v1/bids ───

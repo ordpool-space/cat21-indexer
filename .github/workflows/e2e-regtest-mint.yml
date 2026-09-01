@@ -197,10 +197,10 @@ jobs:
         # mismatch) and the spec times out at 60s on waitForApprovalPopup.
         run: |
           sed -i \
-            -e "s|'https://api\.ordpool\.space'|'http://localhost:8999'|g" \
-            -e "s|'https://backend2\.cat21\.space'|'http://localhost:9998'|g" \
-            -e "s|'https://ord\.ordpool\.space'|'http://localhost:8999'|g" \
-            -e "s|'https://ord\.cat21\.space'|'http://localhost:8999'|g" \
+            -e "s|https://api\.ordpool\.space|http://localhost:8999|g" \
+            -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
+            -e "s|https://ord\.ordpool\.space|http://localhost:8999|g" \
+            -e "s|https://ord\.cat21\.space|http://localhost:8999|g" \
             -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
             src/app/app.config.ts
           echo "--- patched cat21Config + network ---"
