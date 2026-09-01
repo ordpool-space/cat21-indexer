@@ -33,3 +33,6 @@ Thumbs.db
 
 frontend/playwright-report*/
 frontend/test-results/
+# CI-generated: SDK e2e helpers copied out of node_modules/ordpool-sdk for the
+# regtest specs (Playwright / Node 24 won't transpile .ts under node_modules).
+frontend/e2e/regtest/sdk-lib/

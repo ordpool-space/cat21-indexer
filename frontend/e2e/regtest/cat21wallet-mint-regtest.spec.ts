@@ -13,6 +13,7 @@ import {
   waitForTxConfirmed,
 } from './sdk-lib/regtest-helpers';
 import { waitForApprovalPopup } from './sdk-lib/approval-popup';
+import { onboardCat21Wallet } from './sdk-lib/onboard-cat21wallet';
 import { installContextErrorGuard } from './lib/browser-error-guard';
 
 /**
@@ -79,9 +80,6 @@ const MINT_PATH = '/dashboard/mint';
  *      end of a test can't be allowed to blow up and hide the actual
  *      assertion outcome.
  */
-
-const TEST_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-const TEST_PASSWORD = 'correct-horse-battery-staple-Tr0ub4dor-9876';
 
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
 const EXT_PATH = process.env.CAT21WALLET_EXT_PATH ?? path.join(SDK_E2E_DIR, 'extensions/cat21wallet');
@@ -263,31 +261,6 @@ async function clickApprovalButton(popup: Page): Promise<void> {
   }
 }
 
-async function onboardCat21Wallet(page: Page): Promise<void> {
-  await page.goto(`chrome-extension://${extensionId}/index.html`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('sign-in-link')).toBeVisible({ timeout: 15_000 });
-  await page.getByTestId('sign-in-link').click();
-
-  const inputs = page.locator('input[type="text"], input[type="password"]');
-  await expect(inputs.first()).toBeVisible({ timeout: 15_000 });
-  const words = TEST_MNEMONIC.split(' ');
-  for (let i = 0; i < 12; i++) {
-    await inputs.nth(i).fill(words[i]);
-  }
-  await page.getByRole('button', { name: /continue|sign in|restore|confirm/i }).first().click();
-
-  const pwInput = page.getByTestId('set-or-enter-password-input');
-  await expect(pwInput).toBeVisible({ timeout: 15_000 });
-  await pwInput.click();
-  await pwInput.pressSequentially(TEST_PASSWORD, { delay: 15 });
-  await page.getByTestId('set-password-btn').click();
-
-  await page.waitForFunction(() => {
-    const t = (document.body.innerText || '').toLowerCase();
-    return t.includes('send') || t.includes('receive') || t.includes('balance') || t.includes('bitcoin');
-  }, undefined, { timeout: 30_000, polling: 250 });
-}
-
 test.beforeAll(async () => {
   if (!fs.existsSync(path.join(EXT_PATH, 'manifest.json'))) {
     throw new Error(`CAT-21 wallet extension not unpacked at ${EXT_PATH}.`);
@@ -344,7 +317,7 @@ test.beforeAll(async () => {
   extensionId = worker.url().split('/')[2];
 
   const primer = await context.newPage();
-  await onboardCat21Wallet(primer);
+  await onboardCat21Wallet(primer, extensionId);
   await shot(primer, '00-onboarded');
   await primer.close();
 

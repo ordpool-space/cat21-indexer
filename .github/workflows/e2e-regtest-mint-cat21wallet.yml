@@ -72,7 +72,7 @@ jobs:
       - name: Start fees + electrs HTTP shim on :8999
         run: |
           ELECTRS_URL=http://localhost:3000 PORT=8999 \
-            nohup node e2e/fees-electrs-stub.mjs > fees-stub.log 2>&1 &
+            nohup node frontend/node_modules/ordpool-sdk/e2e/regtest/fees-electrs-stub.mjs > fees-stub.log 2>&1 &
           echo $! > fees-stub.pid
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:8999/healthz >/dev/null 2>&1; then
@@ -262,7 +262,7 @@ jobs:
         run: |
           mkdir -p e2e/regtest/sdk-lib
           cp node_modules/ordpool-sdk/e2e/regtest/regtest-helpers.ts e2e/regtest/sdk-lib/
-          cp node_modules/ordpool-sdk/e2e/playwright/approval-popup.ts e2e/regtest/sdk-lib/
+          cp node_modules/ordpool-sdk/e2e/playwright/*.ts e2e/regtest/sdk-lib/
 
       - name: Run the cat21-wallet regtest spec
         working-directory: frontend
