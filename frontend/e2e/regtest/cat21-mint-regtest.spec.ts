@@ -3,9 +3,6 @@ import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
-// The SDK ships these helpers as raw .ts under e2e/. Node 24's built-in
-// type-stripping refuses to compile .ts under node_modules, so the
-// workflow copies them out to ./sdk-lib/ before the spec runs.
 import {
   getUtxos,
   waitForUtxoAt,
@@ -14,8 +11,8 @@ import {
   mineBlocks,
   getTx,
   waitForTxConfirmed,
-} from './sdk-lib/regtest-helpers';
-import { waitForApprovalPopup } from './sdk-lib/approval-popup';
+  waitForApprovalPopup,
+} from 'ordpool-sdk/e2e';
 import { installBrowserErrorGuard } from './console-guard';
 
 /**

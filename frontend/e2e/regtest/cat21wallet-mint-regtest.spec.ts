@@ -11,9 +11,9 @@ import {
   mineBlocks,
   getTx,
   waitForTxConfirmed,
-} from './sdk-lib/regtest-helpers';
-import { waitForApprovalPopup } from './sdk-lib/approval-popup';
-import { onboardCat21Wallet } from './sdk-lib/onboard-cat21wallet';
+  waitForApprovalPopup,
+  onboardCat21Wallet,
+} from 'ordpool-sdk/e2e';
 import { installContextErrorGuard } from './lib/browser-error-guard';
 
 /**
