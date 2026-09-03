@@ -1,7 +1,9 @@
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
-import { WalletService, WatchOnlyDeriveError, cat21Config } from 'ordpool-sdk';
+import { WalletService, WatchOnlyDeriveError } from 'ordpool-sdk';
+
+import { cat21Config } from './sdk-tokens';
 
 import { WatchOnlyConnectService } from './watch-only-connect.service';
 

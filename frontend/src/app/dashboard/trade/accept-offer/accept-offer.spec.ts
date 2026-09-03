@@ -10,8 +10,9 @@ import {
   CatOutpoint,
   WalletInfo,
   WalletService,
-  cat21Config,
 } from 'ordpool-sdk';
+
+import { cat21Config } from '../../../shared/sdk-tokens';
 
 import { AcceptOffer } from './accept-offer';
 import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';

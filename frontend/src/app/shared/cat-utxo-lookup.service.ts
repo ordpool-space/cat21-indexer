@@ -2,7 +2,9 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { catchError, forkJoin, map, Observable, of, switchMap } from 'rxjs';
 import { hex } from '@scure/base';
-import { BuyOfferTargetCat, Cat21Holding, cat21Config } from 'ordpool-sdk';
+import { BuyOfferTargetCat, Cat21Holding } from 'ordpool-sdk';
+
+import { cat21Config } from './sdk-tokens';
 
 import { ApiService } from './cat21-api/api/api.service';
 import { esploraApiBase } from './esplora-base';

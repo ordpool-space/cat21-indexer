@@ -10,11 +10,11 @@ import {
   TransferSnapshot,
   TxnOutput,
   WalletService,
-  bitcoinNetwork,
-  cat21Config,
   parseTransferQueryParams,
   toScureNetwork,
 } from 'ordpool-sdk';
+
+import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';

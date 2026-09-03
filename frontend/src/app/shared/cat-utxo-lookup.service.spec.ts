@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of, throwError } from 'rxjs';
 import { hex } from '@scure/base';
-import { cat21Config } from 'ordpool-sdk';
+import { cat21Config } from './sdk-tokens';
 
 import { ApiService } from './cat21-api/api/api.service';
 import { CatUtxoLookupService } from './cat-utxo-lookup.service';

@@ -1,6 +1,8 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { WalletInfo, WalletService, WatchOnlyDeriveError, WatchOnlyScriptType, cat21Config, makeWatchOnlyProbe } from 'ordpool-sdk';
+import { WalletInfo, WalletService, WatchOnlyDeriveError, WatchOnlyScriptType, makeWatchOnlyProbe } from 'ordpool-sdk';
+
+import { cat21Config } from './sdk-tokens';
 
 import { esploraApiBase } from './esplora-base';
 

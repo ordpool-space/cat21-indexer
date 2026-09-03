@@ -11,13 +11,13 @@ import {
   CreateOfferSnapshot,
   WalletCapability,
   WalletService,
-  bitcoinNetwork,
   capabilityOf,
-  cat21Config,
   parseBuyOfferQueryParams,
   toPaymentAddress,
   TxnOutput,
 } from 'ordpool-sdk';
+
+import { bitcoinNetwork, cat21Config } from '../../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../../shared/cat21-orchestrator-ports';
 import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';

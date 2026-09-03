@@ -10,12 +10,13 @@ import {
   Cat21OfferRejectionReason,
   Cat21Service,
   WalletCapability,
-  bitcoinNetwork,
   capabilityOf,
   parseAcceptOfferQueryParams,
   toPaymentAddress,
   WalletService,
 } from 'ordpool-sdk';
+
+import { bitcoinNetwork } from '../../../shared/sdk-tokens';
 
 import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';
 import { PsbtExportBridgeService } from '../../../shared/psbt-export-bridge/psbt-export-bridge.service';

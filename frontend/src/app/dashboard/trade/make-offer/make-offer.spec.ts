@@ -14,9 +14,9 @@ import {
   UtxoScanState,
   WalletInfo,
   WalletService,
-  cat21Config,
 } from 'ordpool-sdk';
 
+import { cat21Config } from '../../../shared/sdk-tokens';
 import { MakeOffer } from './make-offer';
 import { Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';

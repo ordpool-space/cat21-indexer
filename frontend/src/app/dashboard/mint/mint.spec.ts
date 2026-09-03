@@ -21,8 +21,9 @@ import {
   UtxoScanState,
   UtxoSimulationRow,
   WalletService,
-  cat21Config,
 } from 'ordpool-sdk';
+
+import { cat21Config } from '../../shared/sdk-tokens';
 
 import { Mint } from './mint';
 import { makeWallet, WalletServiceStub } from '../../testing/wallet.fixtures';

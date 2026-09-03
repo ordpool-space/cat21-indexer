@@ -17,12 +17,12 @@ import {
   UtxoScanState,
   UtxoSimulationRow,
   WalletService,
-  bitcoinNetwork,
   bucketOf,
   calculateRecommendedFundingSats,
-  cat21Config,
   runeNamesFromContent,
 } from 'ordpool-sdk';
+
+import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';

@@ -7,12 +7,13 @@ import {
   provideEnvironmentInitializer,
 } from '@angular/core';
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
-import { Network, bitcoinNetwork, cat21Config, storage } from 'ordpool-sdk';
+import { Cat21Service, Network, UtxoContentScanner, WalletService } from 'ordpool-sdk';
 
 import { environment } from '../environments/environment';
 import { routes } from './app.routes';
 import { BrowserStorageAdapter } from './shared/browser-storage.adapter';
 import { ApiModule, Configuration } from './shared/cat21-api';
+import { bitcoinNetwork, cat21Config } from './shared/sdk-tokens';
 import { SmartScrollService } from './shared/smart-scroll.service';
 
 export const appConfig: ApplicationConfig = {
@@ -29,7 +30,6 @@ export const appConfig: ApplicationConfig = {
     ),
     provideEnvironmentInitializer(() => inject(SmartScrollService)),
     { provide: bitcoinNetwork, useValue: Network.Mainnet },
-    { provide: storage, useExisting: BrowserStorageAdapter },
     // cat21Config feeds the SDK's mint pipeline. All four endpoints are
     // ours (no third-party deps):
     //  - mempoolApiUrl   → api.ordpool.space — electrs (UTXOs, broadcast,
@@ -49,5 +49,11 @@ export const appConfig: ApplicationConfig = {
         cat21OrdApiUrl: 'https://ord.cat21.space',
       },
     },
+    // The SDK's stateful classes are plain (no @Injectable) — cat21.space
+    // registers them here as root singletons, constructing each with the
+    // tokens above. Call sites keep injecting the class as before.
+    { provide: Cat21Service, useFactory: () => new Cat21Service(inject(cat21Config), inject(bitcoinNetwork)) },
+    { provide: UtxoContentScanner, useFactory: () => new UtxoContentScanner(inject(cat21Config)) },
+    { provide: WalletService, useFactory: () => new WalletService({ storage: inject(BrowserStorageAdapter), network: inject(bitcoinNetwork) }) },
   ],
 };
