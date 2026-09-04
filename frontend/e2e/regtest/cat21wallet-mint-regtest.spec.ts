@@ -869,10 +869,10 @@ function mockCatDto(catNumber: number): unknown {
  * (HOST-AGNOSTIC) so the mock fires whichever host the build baked
  * into these calls — the cat-detail flow reads getCat / getStatus via
  * the OpenAPI client (`environment.api`) and the owner via
- * `environment.ordExplorer`, both of which the production `ng build`
- * pins to prod hosts (backend2.cat21.space / ord.cat21.space) that the
- * app.config.ts `sed` never touches. Path-only matching intercepts
- * them regardless, so no cat-api call ever escapes to production:
+ * `environment.ordExplorer`. The workflow seds environment.prod.ts to
+ * local hosts (backend2 → :9998, ordExplorer → the real cat21-ord on
+ * :8080), and path-only matching intercepts the cat-api calls
+ * regardless of host, so nothing escapes to production:
  *   - GET /api/cat/:N   → synthesised cat #N owned by `owner`
  *   - GET /api/status   → totalCats large enough that /cat/N is "synced"
  *   - GET /cat/:N        → { address: owner }  (ord owner lookup)
@@ -907,7 +907,7 @@ async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress
   // is also `<frontend-host>/cat/<N>`, so a host-agnostic pattern intercepts
   // the page navigation itself and the cat page never renders. (This still
   // excludes the indexer's `/api/cat/<N>`, owned by the first route.)
-  await page.route(new RegExp(`(ord\\.cat21\\.space|localhost:8999)/cat/${catNumber}(\\?|$)`), (route) => {
+  await page.route(new RegExp(`(ord\\.cat21\\.space|localhost:8999|localhost:8080)/cat/${catNumber}(\\?|$)`), (route) => {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
