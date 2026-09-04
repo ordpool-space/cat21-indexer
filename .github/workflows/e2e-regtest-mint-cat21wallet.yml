@@ -256,17 +256,21 @@ jobs:
 
       - name: Serve the static bundle on :4221
         run: |
+          # Pre-fetch in the foreground so the background start below is
+          # instant: a cold `npx -y` download can exceed the readiness
+          # wait, leaving an empty serve.log and a refused :4221.
+          npx -y serve@14 --version
           nohup npx -y serve@14 -s "$BROWSER_DIR" -l 4221 --no-clipboard > serve.log 2>&1 &
           echo $! > serve.pid
 
       - name: Wait for static server ready on :4221
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4221/ 2>/dev/null || echo 000)
             if [ "$code" = "200" ]; then
               echo "static server up"; break
             fi
-            if [ "$i" = "30" ]; then
+            if [ "$i" = "60" ]; then
               echo "static server never came up (last HTTP $code)"; tail -200 serve.log || true; exit 1
             fi
             sleep 1
