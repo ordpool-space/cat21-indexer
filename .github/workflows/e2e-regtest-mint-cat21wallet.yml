@@ -256,11 +256,25 @@ jobs:
 
       - name: Serve the static bundle on :4221
         run: |
-          # Pre-fetch in the foreground so the background start below is
-          # instant: a cold `npx -y` download can exceed the readiness
-          # wait, leaving an empty serve.log and a refused :4221.
-          npx -y serve@14 --version
-          nohup npx -y serve@14 -s "$BROWSER_DIR" -l 4221 --no-clipboard > serve.log 2>&1 &
+          # Dependency-free SPA server (runner-preinstalled node, zero
+          # network): npx-at-runtime proved pathological here — a cold
+          # `npx -y serve@14 --version` took ~4 minutes and the nohup'd
+          # npx still left :4221 refused past the readiness window.
+          cat > spa-server.cjs <<'EOF'
+          const http = require('http'), fs = require('fs'), path = require('path');
+          const root = path.resolve(process.argv[2]);
+          const port = Number(process.argv[3] ?? 4221);
+          const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', png: 'image/png', svg: 'image/svg+xml', ico: 'image/x-icon', woff2: 'font/woff2', woff: 'font/woff', txt: 'text/plain', map: 'application/json' };
+          http.createServer((req, res) => {
+            let p = path.normalize(decodeURIComponent((req.url ?? '/').split('?')[0]));
+            let f = path.join(root, p);
+            if (!f.startsWith(root) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(root, 'index.html');
+            const ext = f.split('.').pop() ?? '';
+            res.writeHead(200, { 'content-type': types[ext] ?? 'application/octet-stream' });
+            fs.createReadStream(f).pipe(res);
+          }).listen(port, () => console.log(`spa-server on :${port} root=${root}`));
+          EOF
+          nohup node spa-server.cjs "$BROWSER_DIR" 4221 > serve.log 2>&1 &
           echo $! > serve.pid
 
       - name: Wait for static server ready on :4221
