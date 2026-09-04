@@ -12,6 +12,7 @@ import {
   getTx,
   waitForTxConfirmed,
   waitForApprovalPopup,
+  waitForOrdSync,
   onboardCat21Wallet,
 } from 'ordpool-sdk/e2e';
 import { installContextErrorGuard } from './lib/browser-error-guard';
@@ -1479,6 +1480,147 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   expect(Math.round(transferRaw.vout[0].value * 1e8)).toBe(546);
   expect(transferRaw.vout[0].scriptPubKey.address).toBe(recipientAddress);
   console.log(`[transfer-flow] cat moved from ${catAddressBefore} → ${recipientAddress}, 546 sats intact`);
+
+  await page.close();
+});
+
+
+// ============================================================
+// PICKER-driven transfer round-trip: the ord-driven holdings
+// picker, proven against the REAL cat21-ord index.
+//
+// The URL-override test above exercises the ?catTxid deep-link (a
+// shipping feature). This test exercises the OTHER path — the one
+// every ordinary user takes: no URL params, the picker fetches the
+// connected wallet's cats from cat21-ord (/address → per-cat
+// /inscription satpoint expansion via CatUtxoLookupService.
+// getMyHoldings) and the user selects their cat from the dropdown.
+// Requires cat21-ord in the e2e stack (bootstrap --with-cat21-ord)
+// and environment.ordExplorer patched to the local instance.
+// ============================================================
+
+test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdings picker lists it → transfer via picker selection', { timeout: 300_000 }, async () => {
+  if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
+
+  // ─── Mint a fresh cat + let cat21-ord index it ───
+  const fresh = await cat21walletMintAtRate({
+    rate: 5,
+    scenarioLabel: 'picker-transfer-mint',
+  });
+  const freshTxid = fresh.broadcastTxid;
+  const freshInscriptionId = `${freshTxid}i0`;
+  console.log(`[picker-transfer] minted fresh cat, txid = ${freshTxid}`);
+  const tip = mineBlocks(1);
+  await waitForElectrsSync(tip);
+  await waitForOrdSync(tip);
+
+  const recipientAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
+  expect(recipientAddress).toMatch(/^bcrt1p/);
+
+  // ─── Navigate WITHOUT any URL override — the picker must do the work ───
+  const page = await context.newPage();
+  page.on('console', (msg) => {
+    const text = msg.text();
+    if (text.includes('cat21-transfer-sim') || msg.type() === 'error') {
+      console.log(`[browser-${msg.type()}] ${text}`);
+    }
+  });
+  const knownBeforeNavigate = new Set(context.pages());
+  await page.goto(`${FRONTEND_URL}/dashboard/transfer`, { waitUntil: 'domcontentloaded' });
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeNavigate,
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+  await shot(page, 'picker-transfer-01-loaded');
+
+  // ─── The REAL picker: cat21-ord listed the wallet's cats ───
+  const picker = page.getByTestId('transfer-cat-picker');
+  await expect(picker).toBeVisible({ timeout: 60_000 });
+  // The freshly minted cat appears as an option keyed by its
+  // inscription id — value fetched from cat21-ord, not from any URL.
+  await expect(picker.locator(`option[value="${freshInscriptionId}"]`)).toHaveCount(1, { timeout: 60_000 });
+  await picker.selectOption(freshInscriptionId);
+
+  // Satpoint expansion proof: the detail line shows the cat's CURRENT
+  // outpoint as resolved via cat21-ord's /inscription satpoint.
+  const detail = page.getByTestId('transfer-cat-detail');
+  await expect(detail).toBeVisible({ timeout: 30_000 });
+  await expect(detail).toContainText(`${freshTxid}:0`);
+  await shot(page, 'picker-transfer-02-picked');
+
+  // ─── Recipient + fee ───
+  const recipientInput = page.getByTestId('transfer-recipient-input');
+  await expect(recipientInput).toBeVisible({ timeout: 30_000 });
+  await recipientInput.fill(recipientAddress);
+  await expect(page.getByTestId('transfer-recipient-invalid')).toHaveCount(0);
+  const manualInput = page.getByTestId('fees-picker-manual-input');
+  await manualInput.fill('1');
+  await manualInput.press('Tab');
+
+  const transferBtn = page.getByTestId('transfer-cta');
+  await expect(transferBtn).toBeVisible({ timeout: 30_000 });
+  await expect(transferBtn).toBeEnabled({ timeout: 60_000 });
+  await shot(page, 'picker-transfer-03-ready');
+
+  // ─── Sign in the wallet popup(s) ───
+  let knownBeforeSign = new Set(context.pages());
+  await transferBtn.click();
+  for (let i = 0; i < 2; i++) {
+    const approvalSign = await waitForApprovalPopup({
+      context,
+      knownPages: knownBeforeSign,
+      timeoutMs: i === 0 ? 120_000 : 5_000,
+      isApproval: async (p) => {
+        if (!p.url().startsWith('chrome-extension://')) return false;
+        await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+          .waitFor({ state: 'visible', timeout: 60_000 });
+        return true;
+      },
+    }).catch(() => null);
+    if (!approvalSign) break;
+    await shot(approvalSign, `picker-transfer-04-sign-${i + 1}`);
+    await clickApprovalButton(approvalSign);
+    await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+    knownBeforeSign = new Set(context.pages());
+  }
+
+  // ─── Success + on-chain verification ───
+  const successCard = page.getByTestId('transfer-success');
+  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  const successHref = await successCard.locator('a').first().getAttribute('href');
+  const transferTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
+  console.log(`[picker-transfer] transfer tx = ${transferTxid}`);
+
+  mineBlocks(1);
+  const transferTx = await waitForTxConfirmed(transferTxid, 30_000);
+  // Regression guard: SDK builder invariant (cat21-transfer.helper.ts
+  // throws if lockTime !== 21). Not a protocol requirement on a
+  // transfer — the cat moves by sat-tracking regardless.
+  expect(transferTx.locktime).toBe(21);
+  const transferRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', transferTxid, '2')
+  ) as {
+    vout: Array<{ value: number; scriptPubKey: { address?: string } }>;
+  };
+  expect(Math.round(transferRaw.vout[0].value * 1e8)).toBe(546);
+  expect(transferRaw.vout[0].scriptPubKey.address).toBe(recipientAddress);
+
+  // The index agrees: cat21-ord now reports the cat at the recipient.
+  const newTip = mineBlocks(1);
+  await waitForOrdSync(newTip);
+  const ordView = await fetch(`http://localhost:8080/inscription/${freshInscriptionId}`, {
+    headers: { Accept: 'application/json' },
+  }).then(r => r.json()) as { address?: string; satpoint?: string };
+  expect(ordView.address).toBe(recipientAddress);
+  expect(ordView.satpoint).toBe(`${transferTxid}:0:0`);
+  console.log(`[picker-transfer] cat21-ord confirms the cat at ${recipientAddress} (${transferTxid}:0:0)`);
 
   await page.close();
 });

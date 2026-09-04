@@ -61,6 +61,17 @@ jobs:
           ref: ordpool
           path: ordpool-electrs
 
+      # cat21-ord — the REAL cat index behind the transfer page's
+      # holdings picker (CatUtxoLookupService via environment.ordExplorer).
+      # The picker e2e proves ord-driven UI against this index instead of
+      # a URL override.
+      - name: Checkout cat21-ord (for the cat21-ord container)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/cat21-ord
+          ref: index-cat21
+          path: cat21-ord
+
       # buildx gha cache: reuse the compiled electrs image across runs
       # instead of recompiling Rust (~10 min) every run. A docker-container
       # builder + the Actions runtime env make type=gha work; the
@@ -72,17 +83,36 @@ jobs:
       - name: Export GitHub Actions runtime for the gha cache backend
         uses: crazy-max/ghaction-github-runtime@v3
 
-      - name: Stabilise the electrs build context for layer caching
-        run: printf '.git\ntarget\n' > ordpool-electrs/.dockerignore
+      - name: Stabilise the electrs + cat21-ord build contexts for layer caching
+        run: |
+          printf '.git\ntarget\n' > ordpool-electrs/.dockerignore
+          printf '.git\ntarget\n' > cat21-ord/.dockerignore
 
-      - name: Bring up consumer-environment (bitcoind + electrs + mariadb)
+      - name: Bring up consumer-environment (bitcoind + electrs + mariadb + cat21-ord)
         env:
           ELECTRS_SRC: ${{ github.workspace }}/ordpool-electrs
+          CAT21_ORD_SRC: ${{ github.workspace }}/cat21-ord
         run: |
           frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh \
             --buildx-cache \
+            --with-cat21-ord \
             > stack.json
           cat stack.json
+
+      - name: Wait for cat21-ord ready on :8080
+        run: |
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost:8080/status 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "cat21-ord up"; break
+            fi
+            if [ "$i" = "120" ]; then
+              echo "cat21-ord never came up (last HTTP $code)"
+              docker logs ordpool-e2e-consumer-cat21-ord --tail 100 || true
+              exit 1
+            fi
+            sleep 2
+          done
 
       - name: Start fees + electrs HTTP shim on :8999
         run: |
@@ -188,6 +218,16 @@ jobs:
             -e "s|https://ord\.cat21\.space|http://localhost:8999|g" \
             -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
             src/app/app.config.ts
+          # environment.prod.ts is what the production build bundles (the
+          # sed above only covers app.config.ts). ordExplorer feeds
+          # OrdApiService — the transfer page's holdings picker — and must
+          # hit the REAL local cat21-ord, not the fees/electrs stub and
+          # never the live prod host from CI.
+          sed -i \
+            -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
+            -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
+            -e "s|https://ord\.ordpool\.space|http://localhost:8999|g" \
+            src/environments/environment.prod.ts
 
       - name: Build static frontend bundle
         working-directory: frontend
