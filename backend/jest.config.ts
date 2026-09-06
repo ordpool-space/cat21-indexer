@@ -4,6 +4,10 @@ const config: Config = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: 'src',
   testRegex: '.*\\.spec\\.ts$',
+  // `*.regtest.spec.ts` are REAL integration tests against a live regtest
+  // cat21-ord; they run only via `npm run test:regtest` (jest.regtest.config.ts),
+  // never in the pure-unit lane, which has no ord.
+  testPathIgnorePatterns: ['/node_modules/', '\\.regtest\\.spec\\.ts$'],
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },

@@ -16,7 +16,8 @@
     "drizzle:push": "drizzle-kit push",
     "drizzle:studio": "drizzle-kit studio",
     "kill": "lsof -ti :3333 | xargs kill -9 2>/dev/null || true",
-    "test": "jest"
+    "test": "jest",
+    "test:regtest": "jest --config jest.regtest.config.ts"
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.1",
