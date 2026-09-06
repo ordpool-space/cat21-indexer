@@ -52,7 +52,10 @@ export interface CatCurrentLocation {
  * between sign-time and accept-time, the listing is stale.
  */
 export interface OrdOutputDetail {
-  cats: number[];
+  // cat21-ord's `/output` re-emits ord's `inscriptions` array as `cats`, whose
+  // entries are inscription-id strings (`<txid>i<n>`). Older instances may
+  // surface numbers directly; both are tolerated by `getCatsAtOutput`.
+  cats: (string | number)[];
   inscriptions: string[];
   runes: Record<string, unknown>;
 }
@@ -127,9 +130,18 @@ export class OrdClientService {
     );
     if (!out) return null;
     if (!Array.isArray(out.cats)) return [];
-    const sorted = Array.from(new Set(out.cats.filter((c) => Number.isInteger(c) && c >= 0)))
-      .sort((a, b) => a - b);
-    return sorted;
+    // cat21-ord returns `cats` as inscription-id strings (`<txid>i<n>`); map
+    // each to its cat number (under --index-cat21 the inscription number IS the
+    // cat number). Already-numeric entries pass through unchanged.
+    const numbers = await Promise.all(
+      out.cats.map(async (entry) => {
+        if (typeof entry === 'number') return Number.isInteger(entry) && entry >= 0 ? entry : null;
+        const cat = await this.getCat(entry);
+        return cat?.number ?? null;
+      }),
+    );
+    const resolved = numbers.filter((n): n is number => n !== null && n >= 0);
+    return Array.from(new Set(resolved)).sort((a, b) => a - b);
   }
 
   private async fetchJson<T>(url: string, allow404: true): Promise<T | null>;
