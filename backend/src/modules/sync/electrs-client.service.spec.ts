@@ -38,6 +38,13 @@ describe('ElectrsClientService', () => {
     return new ElectrsClientService(cfg);
   }
 
+  // electrs `/tx/{txid}/outspend/{vout}` returns `{ spent: boolean }` on an
+  // unspent output (`{ spent: true, txid, vin, status: {...} }` on a spent one),
+  // and `getOutpointStatus` reads ONLY the top-level boolean `spent`. So the
+  // `{ spent: … }` bodies these tests feed are electrs's REAL wire contract
+  // (verified against a live electrs /outspend response), not a shape invented
+  // to match the code. The real-infra backstop is `getCatsAtOutput`'s sibling
+  // pattern; here the boundary contract is a single boolean, captured above.
   function stubFetch(status: number, body: unknown, opts: { throw?: Error; badJson?: boolean } = {}) {
     globalThis.fetch = jest.fn().mockImplementation((url: string) => {
       if (opts.throw) return Promise.reject(opts.throw);
