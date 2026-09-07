@@ -127,8 +127,11 @@ jobs:
           # generatetoaddress is a node RPC (no -rpcwallet needed).
           bcli generatetoaddress 101 "$SEED_ADDR" >/dev/null
 
-          # Baseline cat count before the mint (fresh chain → 0).
-          BEFORE=$(curl -s http://localhost:8080/cats | jq '.ids | length' 2>/dev/null || echo 0)
+          # Baseline cat count before the mint (fresh chain → 0). cat21-ord
+          # serves HTML unless asked for JSON, so the Accept header is
+          # load-bearing — without it /cats returns an HTML page, jq fails,
+          # and the count silently reads 0 forever.
+          BEFORE=$(curl -s -H 'Accept: application/json' http://localhost:8080/cats | jq '.ids | length' 2>/dev/null || echo 0)
           echo "cat count before seed: $BEFORE"
 
           # Build a CAT-21 mint the RELIABLE way: an EXPLICIT-input
@@ -169,12 +172,15 @@ jobs:
 
           # Wait for cat21-ord to index the new cat.
           for i in $(seq 1 120); do
-            COUNT=$(curl -s http://localhost:8080/cats | jq '.ids | length' 2>/dev/null || echo 0)
+            COUNT=$(curl -s -H 'Accept: application/json' http://localhost:8080/cats | jq '.ids | length' 2>/dev/null || echo 0)
             if [ "${COUNT:-0}" -gt "${BEFORE:-0}" ]; then
               echo "cat21-ord indexed the seed cat (count $BEFORE -> $COUNT)"; break
             fi
             if [ "$i" = "120" ]; then
               echo "cat21-ord never indexed the seed cat (count stuck at $COUNT)"
+              echo "--- /cats (json) ---";       curl -s -H 'Accept: application/json' http://localhost:8080/cats || true
+              echo "--- /blockcount (json) ---"; curl -s -H 'Accept: application/json' http://localhost:8080/blockcount || true
+              echo "--- /cat/0 (json) ---";      curl -s -H 'Accept: application/json' http://localhost:8080/cat/0 || true
               docker logs ordpool-e2e-consumer-cat21-ord --tail 100 || true
               exit 1
             fi
