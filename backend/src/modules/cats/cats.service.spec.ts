@@ -36,7 +36,11 @@ describe('CatsService', () => {
       const result = service.getHealth();
       expect(result.status).toBe('ok');
       expect(result.uptimeSec).toBeGreaterThanOrEqual(0);
-      expect(result.version).toBeDefined();
+      // `version` is `npm_package_version ?? '0.1.0'` — always a defined string,
+      // so `toBeDefined()` couldn't fail on a value regression (empty / garbage /
+      // non-semver). Pin the real contract (a semver string) without coupling to
+      // the exact number, which would churn on every bump.
+      expect(result.version).toMatch(/^\d+\.\d+\.\d+/);
       expect(result.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
   });

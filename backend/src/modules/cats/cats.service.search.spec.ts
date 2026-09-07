@@ -1,9 +1,30 @@
+import { MySqlDialect } from 'drizzle-orm/mysql-core';
+
 import { buildSearchWhere, type SearchFilters } from './cats.service';
 
-// `buildSearchWhere` returns a Drizzle SQL expression or undefined; we don't
-// need to introspect the SQL tree byte-for-byte. Pinning the high-level
-// shape — "this filter -> this number of AND-combined clauses, this empty
-// filter -> undefined" — gives the regression coverage that matters.
+/**
+ * `buildSearchWhere` returns a Drizzle `SQL` expression (or `undefined` for an
+ * empty filter set). These specs compile that expression into the exact
+ * `{ sql, params }` MariaDB receives, so they pin the REAL predicate emitted,
+ * not merely that some object exists.
+ *
+ * The load-bearing case is `category`. Per the workspace HARD RULE
+ * (ordpool-parser/CAT21-RARITY-SCORE.md), categories are DISJOINT collections:
+ * `sub1k` means cats 1000-9999 ONLY, matched by `inArray(cats.category, …)` —
+ * NEVER a cumulative `cat_number < threshold`. The exact HARD-RULE regression
+ * (swap that `inArray` for a cumulative `lte()`) changes the compiled SQL from
+ * `` `category` in (?) `` to `` `cat_number` <= ? `` and the param from the band
+ * token to a number; the category specs below assert against exactly that, so
+ * the regression turns them red.
+ */
+const dialect = new MySqlDialect();
+
+/** Compile to the real `{ sql, params }`; throws if the builder emitted no clause. */
+function compile(where: ReturnType<typeof buildSearchWhere>): { sql: string; params: unknown[] } {
+  if (!where) throw new Error('expected a SQL expression, got undefined');
+  const { sql, params } = dialect.sqlToQuery(where);
+  return { sql, params };
+}
 
 describe('buildSearchWhere', () => {
 
@@ -12,26 +33,28 @@ describe('buildSearchWhere', () => {
     expect(buildSearchWhere({ eyes: [], pose: [] })).toBeUndefined();
   });
 
-  it('returns a SQL expression for a single-field single-value filter', () => {
-    const sql = buildSearchWhere({ eyes: ['Red'] });
-    expect(sql).toBeDefined();
-  });
-
-  it('returns a SQL expression for multi-value single-field filter', () => {
-    const sql = buildSearchWhere({ eyes: ['Red', 'Blue'] });
-    expect(sql).toBeDefined();
-  });
-
-  it('combines multiple fields', () => {
-    const sql = buildSearchWhere({
-      eyes: ['Red'],
-      pose: ['Sleeping'],
-      crown: ['Diamond'],
+  it('emits `laser_eyes in (?)` for a single-field single-value filter', () => {
+    expect(compile(buildSearchWhere({ eyes: ['Red'] }))).toEqual({
+      sql: '`cats`.`laser_eyes` in (?)',
+      params: ['Red'],
     });
-    expect(sql).toBeDefined();
   });
 
-  it('handles every documented categorical field', () => {
+  it('emits a multi-placeholder inArray (OR within a field) for a multi-value filter', () => {
+    expect(compile(buildSearchWhere({ eyes: ['Red', 'Blue'] }))).toEqual({
+      sql: '`cats`.`laser_eyes` in (?, ?)',
+      params: ['Red', 'Blue'],
+    });
+  });
+
+  it('AND-combines multiple fields, each an inArray on its own column', () => {
+    expect(compile(buildSearchWhere({ eyes: ['Red'], pose: ['Sleeping'], crown: ['Diamond'] }))).toEqual({
+      sql: '(`cats`.`laser_eyes` in (?) and `cats`.`design_pose` in (?) and `cats`.`crown` in (?))',
+      params: ['Red', 'Sleeping', 'Diamond'],
+    });
+  });
+
+  it('maps every documented categorical field to an inArray on its own column, in push order', () => {
     const filters: SearchFilters = {
       eyes: ['Orange'],
       pose: ['Standing'],
@@ -41,58 +64,122 @@ describe('buildSearchWhere', () => {
       crown: ['Gold'],
       glasses: ['Cool'],
     };
-    expect(buildSearchWhere(filters)).toBeDefined();
+    const { sql, params } = compile(buildSearchWhere(filters));
+    for (const col of ['laser_eyes', 'design_pose', 'design_expression', 'design_pattern', 'background', 'crown', 'glasses']) {
+      expect(sql).toContain(`\`cats\`.\`${col}\` in (?)`);
+    }
+    expect(params).toEqual(['Orange', 'Standing', 'Smile', 'Solid', 'Cyberpunk', 'Gold', 'Cool']);
   });
 
-  describe('category', () => {
+  describe('category (load-bearing: DISJOINT collections, HARD RULE)', () => {
 
-    it('translates a single sub-Nk category into a clause', () => {
-      expect(buildSearchWhere({ category: ['sub1'] })).toBeDefined();
-      expect(buildSearchWhere({ category: ['sub1k'] })).toBeDefined();
-      expect(buildSearchWhere({ category: ['sub10k'] })).toBeDefined();
-      expect(buildSearchWhere({ category: ['sub50k'] })).toBeDefined();
-      expect(buildSearchWhere({ category: ['sub100k'] })).toBeDefined();
-      expect(buildSearchWhere({ category: ['sub250k'] })).toBeDefined();
-      expect(buildSearchWhere({ category: ['sub500k'] })).toBeDefined();
-      expect(buildSearchWhere({ category: ['sub1M'] })).toBeDefined();
+    it('emits `category in (?)` with the band token — NOT a cumulative cat_number ceiling', () => {
+      const { sql, params } = compile(buildSearchWhere({ category: ['sub1k'] }));
+      expect(sql).toBe('`cats`.`category` in (?)');
+      expect(params).toEqual(['sub1k']);
+      // The HARD-RULE regression (inArray -> cumulative lte on cat_number) would
+      // emit `cat_number <= ?` with a numeric param; assert its absence so the
+      // mutation turns this spec red.
+      expect(sql).not.toContain('cat_number');
+      expect(sql).not.toContain('<=');
+      expect(params).not.toContain(1000);
+      expect(params).not.toContain(9999);
     });
 
-    it('still returns a SQL clause for unknown category values (they just match nothing)', () => {
-      expect(buildSearchWhere({ category: ['sub42k'] })).toBeDefined();
+    it('matches EACH band by its exact token (disjoint), never a range', () => {
+      for (const band of ['sub1', 'sub1k', 'sub10k', 'sub50k', 'sub100k', 'sub250k', 'sub500k', 'sub1M']) {
+        expect(compile(buildSearchWhere({ category: [band] }))).toEqual({
+          sql: '`cats`.`category` in (?)',
+          params: [band],
+        });
+      }
+    });
+
+    it('multi-select category is an inArray over the exact bands, still disjoint (never a widening range)', () => {
+      expect(compile(buildSearchWhere({ category: ['sub1k', 'sub10k'] }))).toEqual({
+        sql: '`cats`.`category` in (?, ?)',
+        params: ['sub1k', 'sub10k'],
+      });
+    });
+
+    it('an unknown band is still matched literally (inArray), so it matches nothing rather than a range', () => {
+      expect(compile(buildSearchWhere({ category: ['sub42k'] }))).toEqual({
+        sql: '`cats`.`category` in (?)',
+        params: ['sub42k'],
+      });
     });
   });
 
-  describe('genesis (ORIGIN trait)', () => {
+  describe('genesis (ORIGIN trait -> boolean equality)', () => {
 
-    it("translates 'genesis' alone to a boolean equality clause", () => {
-      expect(buildSearchWhere({ genesis: ['genesis'] })).toBeDefined();
+    it("'genesis' alone -> `genesis` = true", () => {
+      expect(compile(buildSearchWhere({ genesis: ['genesis'] }))).toEqual({
+        sql: '`cats`.`genesis` = ?',
+        params: [true],
+      });
     });
 
-    it("translates 'normal' alone to a boolean equality clause", () => {
-      expect(buildSearchWhere({ genesis: ['normal'] })).toBeDefined();
+    it("'normal' alone -> `genesis` = false", () => {
+      expect(compile(buildSearchWhere({ genesis: ['normal'] }))).toEqual({
+        sql: '`cats`.`genesis` = ?',
+        params: [false],
+      });
     });
 
-    it('returns undefined when both genesis+normal are selected (matches everything)', () => {
+    it('both genesis+normal -> undefined (matches everything, no clause)', () => {
       expect(buildSearchWhere({ genesis: ['genesis', 'normal'] })).toBeUndefined();
     });
   });
 
-  describe('gender', () => {
+  describe('gender (inArray)', () => {
 
-    it('matches Male via inArray', () => {
-      expect(buildSearchWhere({ gender: ['Male'] })).toBeDefined();
+    it('Male -> `gender in (?)`', () => {
+      expect(compile(buildSearchWhere({ gender: ['Male'] }))).toEqual({
+        sql: '`cats`.`gender` in (?)',
+        params: ['Male'],
+      });
     });
 
-    it('matches Female via inArray', () => {
-      expect(buildSearchWhere({ gender: ['Female'] })).toBeDefined();
+    it('Female -> `gender in (?)`', () => {
+      expect(compile(buildSearchWhere({ gender: ['Female'] }))).toEqual({
+        sql: '`cats`.`gender` in (?)',
+        params: ['Female'],
+      });
     });
 
-    it('combines both via OR', () => {
-      expect(buildSearchWhere({ gender: ['Male', 'Female'] })).toBeDefined();
+    it('both -> `gender in (?, ?)` (OR)', () => {
+      expect(compile(buildSearchWhere({ gender: ['Male', 'Female'] }))).toEqual({
+        sql: '`cats`.`gender` in (?, ?)',
+        params: ['Male', 'Female'],
+      });
     });
 
-    it('still returns a clause for unknown gender tokens (just matches nothing)', () => {
-      expect(buildSearchWhere({ gender: ['xenon'] })).toBeDefined();
+    it('unknown token still an inArray literal (matches nothing)', () => {
+      expect(compile(buildSearchWhere({ gender: ['xenon'] }))).toEqual({
+        sql: '`cats`.`gender` in (?)',
+        params: ['xenon'],
+      });
+    });
+  });
+
+  describe('rarity (rank CEILING -> lte, broadest wins)', () => {
+
+    it('single tier -> `rarity_rank <= ?` at that threshold', () => {
+      expect(compile(buildSearchWhere({ rarity: ['top100'] }))).toEqual({
+        sql: '`cats`.`rarity_rank` <= ?',
+        params: [100],
+      });
+    });
+
+    it('multi-select -> the BROADEST ceiling wins (max threshold), not the narrowest', () => {
+      expect(compile(buildSearchWhere({ rarity: ['top10', 'top100'] }))).toEqual({
+        sql: '`cats`.`rarity_rank` <= ?',
+        params: [100],
+      });
+    });
+
+    it('an unknown tier alone contributes no clause -> undefined', () => {
+      expect(buildSearchWhere({ rarity: ['top999'] })).toBeUndefined();
     });
   });
 });

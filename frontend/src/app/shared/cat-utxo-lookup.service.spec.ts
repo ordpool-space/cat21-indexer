@@ -355,6 +355,15 @@ describe('CatUtxoLookupService', () => {
       }));
       const result = await firstValueFrom(service.getTargetByNumber(42));
       expect(result).not.toBeNull();
+      // This is the branch where esplora has NO address to cross-check, so
+      // `sellerAddress` MUST fall back to ord's `insc.address`. Pin it: a
+      // regression sourcing it from the (here-undefined) esplora address would
+      // still be non-null and slip past `not.toBeNull()` alone.
+      expect(result!.sellerAddress).toBe('bc1pSellerCurrent');
+      expect(result!.target.txid).toBe(currentTxid);
+      expect(result!.target.vout).toBe(0);
+      expect(result!.target.value).toBe(546);
+      expect(result!.target.scriptPubKey).toEqual(hex.decode(scriptHex));
     });
 
     it('returns null when ord reports no current address (cat is at OP_RETURN / lost)', async () => {
