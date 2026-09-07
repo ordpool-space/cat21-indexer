@@ -131,18 +131,39 @@ jobs:
           BEFORE=$(curl -s http://localhost:8080/cats | jq '.ids | length' 2>/dev/null || echo 0)
           echo "cat count before seed: $BEFORE"
 
-          # Build a CAT-21 mint: nLockTime=21, cat output 0 = 0.001 BTC,
-          # change pinned to output 1 so output 0 is the cat UTXO.
+          # Build a CAT-21 mint the RELIABLE way: an EXPLICIT-input
+          # createrawtransaction with locktime=21. fundrawtransaction and the
+          # `send` RPC apply anti-fee-sniping and OVERRIDE the locktime (the
+          # first attempt at this seed produced a locktime!=21 tx that
+          # cat21-ord silently ignored). createrawtransaction writes exactly
+          # the locktime we pass, and signrawtransactionwithwallet preserves
+          # it. cat21-ord indexes a tx as a cat IFF nLockTime==21
+          # (inscription_updater.rs: `tx.lock_time.to_consensus_u32() == 21`),
+          # so that one field is load-bearing. Pick one mature coinbase UTXO,
+          # pay a 0.001 BTC cat output + change (fee 0.0001 BTC), in satoshis
+          # to avoid float rounding.
+          SEL=$(wcli listunspent 100 9999999 '[]' true '{"minimumAmount":1}' | jq -c '.[0]')
+          UTXO_TXID=$(echo "$SEL" | jq -r '.txid')
+          UTXO_VOUT=$(echo "$SEL" | jq -r '.vout')
+          UTXO_SAT=$(echo "$SEL" | jq -r '(.amount * 100000000) | round')
+          CHANGE_SAT=$((UTXO_SAT - 100000 - 10000))
+          CHANGE_BTC=$(printf '%d.%08d' $((CHANGE_SAT / 100000000)) $((CHANGE_SAT % 100000000)))
           DEST=$(wcli getnewaddress)
-          OUTPUTS=$(jq -nc --arg dest "$DEST" '[{($dest): 0.001}]')
-          RAW=$(bcli createrawtransaction '[]' "$OUTPUTS" 21)
-          # fundrawtransaction on a locktime!=0 tx yields an RBF sequence
-          # (0xfffffffd) — fine for INDEXING (cat21-ord only checks
-          # locktime==21). This is a SEED, not a spec-compliant mint.
-          FUNDED=$(wcli fundrawtransaction "$RAW" '{"changePosition":1}' | jq -r '.hex')
-          SIGNED=$(wcli signrawtransactionwithwallet "$FUNDED" | jq -r '.hex')
+          CHANGE=$(wcli getnewaddress)
+          INPUTS=$(jq -nc --arg t "$UTXO_TXID" --argjson v "$UTXO_VOUT" '[{txid:$t,vout:$v}]')
+          OUTPUTS=$(jq -nc --arg d "$DEST" --arg c "$CHANGE" --arg cha "$CHANGE_BTC" '[{($d):0.001},{($c):($cha|tonumber)}]')
+          RAW=$(bcli createrawtransaction "$INPUTS" "$OUTPUTS" 21)
+          SIGNED=$(wcli signrawtransactionwithwallet "$RAW" | jq -r '.hex')
           TXID=$(bcli sendrawtransaction "$SIGNED")
           echo "seed mint txid: $TXID"
+          # Self-verify nLockTime==21 on-chain BEFORE depending on indexing —
+          # a locktime!=21 here fails loud instead of a mystery index timeout.
+          LT=$(bcli getrawtransaction "$TXID" true | jq -r '.locktime')
+          echo "seed tx locktime: $LT"
+          if [ "$LT" != "21" ]; then
+            echo "FATAL: seed tx locktime=$LT, not 21 — cat21-ord will not index it as a cat"
+            exit 1
+          fi
           # Confirm the mint.
           bcli generatetoaddress 1 "$SEED_ADDR" >/dev/null
 
