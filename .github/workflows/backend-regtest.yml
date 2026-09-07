@@ -189,7 +189,7 @@ jobs:
 
           # Wait for electrs to see the confirmed mint tx.
           for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:3000/tx/$TXID" 2>/dev/null || echo 000)
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:3010/tx/$TXID" 2>/dev/null || echo 000)
             if [ "$code" = "200" ]; then
               echo "electrs indexed the seed mint tx"; break
             fi
@@ -207,7 +207,7 @@ jobs:
         working-directory: backend
         env:
           ORD_API_URL: http://localhost:8080
-          ELECTRS_API_URL: http://localhost:3000
+          ELECTRS_API_URL: http://localhost:3010
           SEED_MINT_TXID: ${{ env.SEED_MINT_TXID }}
         run: npm run test:regtest
 

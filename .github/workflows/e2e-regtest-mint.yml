@@ -99,7 +99,7 @@ jobs:
 
       - name: Start fees + electrs HTTP shim on :8999
         run: |
-          ELECTRS_URL=http://localhost:3000 PORT=8999 \
+          ELECTRS_URL=http://localhost:3010 PORT=8999 \
             nohup node frontend/node_modules/ordpool-sdk/e2e/regtest/fees-electrs-stub.mjs > fees-stub.log 2>&1 &
           echo $! > fees-stub.pid
           for i in $(seq 1 30); do

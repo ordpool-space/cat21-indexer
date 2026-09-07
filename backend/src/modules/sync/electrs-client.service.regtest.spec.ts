@@ -3,7 +3,7 @@ import { ElectrsClientService } from './electrs-client.service';
 /**
  * REAL integration test — NO MOCK. Runs the electrs client against a live
  * regtest electrs (ordpool-electrs fork, Esplora API, default
- * http://127.0.0.1:3000). Runs only in the regtest lane
+ * http://127.0.0.1:3010). Runs only in the regtest lane
  * (`npm run test:regtest`), never the pure-unit `npm test`.
  *
  * Why this exists: `getOutpointStatus` decides whether a bid's buyer input
@@ -20,7 +20,7 @@ import { ElectrsClientService } from './electrs-client.service';
  * always set, so both branches are always exercised; a bare local run
  * without it skips them and still proves the 404 → 'spent' collapse.
  */
-const ELECTRS_API_URL = process.env.ELECTRS_API_URL ?? 'http://127.0.0.1:3000';
+const ELECTRS_API_URL = process.env.ELECTRS_API_URL ?? 'http://127.0.0.1:3010';
 
 function realService(): ElectrsClientService {
   // Minimal ConfigService stub: the ONLY thing mocked is config lookup; the
