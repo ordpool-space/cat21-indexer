@@ -1,0 +1,205 @@
+name: Backend regtest (real infra)
+
+# Dedicated regtest lane for the cat21-indexer BACKEND's sync clients
+# (OrdClientService, ElectrsClientService). Runs `npm run test:regtest`
+# — every `*.regtest.spec.ts` — against a REAL stack: bitcoind + our
+# ordpool-electrs + cat21-ord, no mocks. Isolated in its own workflow so
+# it can never turn the cat21-wallet money-path lane red, and vice versa.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'backend/src/modules/sync/**'
+      - 'backend/jest.regtest.config.ts'
+      - '.github/workflows/backend-regtest.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cat21-indexer-backend-regtest-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  backend-regtest:
+    name: Backend sync clients vs real bitcoind + electrs + cat21-ord
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout cat21-indexer
+        uses: actions/checkout@v4
+
+      - name: Setup Node (backend)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+
+      - name: Install backend deps (brings ordpool-sdk into node_modules)
+        working-directory: backend
+        run: npm ci
+
+      - name: Make SDK consumer-environment scripts executable
+        run: chmod +x backend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
+
+      # OUR electrs. consumer-environment.yml builds the electrs service
+      # from the ordpool-electrs fork (not the upstream mempool/electrs
+      # image); ELECTRS_SRC points its build context at this checkout.
+      - name: Checkout ordpool-electrs (for the electrs container)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/ordpool-electrs
+          ref: ordpool
+          path: ordpool-electrs
+
+      # cat21-ord — the REAL cat index the backend's OrdClientService reads
+      # (via ORD_API_URL). The ord-client regtest spec discovers a live cat
+      # here; the electrs spec proves outpoint status against real electrs.
+      - name: Checkout cat21-ord (for the cat21-ord container)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/cat21-ord
+          ref: index-cat21
+          path: cat21-ord
+
+      # buildx gha cache: reuse the compiled electrs image across runs
+      # instead of recompiling Rust (~10 min) every run. A docker-container
+      # builder + the Actions runtime env make type=gha work; the
+      # .dockerignore excludes each checkout's volatile .git/ so the COPY
+      # layer (and the compile beneath it) is stable and cache-hits.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Export GitHub Actions runtime for the gha cache backend
+        uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Stabilise the electrs + cat21-ord build contexts for layer caching
+        run: |
+          printf '.git\ntarget\n' > ordpool-electrs/.dockerignore
+          printf '.git\ntarget\n' > cat21-ord/.dockerignore
+
+      - name: Bring up consumer-environment (bitcoind + electrs + mariadb + cat21-ord)
+        env:
+          ELECTRS_SRC: ${{ github.workspace }}/ordpool-electrs
+          CAT21_ORD_SRC: ${{ github.workspace }}/cat21-ord
+        run: |
+          backend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh \
+            --buildx-cache \
+            --with-cat21-ord \
+            > stack.json
+          cat stack.json
+
+      - name: Wait for cat21-ord ready on :8080
+        run: |
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost:8080/status 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "cat21-ord up"; break
+            fi
+            if [ "$i" = "120" ]; then
+              echo "cat21-ord never came up (last HTTP $code)"
+              docker logs ordpool-e2e-consumer-cat21-ord --tail 100 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      # The regtest specs need a real CAT-21 cat on-chain: the ord-client
+      # spec discovers the latest cat and its outpoint; the electrs spec
+      # reads the mint's fresh (unspent) cat output AND the (spent) funding
+      # input it consumed. Seed exactly one mint so both prove against real
+      # infra.
+      - name: Seed a CAT-21 cat into the regtest index
+        run: |
+          set -eo pipefail
+          BITCOIND=ordpool-e2e-consumer-bitcoind
+          bcli() { docker exec "$BITCOIND" bitcoin-cli -regtest -rpcuser=ordpool -rpcpassword=ordpool "$@"; }
+          wcli() { docker exec "$BITCOIND" bitcoin-cli -regtest -rpcuser=ordpool -rpcpassword=ordpool -rpcwallet=seed "$@"; }
+
+          # Dedicated funding wallet (idempotent create-or-load).
+          bcli -named createwallet wallet_name=seed load_on_startup=true >/dev/null 2>&1 \
+            || bcli loadwallet seed >/dev/null 2>&1 || true
+
+          SEED_ADDR=$(wcli getnewaddress)
+          # Mine 101 blocks to the seed wallet so its coinbase matures.
+          # generatetoaddress is a node RPC (no -rpcwallet needed).
+          bcli generatetoaddress 101 "$SEED_ADDR" >/dev/null
+
+          # Baseline cat count before the mint (fresh chain → 0).
+          BEFORE=$(curl -s http://localhost:8080/cats | jq '.ids | length' 2>/dev/null || echo 0)
+          echo "cat count before seed: $BEFORE"
+
+          # Build a CAT-21 mint: nLockTime=21, cat output 0 = 0.001 BTC,
+          # change pinned to output 1 so output 0 is the cat UTXO.
+          DEST=$(wcli getnewaddress)
+          OUTPUTS=$(jq -nc --arg dest "$DEST" '[{($dest): 0.001}]')
+          RAW=$(bcli createrawtransaction '[]' "$OUTPUTS" 21)
+          # fundrawtransaction on a locktime!=0 tx yields an RBF sequence
+          # (0xfffffffd) — fine for INDEXING (cat21-ord only checks
+          # locktime==21). This is a SEED, not a spec-compliant mint.
+          FUNDED=$(wcli fundrawtransaction "$RAW" '{"changePosition":1}' | jq -r '.hex')
+          SIGNED=$(wcli signrawtransactionwithwallet "$FUNDED" | jq -r '.hex')
+          TXID=$(bcli sendrawtransaction "$SIGNED")
+          echo "seed mint txid: $TXID"
+          # Confirm the mint.
+          bcli generatetoaddress 1 "$SEED_ADDR" >/dev/null
+
+          # Wait for cat21-ord to index the new cat.
+          for i in $(seq 1 120); do
+            COUNT=$(curl -s http://localhost:8080/cats | jq '.ids | length' 2>/dev/null || echo 0)
+            if [ "${COUNT:-0}" -gt "${BEFORE:-0}" ]; then
+              echo "cat21-ord indexed the seed cat (count $BEFORE -> $COUNT)"; break
+            fi
+            if [ "$i" = "120" ]; then
+              echo "cat21-ord never indexed the seed cat (count stuck at $COUNT)"
+              docker logs ordpool-e2e-consumer-cat21-ord --tail 100 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Wait for electrs to see the confirmed mint tx.
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:3000/tx/$TXID" 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "electrs indexed the seed mint tx"; break
+            fi
+            if [ "$i" = "60" ]; then
+              echo "electrs never indexed the seed mint tx (last HTTP $code)"
+              docker logs ordpool-e2e-consumer-electrs --tail 100 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "SEED_MINT_TXID=$TXID" >> "$GITHUB_ENV"
+
+      - name: Run the backend regtest lane
+        working-directory: backend
+        env:
+          ORD_API_URL: http://localhost:8080
+          ELECTRS_API_URL: http://localhost:3000
+          SEED_MINT_TXID: ${{ env.SEED_MINT_TXID }}
+        run: npm run test:regtest
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "===== bitcoind ====="; docker logs ordpool-e2e-consumer-bitcoind --tail 100 || true
+          echo "===== electrs ====="; docker logs ordpool-e2e-consumer-electrs --tail 100 || true
+          echo "===== cat21-ord ====="; docker logs ordpool-e2e-consumer-cat21-ord --tail 100 || true
+
+      - name: Tear down stack
+        if: always()
+        run: |
+          docker compose \
+            -f backend/node_modules/ordpool-sdk/e2e/docker-compose.consumer-environment.yml \
+            --profile cat21-ord \
+            down -v --remove-orphans || true
+          docker rm -f \
+            ordpool-e2e-consumer-bitcoind \
+            ordpool-e2e-consumer-electrs \
+            ordpool-e2e-consumer-mariadb \
+            ordpool-e2e-consumer-cat21-ord 2>/dev/null || true
