@@ -161,8 +161,9 @@ export class BidsService {
     // (6b) Buyer inputs must reference outpoints that actually exist
     //      on chain and are still spendable. Rejects the phantom-input
     //      adversarial pattern (attacker POSTs a bid whose funding
-    //      inputs reference a made-up txid → electrs 404 → 'spent' →
-    //      reject at insert). Legitimate bids always pass — the
+    //      inputs reference a made-up txid → getOutpointStatus returns
+    //      'spent' for the phantom → reject at insert). Legitimate bids
+    //      always pass: the
     //      buyer wouldn't have been able to sign against a UTXO
     //      they don't own. Cost: 1..N electrs HTTP calls per POST
     //      (N = buyer input count, typically 1-3). 'unknown' (electrs

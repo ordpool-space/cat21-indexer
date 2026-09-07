@@ -9,11 +9,16 @@ import { ElectrsClientService } from './electrs-client.service';
  * 'spent' (destructive → prune / reject), 'unspent' (all good), and
  * 'unknown' (fail-safe, don't mutate).
  *
- * Key behaviour: a 404 collapses into `'spent'`, NOT `'unknown'`.
- * An outpoint referencing a txid electrs never saw is a phantom —
- * unbroadcastable in both directions — so the pruner drops it and
- * the POST-time validation rejects it. This is the fix for the
- * 2026-07-25 phantom-input finding.
+ * Phantom detection: an outpoint whose txid electrs never saw is
+ * unspendable and collapses into `'spent'`. Our electrs answers
+ * `{ spent: false }` (NOT a 404) on `/outspend` for an unknown txid
+ * (verified against live electrs), so a `{ spent: false }` result is
+ * confirmed against a `/tx` existence probe: `/tx` 404 → 'spent'
+ * (phantom), `/tx` 200 → 'unspent' (real UTXO), `/tx` 5xx → 'unknown'
+ * (fail-safe). A `/outspend` 404 still collapses straight to 'spent'
+ * for electrs builds that signal a phantom that way. This is the fix
+ * for the 2026-07-25 phantom-input finding, corrected to the real
+ * `{ spent: false }` behavior the backend regtest lane surfaced.
  *
  * `isOutpointSpent` is a thin boolean wrapper (`status === 'spent'`)
  * kept for backward compat; new callers use the tri-state directly.
@@ -57,6 +62,24 @@ describe('ElectrsClientService', () => {
     }) as never;
   }
 
+  // URL-aware stub for the two-call phantom path: the `/outspend` call and
+  // the `/tx/{txid}` existence probe get distinct responses. The existence
+  // probe URL ends in `/tx/{txid}`; `/outspend` ends in `/outspend/{vout}`.
+  function stubFetchRoutes(routes: {
+    outspend: { status: number; body?: unknown };
+    tx: { status: number };
+  }) {
+    globalThis.fetch = jest.fn().mockImplementation((url: string) => {
+      const isExistenceProbe = /\/tx\/[0-9a-f]+$/i.test(url);
+      const r = isExistenceProbe ? routes.tx : routes.outspend;
+      return Promise.resolve({
+        status: r.status,
+        ok: r.status >= 200 && r.status < 300,
+        json: () => Promise.resolve((r as { body?: unknown }).body ?? null),
+      });
+    }) as never;
+  }
+
   it('returns `spent` when electrs responds {spent: true}', async () => {
     stubFetch(200, { spent: true });
     const client = makeClient();
@@ -69,6 +92,29 @@ describe('ElectrsClientService', () => {
     const client = makeClient();
     expect(await client.getOutpointStatus(TXID, 0)).toBe('unspent');
     expect(await client.isOutpointSpent(TXID, 0)).toBe(false);
+  });
+
+  it('reports a phantom outpoint `spent`: /outspend says {spent:false} but /tx 404s', async () => {
+    // Real electrs answers {spent:false} for a txid it never saw; only the
+    // /tx existence probe reveals the phantom. Pins the real bug the backend
+    // regtest lane caught: the pre-fix code returned 'unspent' here, so an
+    // attacker's fabricated funding input slipped past phantom-input checks.
+    stubFetchRoutes({ outspend: { status: 200, body: { spent: false } }, tx: { status: 404 } });
+    const client = makeClient();
+    expect(await client.getOutpointStatus(TXID, 0)).toBe('spent');
+    expect(await client.isOutpointSpent(TXID, 0)).toBe(true);
+  });
+
+  it('reports a real unspent UTXO `unspent`: /outspend {spent:false} + /tx 200', async () => {
+    stubFetchRoutes({ outspend: { status: 200, body: { spent: false } }, tx: { status: 200 } });
+    const client = makeClient();
+    expect(await client.getOutpointStatus(TXID, 0)).toBe('unspent');
+  });
+
+  it('returns `unknown` when /outspend {spent:false} but the /tx probe 5xxs (fail-safe)', async () => {
+    stubFetchRoutes({ outspend: { status: 200, body: { spent: false } }, tx: { status: 503 } });
+    const client = makeClient();
+    expect(await client.getOutpointStatus(TXID, 0)).toBe('unknown');
   });
 
   it('collapses a 404 into `spent` (phantom txid → unbroadcastable → prune)', async () => {

@@ -176,9 +176,10 @@ export class BidsPruner implements OnModuleInit, OnModuleDestroy {
    *                 electrs failure can't destroy every legitimate
    *                 bid. Bid gets re-checked next tick.
    *
-   * Phantom-txid case (electrs 404 = txid never broadcast, e.g. an
-   * attacker POSTing a made-up funding input) is now 'spent', not
-   * 'unknown' — so the pruner drops it instead of leaving it forever.
+   * Phantom-txid case (a made-up funding input an attacker POSTs, or a
+   * never-broadcast / orphaned txid) resolves to 'spent' via
+   * getOutpointStatus's `/tx` existence probe, not 'unknown', so the
+   * pruner drops it instead of leaving it forever.
    */
   private async checkBuyerInputsLive(psbtBase64: string): Promise<boolean | null> {
     const bytes = base64.decode(psbtBase64);

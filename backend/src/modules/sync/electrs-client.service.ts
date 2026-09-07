@@ -63,8 +63,11 @@ export class ElectrsClientService {
 
   /**
    * Preferred entry point. See `OutpointStatus` for the tri-state
-   * semantics. 404 collapses into `'spent'` — an outpoint referencing
-   * a txid electrs never saw is a phantom and unbroadcastable.
+   * semantics. A txid electrs never saw is a phantom and unspendable, so
+   * it collapses into `'spent'`. Some electrs builds signal that with a
+   * `/outspend` 404; ours instead answers `{ spent: false }` for an
+   * unknown txid, so a `{ spent: false }` result is confirmed against a
+   * `/tx` existence probe before the outpoint is called spendable.
    */
   async getOutpointStatus(txid: string, vout: number): Promise<OutpointStatus> {
     const url = `${this.baseUrl}/tx/${txid}/outspend/${vout}`;
@@ -108,10 +111,48 @@ export class ElectrsClientService {
       'spent' in body &&
       typeof (body as OutspendStatus).spent === 'boolean'
     ) {
-      return (body as OutspendStatus).spent ? 'spent' : 'unspent';
+      if ((body as OutspendStatus).spent) return 'spent';
+      // `/outspend` answers `{ spent: false }` even for a txid electrs has
+      // never seen (verified against live electrs: /tx/<phantom>/outspend
+      // -> 200 {spent:false}, but /tx/<phantom> -> 404). So `{ spent: false }`
+      // alone can't tell a real unspent UTXO from a phantom outpoint an
+      // attacker fabricated. Confirm the txid exists before calling the
+      // outpoint spendable; a missing txid is unspendable, i.e. 'spent'.
+      const exists = await this.txExists(txid);
+      if (exists === 'missing') return 'spent';
+      if (exists === 'unknown') return 'unknown';
+      return 'unspent';
     }
     this.logger.warn(`electrs outspend unexpected shape for ${txid}:${vout}: ${JSON.stringify(body)}`);
     return 'unknown';
+  }
+
+  /**
+   * Whether electrs has a record of `txid`: 'exists' (200), 'missing'
+   * (404 -> a phantom the caller treats as unspendable), or 'unknown'
+   * (5xx / network blip -> fail-safe). Needed because `/outspend` returns
+   * `{ spent: false }` for a txid it never saw, so it cannot detect a
+   * phantom outpoint on its own.
+   */
+  private async txExists(txid: string): Promise<'exists' | 'missing' | 'unknown'> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/tx/${txid}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch (err) {
+      this.logger.warn(
+        `electrs /tx fetch failed for ${txid}: ${err instanceof Error ? err.message : err}`,
+      );
+      return 'unknown';
+    }
+    if (res.status === 404) return 'missing';
+    if (!res.ok) {
+      this.logger.warn(`electrs /tx returned ${res.status} for ${txid}`);
+      return 'unknown';
+    }
+    return 'exists';
   }
 
   /**
