@@ -539,3 +539,61 @@ describe('BidsService.deleteByOutpointAndBuyer', () => {
     expect(where).toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// findPaginated happy-path needs a two-query mock: the rows query ends at
+// `.offset()`, the count query is `select({ total: count() }).from()`. We key
+// off whether `select` was called with an argument to hand back the right
+// terminal.
+// ---------------------------------------------------------------------------
+function paginatedDrizzle(rows: unknown[], total: number) {
+  const offset = jest.fn().mockResolvedValue(rows);
+  const rowsChain: Record<string, jest.Mock> = {
+    from: jest.fn(() => rowsChain as unknown as jest.Mock),
+    orderBy: jest.fn(() => rowsChain as unknown as jest.Mock),
+    limit: jest.fn(() => rowsChain as unknown as jest.Mock),
+    offset,
+  };
+  const countChain = { from: jest.fn().mockResolvedValue([{ total }]) };
+  // Shaped like createDrizzleMock's return ({ db }) so it can be passed
+  // straight to the constructor; `offset` rides along for assertions.
+  return { db: { select: jest.fn((arg?: unknown) => (arg === undefined ? rowsChain : countChain)) }, offset };
+}
+
+describe('BidsService.network', () => {
+  it('exposes the backend deployment network (mainnet by default in tests)', () => {
+    const service = new BidsService(
+      createDrizzleMock() as never,
+      createOrdMock() as never,
+      createElectrsMock() as never,
+    );
+    expect(service.network).toBe('mainnet');
+  });
+});
+
+describe('BidsService.findPaginated — happy path', () => {
+  it('maps rows to DTOs, passes through total, and applies the (page-1)*perPage offset', async () => {
+    const rows = [
+      persistedRow({ id: 'p1', bidSats: 25_000 }),
+      persistedRow({ id: 'p2', bidSats: 21_000 }),
+    ];
+    const mock = paginatedDrizzle(rows, 42);
+    const service = new BidsService(mock as never, createOrdMock() as never, createElectrsMock() as never);
+
+    const res = await service.findPaginated(25, 2);
+
+    expect(res).toMatchObject({ total: 42, currentPage: 2, itemsPerPage: 25 });
+    expect(res.items).toHaveLength(2);
+    expect(res.items[0]).toMatchObject({ id: 'p1', bidSats: 25_000, cats: [42] });
+    expect(res.items[1]).toMatchObject({ id: 'p2', bidSats: 21_000 });
+    // offset for page 2 at 25/page is 25 — pins the pagination math
+    expect(mock.offset).toHaveBeenCalledWith(25);
+  });
+
+  it('offset is 0 on page 1', async () => {
+    const mock = paginatedDrizzle([persistedRow()], 1);
+    const service = new BidsService(mock as never, createOrdMock() as never, createElectrsMock() as never);
+    await service.findPaginated(10, 1);
+    expect(mock.offset).toHaveBeenCalledWith(0);
+  });
+});
