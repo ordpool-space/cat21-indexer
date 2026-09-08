@@ -646,3 +646,62 @@ describe('CacheService', () => {
     });
   });
 });
+
+describe('CacheService.invalidateCat', () => {
+  it('drops the cached cat AND its txHash index entry (via onEvict)', () => {
+    const c = new CacheService();
+    const cat = makeCatDto(42, 'txhash-abc');
+    c.setCachedCat(cat);
+    expect(c.getCachedCat(42)).toBe(cat);
+    expect(c.getCachedCatNumberByTxHash('txhash-abc')).toBe(42);
+
+    c.invalidateCat(42);
+
+    expect(c.getCachedCat(42)).toBeUndefined();
+    expect(c.getCachedCatNumberByTxHash('txhash-abc')).toBeUndefined();
+  });
+});
+
+describe('CacheService.adjustCacheSizes (memory-pressure resize)', () => {
+  const MIN = 5300; // 2*PINNED_COUNT(2400) + 500
+  const DEFAULT = 10_000;
+
+  // Spy the private memory probe so the resize logic is deterministic and
+  // independent of the host's real RSS.
+  function withHeadroom(headroomBytes: number): CacheService {
+    const c = new CacheService();
+    jest.spyOn(c as unknown as { getMemoryInfo: () => unknown }, 'getMemoryInfo')
+      .mockReturnValue({ rss: 0, headroom: headroomBytes });
+    return c;
+  }
+  const maxSize = (c: CacheService) =>
+    (c as unknown as { catsByNumber: { getMaxSize(): number } }).catsByNumber.getMaxSize();
+  const adjust = (c: CacheService) =>
+    (c as unknown as { adjustCacheSizes(): void }).adjustCacheSizes();
+
+  it('shrinks toward half (clamped up to MIN) when headroom is below the danger threshold', () => {
+    const c = withHeadroom(10 * 1024 * 1024); // 10MB < 20MB DANGER
+    adjust(c);
+    // floor(10000 * 0.5) = 5000, clamped up to MIN 5300
+    expect(maxSize(c)).toBe(MIN);
+  });
+
+  it('grows by 2000 when headroom is above the growth threshold', () => {
+    const c = withHeadroom(200 * 1024 * 1024); // 200MB > 100MB GROWTH
+    adjust(c);
+    expect(maxSize(c)).toBe(DEFAULT + 2000);
+  });
+
+  it('leaves capacity unchanged in the comfortable middle band', () => {
+    const c = withHeadroom(50 * 1024 * 1024); // between danger and growth
+    adjust(c);
+    expect(maxSize(c)).toBe(DEFAULT);
+  });
+
+  it('never shrinks below MIN under sustained pressure (floor holds)', () => {
+    const c = withHeadroom(1 * 1024 * 1024);
+    adjust(c); // 10000 -> 5300
+    adjust(c); // floor(5300*0.5)=2650 -> clamp MIN -> stays 5300
+    expect(maxSize(c)).toBe(MIN);
+  });
+});
