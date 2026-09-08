@@ -17,4 +17,19 @@ module.exports = {
   moduleNameMapper: {
     'rxjs/operators': '<rootDir>/node_modules/rxjs/dist/cjs/operators/index.js',
   },
+  // Coverage is measured over code WE OWN. The OpenAPI-generated client
+  // (src/app/shared/cat21-api/**, stamped "Do not edit the class manually")
+  // is never tested and never counted: it is valid by definition of its
+  // generator. See the workspace CLAUDE.md HARD RULE "Never test
+  // code-generated code". main.ts is the bootstrap entrypoint.
+  collectCoverageFrom: [
+    'src/app/**/*.ts',
+    '!src/app/**/*.spec.ts',
+    '!src/app/shared/cat21-api/**',
+    '!src/main.ts',
+  ],
+  coveragePathIgnorePatterns: [
+    '/node_modules/',
+    '<rootDir>/src/app/shared/cat21-api/',
+  ],
 };
