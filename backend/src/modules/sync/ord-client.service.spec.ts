@@ -166,3 +166,105 @@ describe('OrdClientService', () => {
     });
   });
 });
+
+const TXID_A = 'a'.repeat(64);
+const TXID_B = 'b'.repeat(64);
+
+/** Route a fetch spy by URL substring -> {status, body}. Missing route -> reject. */
+function routeFetch(routes: Array<[string, { status?: number; ok?: boolean; body?: unknown }]>) {
+  jest.spyOn(global, 'fetch').mockImplementation((input: unknown) => {
+    const url = String(input);
+    for (const [needle, r] of routes) {
+      if (url.includes(needle)) {
+        const status = r.status ?? 200;
+        return Promise.resolve({
+          ok: r.ok ?? (status >= 200 && status < 300),
+          status,
+          statusText: 'x',
+          json: () => Promise.resolve(r.body ?? null),
+        } as unknown as Response);
+      }
+    }
+    return Promise.reject(new Error(`unexpected url ${url}`));
+  });
+}
+
+describe('OrdClientService.getCatCurrentLocation', () => {
+  beforeEach(() => jest.restoreAllMocks());
+
+  it('resolves the current outpoint + owning address via /cat then /inscription', async () => {
+    routeFetch([
+      ['/cat/42', { body: { id: 'insc-42i0', number: 42 } }],
+      ['/inscription/insc-42i0', { body: { satpoint: `${TXID_A}:2:0`, address: 'bc1p-owner' } }],
+    ]);
+    const res = await createService().getCatCurrentLocation(42);
+    expect(res).toEqual({ txid: TXID_A, vout: 2, ordinalsAddress: 'bc1p-owner' });
+  });
+
+  it('returns null when the cat does not exist (getCat 404)', async () => {
+    routeFetch([['/cat/999', { status: 404, ok: false }]]);
+    expect(await createService().getCatCurrentLocation(999)).toBeNull();
+  });
+
+  it('returns null when the inscription lookup 404s', async () => {
+    routeFetch([
+      ['/cat/42', { body: { id: 'insc-42i0', number: 42 } }],
+      ['/inscription/insc-42i0', { status: 404, ok: false }],
+    ]);
+    expect(await createService().getCatCurrentLocation(42)).toBeNull();
+  });
+
+  it('returns null when the satpoint has no owning address (cat at OP_RETURN / fee)', async () => {
+    routeFetch([
+      ['/cat/42', { body: { id: 'insc-42i0', number: 42 } }],
+      ['/inscription/insc-42i0', { body: { satpoint: `${TXID_A}:0:0`, address: null } }],
+    ]);
+    expect(await createService().getCatCurrentLocation(42)).toBeNull();
+  });
+
+  it('returns null when the satpoint is malformed', async () => {
+    routeFetch([
+      ['/cat/42', { body: { id: 'insc-42i0', number: 42 } }],
+      ['/inscription/insc-42i0', { body: { satpoint: 'not-a-satpoint', address: 'bc1p-owner' } }],
+    ]);
+    expect(await createService().getCatCurrentLocation(42)).toBeNull();
+  });
+});
+
+describe('OrdClientService.getCatsAtOutput — numeric + non-array branches', () => {
+  beforeEach(() => jest.restoreAllMocks());
+
+  it('passes numeric entries through, dedupes, and sorts ascending', async () => {
+    routeFetch([['/output/', { body: { cats: [42, 7, 42, 0] } }]]);
+    expect(await createService().getCatsAtOutput(TXID_A, 0)).toEqual([0, 7, 42]);
+  });
+
+  it('drops negative / non-integer numeric entries', async () => {
+    routeFetch([['/output/', { body: { cats: [5, -1, 3.5, 9] } }]]);
+    expect(await createService().getCatsAtOutput(TXID_A, 0)).toEqual([5, 9]);
+  });
+
+  it('returns [] when `cats` is not an array', async () => {
+    routeFetch([['/output/', { body: { cats: undefined } }]]);
+    expect(await createService().getCatsAtOutput(TXID_A, 0)).toEqual([]);
+  });
+});
+
+describe('parseSatpoint', () => {
+  // imported lazily to keep the pure-fn test independent of the service
+  const { parseSatpoint } = jest.requireActual('./ord-client.service') as typeof import('./ord-client.service');
+
+  it('parses TXID:VOUT:OFFSET, lowercasing the txid', () => {
+    expect(parseSatpoint(`${TXID_A.toUpperCase()}:3:100`)).toEqual({ txid: TXID_A, vout: 3 });
+  });
+  it.each([
+    ['too few parts', `${TXID_A}:3`],
+    ['too many parts', `${TXID_A}:3:0:0`],
+    ['non-hex txid', `zz${'a'.repeat(62)}:0:0`],
+    ['short txid', `abc:0:0`],
+    ['negative vout', `${TXID_A}:-1:0`],
+    ['non-numeric vout', `${TXID_A}:x:0`],
+  ])('returns null for %s', (_label, bad) => {
+    expect(parseSatpoint(bad)).toBeNull();
+  });
+});
