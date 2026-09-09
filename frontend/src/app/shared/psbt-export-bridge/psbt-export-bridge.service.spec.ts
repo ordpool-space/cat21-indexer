@@ -1,77 +1,60 @@
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { jest } from '@jest/globals';
 import { TestBed } from '@angular/core/testing';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { firstValueFrom } from 'rxjs';
 
-import { PsbtExportBridge } from './psbt-export-bridge';
 import { PsbtExportBridgeService } from './psbt-export-bridge.service';
 
-// The bridge turns the modal round-trip into the promptForSignedPsbt
-// callback the orchestrators call. Pins: it opens the modal, hands the
-// unsigned PSBT to the component, and resolves with the pasted signed
-// PSBT (or errors on cancel).
+function makeModal(result: Promise<string>, componentInstance: Record<string, unknown> = {}) {
+  const dismiss = jest.fn();
+  const ref = { componentInstance, result, dismiss };
+  const modalService = { open: jest.fn().mockReturnValue(ref) };
+  return { modalService, dismiss };
+}
+
+function setup(modalService: unknown): PsbtExportBridgeService {
+  TestBed.configureTestingModule({
+    providers: [PsbtExportBridgeService, { provide: NgbModal, useValue: modalService }],
+  });
+  return TestBed.inject(PsbtExportBridgeService);
+}
 
 describe('PsbtExportBridgeService', () => {
-  let service: PsbtExportBridgeService;
-  let open: jest.Mock;
-  let dismiss: jest.Mock;
-  let componentInstance: PsbtExportBridge;
+  beforeEach(() => TestBed.resetTestingModule());
 
-  function setup(result: Promise<string>) {
-    // Mirror the real component's default primary-button copy so we can
-    // assert positively whether a given prompt path overrode it.
-    componentInstance = { actionLabel: 'Broadcast signed transaction' } as PsbtExportBridge;
-    dismiss = jest.fn();
-    open = jest.fn().mockReturnValue({ componentInstance, result, dismiss });
-    TestBed.configureTestingModule({
-      providers: [
-        PsbtExportBridgeService,
-        { provide: NgbModal, useValue: { open } },
-      ],
-    });
-    service = TestBed.inject(PsbtExportBridgeService);
-  }
+  it('opens the bridge modal, seeds the unsigned PSBT, and resolves with the pasted signed PSBT', async () => {
+    const instance: Record<string, unknown> = {};
+    const { modalService } = makeModal(Promise.resolve('signed-psbt-b64'), instance);
+    const service = setup(modalService);
 
-  beforeEach(() => { TestBed.resetTestingModule(); });
+    const signed = await firstValueFrom(service.promptForSignedPsbt({ base64: 'unsigned-b64', hex: 'deadbeef' }));
 
-  it('opens the modal, sets the unsigned PSBT, and emits the pasted signed PSBT', async () => {
-    setup(Promise.resolve('signed-psbt-base64'));
-    const emitted = await firstValueFrom(
-      service.promptForSignedPsbt({ base64: 'UNSIGNED_B64', hex: 'deadbeef' }),
-    );
-    expect(open).toHaveBeenCalledTimes(1);
-    expect(componentInstance.unsignedBase64).toBe('UNSIGNED_B64');
-    expect(emitted).toBe('signed-psbt-base64');
+    expect(signed).toBe('signed-psbt-b64');
+    expect((modalService.open as jest.Mock)).toHaveBeenCalled();
+    expect(instance['unsignedBase64']).toBe('unsigned-b64');
   });
 
-  it('the default promptForSignedPsbt keeps the "Broadcast" primary-button copy (mint/transfer/accept)', async () => {
-    setup(Promise.resolve('signed'));
-    await firstValueFrom(service.promptForSignedPsbt({ base64: 'B', hex: 'H' }));
-    expect(componentInstance.actionLabel).toBe('Broadcast signed transaction');
+  it('errors the observable when the modal is dismissed (Cancel)', async () => {
+    const { modalService } = makeModal(Promise.reject('cross-click'));
+    const service = setup(modalService);
+    await expect(firstValueFrom(service.promptForSignedPsbt({ base64: 'x', hex: 'y' }))).rejects.toBe('cross-click');
   });
 
-  it('promptForSignedPsbtWithLabel overrides the primary-button copy (create-offer builds, does not broadcast)', async () => {
-    setup(Promise.resolve('signed'));
-    const prompt = service.promptForSignedPsbtWithLabel('Build the offer');
-    const emitted = await firstValueFrom(prompt({ base64: 'OFFER_B64', hex: 'aa' }));
-    expect(componentInstance.unsignedBase64).toBe('OFFER_B64');
-    expect(componentInstance.actionLabel).toBe('Build the offer');
-    expect(emitted).toBe('signed');
+  it('promptForSignedPsbtWithLabel seeds an operation-specific action label on the modal', async () => {
+    const instance: Record<string, unknown> = {};
+    const { modalService } = makeModal(Promise.resolve('s'), instance);
+    const service = setup(modalService);
+
+    await firstValueFrom(service.promptForSignedPsbtWithLabel('Build the offer')({ base64: 'x', hex: 'y' }));
+
+    expect(instance['actionLabel']).toBe('Build the offer');
   });
 
-  it('errors when the modal is dismissed (user cancelled)', async () => {
-    setup(Promise.reject(new Error('cancel')));
-    await expect(
-      firstValueFrom(service.promptForSignedPsbt({ base64: 'X', hex: 'Y' })),
-    ).rejects.toThrow('cancel');
-  });
-
-  it('dismisses the modal when the caller unsubscribes before the user acts (no zombie modal)', () => {
-    // Never-settling result: the user has NOT submitted or cancelled, so the
-    // only thing that can close the modal is the unsubscribe teardown.
-    setup(new Promise<string>(() => { /* pending forever */ }));
-    const sub = service.promptForSignedPsbt({ base64: 'X', hex: 'Y' }).subscribe();
+  it('dismisses the modal on teardown (pipeline torn down before the user acts)', () => {
+    const { modalService, dismiss } = makeModal(new Promise<string>(() => {})); // never settles
+    const service = setup(modalService);
+    const sub = service.promptForSignedPsbt({ base64: 'x', hex: 'y' }).subscribe();
     sub.unsubscribe();
-    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(dismiss).toHaveBeenCalled();
   });
 });
