@@ -1,20 +1,17 @@
 <h1 data-testid="trade-heading">Trade a cat</h1>
 
 <p class="mb-4">
-  CAT-21 buy-offers are <strong>buyer-initiated</strong>, ord-style.
-  The buyer constructs a half-signed PSBT that offers a price for the
-  seller's cat; the seller countersigns input 0 and broadcasts. No
-  intermediary, no marketplace listing, no escrow — share the offer
-  any way you like.
+  Trade cats straight with other people. No marketplace, no middleman,
+  no listing fees: a buyer names a price, the seller says yes, and the
+  cat changes hands.
 </p>
 
 <div class="trade-card-grid">
   <a routerLink="/dashboard/trade/make" class="trade-card" data-testid="trade-make-link">
     <h2>Make an offer</h2>
     <p>
-      You want to <strong>buy</strong> someone else's cat. Pick the cat,
-      set a price, sign your funding inputs; share the half-signed PSBT
-      with the seller.
+      Want someone else's cat? Pick it, name your price, and send the
+      offer to the seller. Your coins stay put until they say yes.
     </p>
     <span class="trade-card-cta">Buyer side →</span>
   </a>
@@ -22,19 +19,15 @@
   <a routerLink="/dashboard/trade/accept" class="trade-card" data-testid="trade-accept-link">
     <h2>Accept an offer</h2>
     <p>
-      You've been offered Bitcoin for one of your cats. Paste the
-      offer PSBT, review the price and recipient, countersign input 0
-      and broadcast.
+      Someone wants to buy one of your cats? Check the price and say
+      yes. Cat to them, coins to you.
     </p>
     <span class="trade-card-cta">Seller side →</span>
   </a>
 </div>
 
 <p class="mt-4 text-muted small">
-  <strong>Offers can be shared in the wild.</strong> A buy-offer PSBT
-  reveals nothing that won't land on Bitcoin anyway once accepted, and
-  it's only useful to a willing buyer (it requires their own funding
-  inputs + signatures). Distribute by URL, QR, paste, Discord, gist,
-  email — whichever's most ergonomic. No transport-layer secrecy
-  needed.
+  <strong>Offers are safe to share in the open.</strong> Post the link
+  anywhere: Discord, a tweet, a QR on a poster. Only a buyer willing to
+  pay your price can act on it, and nothing happens until one does.
 </p>
