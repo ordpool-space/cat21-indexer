@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { catchError, of } from 'rxjs';
 import { BITCOIN_MIN_RELAY_FEE_SAT_PER_VBYTE, Cat21Service, RecommendedFees } from 'ordpool-sdk';
 
 type Tier = 'fastest' | 'halfHour' | 'hour' | 'economy';
@@ -65,8 +66,18 @@ export class FeesPicker {
   /** Fires every time the active fee rate changes (tier click, manual edit, or auto-seed on first-fees). */
   readonly feeRateChange = output<number>();
 
-  /** Polled tier values from the SDK. `undefined` until the first emission. */
-  readonly fees = toSignal(this.cat21.recommendedFees$);
+  /**
+   * Polled tier values from the SDK. `undefined` until the first emission, and
+   * `undefined` again if the fee stream errors (a fee-endpoint hiccup, or an
+   * environment like regtest with no `/fees/recommended`). The `catchError` is
+   * load-bearing: a bare `toSignal` RE-THROWS the source error when the signal
+   * is read, and `fees()` is read in the template, in `activeTier`, and in an
+   * effect, so without it one failed fee lookup throws during change detection
+   * and blanks the ENTIRE embedding screen (mint / make-offer / transfer),
+   * price and action included, not just the tier buttons. On error the picker
+   * degrades to its manual input; the surrounding screen keeps rendering.
+   */
+  readonly fees = toSignal(this.cat21.recommendedFees$.pipe(catchError(() => of(undefined))));
 
   readonly tiers = TIERS;
 
