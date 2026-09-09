@@ -296,4 +296,91 @@ describe('SyncService', () => {
     await service.sync();
     expect(insertMock).not.toHaveBeenCalled();
   });
+
+  describe('getSyncHealth', () => {
+    it('reports null timestamps + no error before any sync has run', () => {
+      const { service } = createMocks();
+      expect(service.getSyncHealth()).toEqual({ lastSuccessAt: null, lastErrorAt: null, lastError: null });
+    });
+
+    it('records lastSuccessAt after a successful (up-to-date) sync', async () => {
+      const { service } = createMocks(10, 10); // remote == local -> clean success, no insert
+      await service.sync();
+      const health = service.getSyncHealth();
+      expect(health.lastSuccessAt).toBeInstanceOf(Date);
+      expect(health.lastError).toBeNull();
+    });
+  });
+
+  describe('handleSync (@Interval wrapper)', () => {
+    it('delegates to sync()', async () => {
+      const { service } = createMocks();
+      const sync = jest.spyOn(service, 'sync').mockResolvedValue(undefined);
+      await service.handleSync();
+      expect(sync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('onModuleInit (fire-and-forget backfill chain)', () => {
+    it('kicks off the color backfill THEN the rarity recompute', async () => {
+      const { service } = createMocks();
+      const backfill = jest.spyOn(service as unknown as { backfillDominantColorCategory: () => Promise<void> }, 'backfillDominantColorCategory').mockResolvedValue(undefined);
+      const rarity = jest.spyOn(service as unknown as { recomputeRarityForAllCategories: () => Promise<void> }, 'recomputeRarityForAllCategories').mockResolvedValue(undefined);
+
+      await service.onModuleInit();
+      await new Promise((r) => setImmediate(r)); // flush the fire-and-forget chain
+
+      expect(backfill).toHaveBeenCalledTimes(1);
+      expect(rarity).toHaveBeenCalledTimes(1);
+    });
+
+    it('swallows a backfill failure (onModuleInit resolves, warn logged, rarity skipped)', async () => {
+      const { service } = createMocks();
+      jest.spyOn(service as unknown as { backfillDominantColorCategory: () => Promise<void> }, 'backfillDominantColorCategory').mockRejectedValue(new Error('boom'));
+      const rarity = jest.spyOn(service as unknown as { recomputeRarityForAllCategories: () => Promise<void> }, 'recomputeRarityForAllCategories').mockResolvedValue(undefined);
+      const warn = jest.spyOn((service as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => {});
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+      await new Promise((r) => setImmediate(r));
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Boot-time backfill failed: boom'));
+      expect(rarity).not.toHaveBeenCalled(); // .then(rarity) skipped, chain went to .catch
+    });
+  });
+
+  describe('backfillDominantColorCategory', () => {
+    it('groups NULL-color rows by computed color and issues an UPDATE per bucket', async () => {
+      const rows = [
+        { catNumber: 1, txHash: 'a'.repeat(64), blockHash: 'b'.repeat(64), feeRate: 10 },
+        { catNumber: 2, txHash: 'c'.repeat(64), blockHash: 'd'.repeat(64), feeRate: 20 },
+      ];
+      const limit = jest.fn().mockResolvedValue(rows); // < BATCH(500) -> one pass
+      const updateWhere = jest.fn().mockResolvedValue(undefined);
+      const drizzle = {
+        db: {
+          select: jest.fn(() => ({ from: () => ({ where: () => ({ limit }) }) })),
+          update: jest.fn(() => ({ set: () => ({ where: updateWhere }) })),
+        },
+      };
+      const service = new SyncService(drizzle as any, {} as any, {} as any);
+
+      await (service as unknown as { backfillDominantColorCategory: () => Promise<void> }).backfillDominantColorCategory();
+
+      expect(drizzle.db.update).toHaveBeenCalled();
+      expect(updateWhere).toHaveBeenCalled();
+    });
+
+    it('does nothing when no rows have a NULL color', async () => {
+      const limit = jest.fn().mockResolvedValue([]);
+      const drizzle = {
+        db: {
+          select: jest.fn(() => ({ from: () => ({ where: () => ({ limit }) }) })),
+          update: jest.fn(),
+        },
+      };
+      const service = new SyncService(drizzle as any, {} as any, {} as any);
+      await (service as unknown as { backfillDominantColorCategory: () => Promise<void> }).backfillDominantColorCategory();
+      expect(drizzle.db.update).not.toHaveBeenCalled();
+    });
+  });
 });
