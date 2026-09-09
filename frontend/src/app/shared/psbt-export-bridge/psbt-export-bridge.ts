@@ -17,7 +17,10 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="modal-header">
-      <h4 class="modal-title">Sign in your wallet</h4>
+      <!-- Initial focus on the title, not the close X. An NgbModal with a
+           .btn-close and no ngbAutofocus target focuses that button (it is the
+           first focusable element), whose focus ring renders as a stray box. -->
+      <h4 class="modal-title" ngbAutofocus tabindex="-1">Sign in your own wallet</h4>
       <button type="button" class="btn-close" aria-label="Close" (click)="activeModal.dismiss('cancel')"></button>
     </div>
     <div class="modal-body psbt-bridge" data-testid="psbt-export-bridge">

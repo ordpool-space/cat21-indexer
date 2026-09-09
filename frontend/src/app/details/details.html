@@ -362,7 +362,10 @@
      and signs the PSBT when they click through. -->
 <ng-template #sellModal let-modal>
   <div class="modal-header">
-    <h4 class="modal-title" id="sell-listing-title">Advertise cat #{{ catNumber() }} for sale</h4>
+    <!-- Initial focus on the title, not the close X. An NgbModal with a
+         .btn-close and no ngbAutofocus target focuses that button (it is the
+         first focusable element), whose focus ring renders as a stray box. -->
+    <h4 class="modal-title" id="sell-listing-title" ngbAutofocus tabindex="-1">Advertise cat #{{ catNumber() }} for sale</h4>
     <button type="button" class="btn-close" aria-label="Close" (click)="modal.dismiss()"></button>
   </div>
   <div class="modal-body">
