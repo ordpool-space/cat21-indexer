@@ -81,6 +81,16 @@ export class WalletConnect {
    * §7.2) so a person whose wallet is installed-but-unreachable (disabled
    * extension, wrong profile, fresh container) reads that we looked and found
    * none, rather than that the site is broken.
+   *
+   * The line's wording assumes the list still OFFERS wallets (each Install
+   * row), i.e. the empty-of-`connect` state is a detection miss, never a
+   * genuinely empty picker. That holds because watch-only backstops six of the
+   * seven capabilities and is reachable on both platforms, and the injected
+   * wallets carry the seventh (SignMessage), so every (capability, platform)
+   * pair yields at least one row. If a future matrix ever left a capability
+   * with no reachable wallet, `pickerRows()` could come back empty and this
+   * line would then mislead (it implies installable wallets exist); that case
+   * needs its own copy, not this one.
    */
   readonly noWalletDetected = computed<boolean>(() =>
     this.pickerRows().every((row) => row.action !== 'connect'),
