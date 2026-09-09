@@ -143,6 +143,37 @@ app root — and is immune to this whole class, but that is *its* design (a dark
 site). It is **not** the fix here, because it would flip every Bootstrap surface
 dark and fight the orange identity.
 
+#### Deferred: connected-state UX pass (needs a wallet + electrs)
+
+Some wallet-UX work can only be reviewed with a **connected wallet and a live
+electrs**, which dev doesn't have, so it is deliberately unbuilt until that
+environment exists rather than shipped blind. Track it here:
+
+- **`walletCustodyCaveat()` is shipped in `ordpool-sdk` but NOT yet placed on
+  cat21.space.** It returns a wallet-level sentence (or `null`) describing a
+  wallet that keeps cats and spendable coins on one address (UniSat has one;
+  Xverse / Leather / Cat21 Wallet return `null`). Treat it as **pending, not
+  live** — an unplaced safety string everyone assumes is showing is worse than
+  one known to be pending. Placement, by cat direction (a custody warning only
+  makes sense where the cat STAYS with the connected wallet):
+
+  | Screen | Capability | Cat direction | Show caveat |
+  |---|---|---|---|
+  | mint | `Cat21Mint` | arrives | **yes** |
+  | make-offer | `Cat21OfferCreate` | you're the BUYER; lands with you on accept, and connecting here chooses its destination | **yes** |
+  | accept-offer | `Cat21OfferAccept` | you're the SELLER; the cat leaves | no |
+  | transfer | `Cat21Transfer` | you're sending; the cat leaves | no |
+
+  Read the *direction*, not the verb: "accept-offer" is the seller, so the cat
+  leaves and the caveat would be nonsensical there.
+
+- **The connected form / blocked / success copy on the trade + transfer screens
+  is unreviewed for §7.6 protocol vocabulary.** The pre-connect CTA panels were
+  rewritten (no PSBT / input 0 / nLockTime / UTXO / first sat), but the copy
+  behind a connected wallet (e.g. "PSBT" in the make-offer bid/success states)
+  almost certainly carries the same class. Review it *rendered* in the connected
+  environment; don't blind-edit copy you can't see.
+
 ### Commands
 ```bash
 cd frontend
