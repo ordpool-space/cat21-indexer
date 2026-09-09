@@ -1,8 +1,7 @@
 import { ComponentRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { KnownOrdinalWalletType, WalletCapability, walletActionNotice } from 'ordpool-sdk';
+import { KnownOrdinalWalletType, WalletCapability, detectWalletPlatform, walletActionNotice } from 'ordpool-sdk';
 
-import { detectWalletPlatform } from '../wallet-platform';
 import { WalletCapabilityNotice } from './wallet-capability-notice';
 
 // Round-2 §7.4: the SDK composes the whole action sentence; the site prints
@@ -13,7 +12,7 @@ import { WalletCapabilityNotice } from './wallet-capability-notice';
 // The component computes its platform via detectWalletPlatform(); the test
 // resolves the same value so the expected notice matches what the component
 // asks the SDK for.
-const PLATFORM = detectWalletPlatform();
+const PLATFORM = detectWalletPlatform(typeof window !== 'undefined' ? window : undefined);
 
 function expectedMessage(wallet: KnownOrdinalWalletType, capability: WalletCapability): string | null {
   return walletActionNotice(wallet, capability, { platform: PLATFORM })?.message ?? null;

@@ -3,10 +3,9 @@ import {
   KnownOrdinalWalletType,
   WalletActionNotice,
   WalletCapability,
+  detectWalletPlatform,
   walletActionNotice,
 } from 'ordpool-sdk';
-
-import { detectWalletPlatform } from '../wallet-platform';
 
 /**
  * Inline notice for a CONNECTED wallet on an action page. The SDK's
@@ -65,6 +64,8 @@ export class WalletCapabilityNotice {
    * assembles the sentence (round-2 §7.4).
    */
   readonly notice = computed<WalletActionNotice | null>(() =>
-    walletActionNotice(this.wallet(), this.capability(), { platform: detectWalletPlatform() }),
+    walletActionNotice(this.wallet(), this.capability(), {
+      platform: detectWalletPlatform(typeof window !== 'undefined' ? window : undefined),
+    }),
   );
 }

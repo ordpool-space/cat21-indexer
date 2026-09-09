@@ -7,14 +7,12 @@ import {
   KnownOrdinalWallets,
   WalletCapability,
   WalletPickerRow,
-  WalletPlatform,
   WalletService,
   WatchOnlyScriptType,
   walletPickerRows,
 } from 'ordpool-sdk';
 
 import { PendingCats } from '../pending-cats/pending-cats';
-import { detectWalletPlatform } from '../wallet-platform';
 import { WatchOnlyConnectService } from '../watch-only-connect.service';
 
 /**
@@ -45,9 +43,6 @@ export class WalletConnect {
   private readonly detectedWallets = toSignal(this.walletService.wallets$, {
     initialValue: { installedWallets: [], notInstalledWallets: [] },
   });
-
-  /** Desktop vs Mobile — decides which matrix rows are reachable at all. */
-  readonly platform = signal<WalletPlatform>(detectWalletPlatform());
 
   /**
    * The action this picker connects a wallet FOR, when embedded in an
@@ -82,9 +77,12 @@ export class WalletConnect {
    */
   readonly pickerRows = computed<WalletPickerRow[]>(() => {
     this.detectedWallets(); // re-run when runtime wallet detection re-emits
+    // Pass `win` and let the SDK derive the platform from the DEVICE
+    // (detectWalletPlatform(win): user-agent + iPad touch count), never the
+    // viewport. A desktop browser dragged narrow keeps its extensions, so the
+    // list must not change with window width (round-2 §7.9).
     return walletPickerRows({
       win: typeof window !== 'undefined' ? window : undefined,
-      platform: this.platform(),
       capability: this.capability(),
       currentUrl: typeof window !== 'undefined' ? window.location.href : undefined,
     });
@@ -120,7 +118,6 @@ export class WalletConnect {
   }
 
   open(): void {
-    this.platform.set(detectWalletPlatform());
     this.connectButtonDisabled.set(false);
     this.connectError.set(null);
     this.modalRef = this.modalService.open(this.connectTemplate(), {
