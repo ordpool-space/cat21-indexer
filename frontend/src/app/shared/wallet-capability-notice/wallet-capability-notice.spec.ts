@@ -1,14 +1,23 @@
 import { ComponentRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { KnownOrdinalWalletType, WalletCapability } from 'ordpool-sdk';
+import { KnownOrdinalWalletType, WalletCapability, walletActionNotice } from 'ordpool-sdk';
 
+import { detectWalletPlatform } from '../wallet-platform';
 import { WalletCapabilityNotice } from './wallet-capability-notice';
 
-// Pins finding #207's core: a connected wallet the matrix marks
-// Unsupported for the trade action gets a notice naming the reason +
-// alternatives; a capable wallet gets nothing. Reads its facts from the
-// live SDK matrix (no mocking) so a matrix change that (un)blocks a
-// wallet surfaces here.
+// Round-2 §7.4: the SDK composes the whole action sentence; the site prints
+// it VERBATIM, never appending or rewording. These specs pin exactly that,
+// against the live SDK (no mocking), so a matrix or wording change surfaces
+// here and any local rewording of the sentence turns them red.
+//
+// The component computes its platform via detectWalletPlatform(); the test
+// resolves the same value so the expected notice matches what the component
+// asks the SDK for.
+const PLATFORM = detectWalletPlatform();
+
+function expectedMessage(wallet: KnownOrdinalWalletType, capability: WalletCapability): string | null {
+  return walletActionNotice(wallet, capability, { platform: PLATFORM })?.message ?? null;
+}
 
 describe('WalletCapabilityNotice', () => {
   let fixture: ComponentFixture<WalletCapabilityNotice>;
@@ -20,44 +29,37 @@ describe('WalletCapabilityNotice', () => {
     ref = fixture.componentRef;
   });
 
-  function render(wallet: KnownOrdinalWalletType, capability: WalletCapability): string | null {
+  function el(wallet: KnownOrdinalWalletType, capability: WalletCapability): HTMLElement | null {
     ref.setInput('wallet', wallet);
     ref.setInput('capability', capability);
     fixture.detectChanges();
-    const el = fixture.nativeElement.querySelector('[data-testid="wallet-capability-notice"]');
-    return el ? el.textContent.replace(/\s+/g, ' ').trim() : null;
+    return fixture.nativeElement.querySelector('[data-testid="wallet-capability-notice"]');
   }
 
-  it('renders a notice for Alby creating an offer (Unsupported in the matrix)', () => {
-    const text = render(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate);
-    expect(text).not.toBeNull();
-    expect(text).toContain('Alby');
-    // The reason comes from the matrix caveat: Alby signs every input
-    // with its one key, so it can't co-sign an offer alongside the buyer.
-    expect(text!.toLowerCase()).toContain('signs every input');
-    expect(text!.toLowerCase()).toContain('co-sign an offer');
-    // Alternatives name a capable injected wallet.
-    expect(text).toContain('Connect');
-    expect(text).toContain('Xverse');
+  it.each([
+    [KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate],
+    [KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferAccept],
+    [KnownOrdinalWalletType.xverse, WalletCapability.Cat21OfferCreate],
+    [KnownOrdinalWalletType.leather, WalletCapability.Cat21OfferAccept],
+    [KnownOrdinalWalletType.unisat, WalletCapability.InscriptionParentChild],
+  ])('prints the SDK notice VERBATIM (or renders nothing) for %s / %s', (wallet, capability) => {
+    const node = el(wallet, capability);
+    expect(node ? node.textContent!.trim() : null).toBe(expectedMessage(wallet, capability));
   });
 
-  it('renders a notice for Alby accepting an offer', () => {
-    const text = render(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferAccept);
-    expect(text).not.toBeNull();
-    expect(text).toContain('Alby');
+  it('renders a blocked notice with role=alert for Alby creating an offer', () => {
+    const notice = walletActionNotice(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate, { platform: PLATFORM });
+    expect(notice?.kind).toBe('blocked'); // matrix sanity: Alby cannot create offers
+    const node = el(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate);
+    expect(node).not.toBeNull();
+    expect(node!.getAttribute('role')).toBe('alert');
+    expect(node!.classList.contains('is-precheck')).toBe(false);
+    expect(node!.textContent!.trim()).toBe(notice!.message);
   });
 
-  it('renders NOTHING for Xverse creating an offer (capable)', () => {
-    expect(render(KnownOrdinalWalletType.xverse, WalletCapability.Cat21OfferCreate)).toBeNull();
-  });
-
-  it('renders NOTHING for Leather accepting an offer (capable)', () => {
-    expect(render(KnownOrdinalWalletType.leather, WalletCapability.Cat21OfferAccept)).toBeNull();
-  });
-
-  it('stays silent for a Proven-with-caveat status (not a hard block)', () => {
-    // UniSat collections carry a Taproot-address caveat but are Proven,
-    // so the notice must not fire — the pre-check is the host's job.
-    expect(render(KnownOrdinalWalletType.unisat, WalletCapability.InscriptionParentChild)).toBeNull();
+  it('renders nothing for a capable wallet (Xverse creating an offer)', () => {
+    // matrix sanity: the SDK reports Xverse can create offers, so no notice
+    expect(walletActionNotice(KnownOrdinalWalletType.xverse, WalletCapability.Cat21OfferCreate, { platform: PLATFORM })).toBeNull();
+    expect(el(KnownOrdinalWalletType.xverse, WalletCapability.Cat21OfferCreate)).toBeNull();
   });
 });

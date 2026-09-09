@@ -4,167 +4,100 @@
     <button type="button" class="btn-close" aria-label="Close" (click)="modal.dismiss()"></button>
   </div>
   <div class="modal-body">
+    <!-- Exactly one line saying what the site is for (round-2 §7.2). Names the
+         site's purpose, never a wallet's abilities. -->
+    <p class="modal-lead">Connect a wallet to mint, send, buy and sell cats.</p>
+
     @if (connectError(); as err) {
       <p class="connect-error" role="alert">Connection failed: {{ err }}</p>
     }
 
-    @if (installedRows().length > 0) {
+    @if (pickerRows().length > 0) {
+      <!-- One plain list; each row is logo + name + one button. Row shape,
+           button label, logo and reachability all come from the SDK's
+           walletPickerRows() so the three sites cannot drift (round-2 §7.2). -->
       <ul class="wallet-list">
-        @for (row of installedRows(); track row.entry.wallet) {
+        @for (row of pickerRows(); track row.wallet) {
           <li class="wallet-row">
-            <span class="wallet-name">{{ row.entry.label }}</span>
-            <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: row.entry }" />
-            <button class="wallet-pick" [attr.data-testid]="'wallet-pick-' + row.entry.wallet" [disabled]="connectButtonDisabled()" (click)="connectWallet(row.entry.wallet)">
-              Connect
-            </button>
+            <img class="wallet-logo" [src]="row.logo" alt="" aria-hidden="true" width="22" height="22" />
+            <span class="wallet-name">{{ row.label }}</span>
+
+            @switch (row.action) {
+              @case ('connect') {
+                <button class="wallet-pick" [attr.data-testid]="'wallet-pick-' + row.wallet" [disabled]="connectButtonDisabled()" (click)="connectWallet(row.wallet)">
+                  {{ row.actionLabel }}
+                </button>
+              }
+              @case ('install') {
+                <a class="wallet-pick" [attr.data-testid]="'wallet-install-' + row.wallet" [href]="row.installUrl" target="_blank" rel="noopener">
+                  {{ row.actionLabel }}
+                </a>
+              }
+              @case ('open-in-app') {
+                <!-- Mobile in-app-browser bounce: the button IS the message. -->
+                <a class="wallet-pick wallet-pick-deeplink" [attr.data-testid]="'wallet-open-' + row.wallet" [href]="row.deepLink" rel="noopener">
+                  {{ row.actionLabel }}
+                </a>
+              }
+              @case ('connect-xpub') {
+                <button class="wallet-pick" data-testid="wallet-pick-xpub" [attr.aria-expanded]="xpubMode()" (click)="toggleXpubMode()">
+                  {{ row.actionLabel }}
+                </button>
+              }
+            }
           </li>
         }
       </ul>
     } @else {
-      <p class="no-installed">No supported wallets detected in this browser.</p>
+      <p class="no-installed">No supported wallets available in this browser.</p>
     }
 
-    @if (notInstalledRows().length > 0) {
-      <h5 class="not-installed-heading">Not installed:</h5>
-      <ul class="wallet-list">
-        @for (row of notInstalledRows(); track row.entry.wallet) {
-          <li class="wallet-row">
-            <span class="wallet-name">{{ row.entry.label }}</span>
-            <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: row.entry }" />
-            @if (row.deepLink; as deepLink) {
-              <!-- Plain mobile browser: no injected provider, so bounce the
-                   user into the wallet's in-app browser (verified scheme
-                   only, from the SDK registry) instead of a dead Download. -->
-              <a class="wallet-pick wallet-pick-deeplink" [attr.data-testid]="'wallet-open-' + row.entry.wallet" [href]="deepLink" rel="noopener">
-                Open in {{ row.entry.label }}
-              </a>
-            } @else {
-              <a class="wallet-pick wallet-pick-download" [attr.data-testid]="'wallet-download-' + row.entry.wallet" [href]="knownOrdinalWallets[row.entry.wallet].downloadLink" target="_blank" rel="noopener">
-                Download
-              </a>
-            }
-          </li>
+    <!-- Watch-only (xpub): a paste flow, revealed by the connect-xpub row's
+         button. Signing for every action is an Export PSBT bridge. -->
+    @if (xpubMode()) {
+      <div class="xpub-form" data-testid="xpub-form">
+        <label class="xpub-label" for="xpub-key">Account extended public key</label>
+        <textarea
+          id="xpub-key"
+          class="xpub-input"
+          rows="3"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="xpub… / ypub… / zpub…"
+          [value]="xpubKey()"
+          (input)="onXpubKeyInput($any($event.target).value)"></textarea>
+
+        @if (xpubNeedsScriptType()) {
+          <label class="xpub-label" for="xpub-scripttype">Account type</label>
+          <select
+            id="xpub-scripttype"
+            class="xpub-select"
+            data-testid="xpub-scripttype"
+            [value]="xpubScriptType()"
+            (change)="onXpubScriptTypeChange($any($event.target).value)">
+            <option value="p2tr">Taproot (P2TR): recommended for cats</option>
+            <option value="p2wpkh">Native SegWit (P2WPKH)</option>
+            <option value="p2sh-p2wpkh">Nested SegWit (P2SH-P2WPKH)</option>
+            <option value="p2pkh">Legacy (P2PKH)</option>
+          </select>
         }
-      </ul>
-    }
 
-    <!-- Watch-only (xpub): a paste flow, not a one-click connect. The
-         signing step for every action is an Export PSBT bridge. -->
-    @if (xpubEntry; as xpub) {
-      <h5 class="not-installed-heading">Watch-only:</h5>
-      <ul class="wallet-list">
-        <li class="wallet-row">
-          <span class="wallet-name">
-            {{ xpub.label }}
-            <small class="sub-label">{{ knownOrdinalWallets[xpub.wallet].subLabel }}</small>
-          </span>
-          <ng-container *ngTemplateOutlet="infoIcon; context: { $implicit: xpub }" />
-          <button class="wallet-pick" data-testid="wallet-pick-xpub" [attr.aria-expanded]="xpubMode()" (click)="toggleXpubMode()">
-            Connect (xpub)
-          </button>
-        </li>
-      </ul>
+        @if (xpubError(); as err) {
+          <p class="xpub-error" role="alert">{{ err }}</p>
+        }
 
-      @if (xpubMode()) {
-        <div class="xpub-form" data-testid="xpub-form">
-          <label class="xpub-label" for="xpub-key">Account extended public key</label>
-          <textarea
-            id="xpub-key"
-            class="xpub-input"
-            rows="3"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="xpub… / ypub… / zpub…"
-            [value]="xpubKey()"
-            (input)="onXpubKeyInput($any($event.target).value)"></textarea>
-
-          @if (xpubNeedsScriptType()) {
-            <label class="xpub-label" for="xpub-scripttype">Account type</label>
-            <select
-              id="xpub-scripttype"
-              class="xpub-select"
-              data-testid="xpub-scripttype"
-              [value]="xpubScriptType()"
-              (change)="onXpubScriptTypeChange($any($event.target).value)">
-              <option value="p2tr">Taproot (P2TR): recommended for cats</option>
-              <option value="p2wpkh">Native SegWit (P2WPKH)</option>
-              <option value="p2sh-p2wpkh">Nested SegWit (P2SH-P2WPKH)</option>
-              <option value="p2pkh">Legacy (P2PKH)</option>
-            </select>
-          }
-
-          @if (xpubError(); as err) {
-            <p class="xpub-error" role="alert">{{ err }}</p>
-          }
-
-          <button
-            type="button"
-            class="xpub-connect-btn"
-            data-testid="xpub-connect-submit"
-            [disabled]="xpubConnecting()"
-            (click)="submitXpub()">
-            {{ xpubConnecting() ? 'Scanning…' : 'Connect watch-only' }}
-          </button>
-          <p class="xpub-note">You sign each action's PSBT in your own wallet; nothing is signed in the browser.</p>
-        </div>
-      }
-    }
-  </div>
-</ng-template>
-
-<!-- Per-row info icon + capability popover. Facts sourced from the SDK
-     matrix; wording from the shared-UX tables. Keyboard-focusable, opens
-     on click (never hover-only, for mobile). -->
-<ng-template #infoIcon let-entry>
-  <button
-    type="button"
-    class="wallet-info-icon"
-    [ngbPopover]="infoPop"
-    [popoverTitle]="entry.label"
-    triggers="manual"
-    #infoPopover="ngbPopover"
-    (click)="infoPopover.toggle()"
-    [attr.aria-label]="'What does ' + entry.label + ' support?'"
-    popoverClass="wallet-info-popover">i</button>
-
-  <ng-template #infoPop>
-    <div class="info-head">
-      <span class="info-platforms">{{ platformLabel(entry) }}</span>
-      <span class="info-signing">{{ signingModeLabel(entry) }}</span>
-    </div>
-    @if (actionCapabilityLine(entry); as action) {
-      <div class="info-action-needed">
-        <span class="info-action-heading">What this action needs</span>
-        <div class="info-cap">
-          <span class="info-cap-icon" aria-hidden="true">{{ action.icon }}</span>
-          <span class="info-cap-body">
-            <span class="info-cap-name">{{ action.name }}</span>
-            <span class="info-cap-wording">{{ action.wording }}</span>
-            @if (action.caveat; as c) {
-              <span class="info-cap-caveat">{{ c }}</span>
-            }
-          </span>
-        </div>
+        <button
+          type="button"
+          class="xpub-connect-btn"
+          data-testid="xpub-connect-submit"
+          [disabled]="xpubConnecting()"
+          (click)="submitXpub()">
+          {{ xpubConnecting() ? 'Scanning…' : 'Connect watch-only' }}
+        </button>
+        <p class="xpub-note">You sign each action's PSBT in your own wallet; nothing is signed in the browser.</p>
       </div>
     }
-    <ul class="info-caps">
-      @for (line of capabilityLines(entry); track line.name) {
-        <li class="info-cap">
-          <span class="info-cap-icon" aria-hidden="true">{{ line.icon }}</span>
-          <span class="info-cap-body">
-            <span class="info-cap-name">{{ line.name }}</span>
-            <span class="info-cap-wording">{{ line.wording }}</span>
-            @if (line.caveat; as c) {
-              <span class="info-cap-caveat">{{ c }}</span>
-            }
-          </span>
-        </li>
-      }
-    </ul>
-    @if (entry.note) {
-      <p class="info-note">{{ entry.note }}</p>
-    }
-  </ng-template>
+  </div>
 </ng-template>
 
 @if (connectedWallet(); as wallet) {
@@ -177,6 +110,7 @@
     [ngbPopover]="popContent"
     [popoverTitle]="popTitle"
     [autoClose]="'outside'"
+    container="body"
     popoverClass="wallet-popover"
     [title]="networkMismatch()
       ? 'Wallet is on the wrong network, expected ' + expectedNetworkGroup

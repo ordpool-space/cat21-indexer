@@ -1,37 +1,39 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import {
-  CapabilitySupport,
   KnownOrdinalWalletType,
+  WalletActionNotice,
   WalletCapability,
-  WalletPlatform,
-  capabilityOf,
-  walletMatrixEntry,
-  walletsSupporting,
+  walletActionNotice,
 } from 'ordpool-sdk';
 
 import { detectWalletPlatform } from '../wallet-platform';
 
 /**
- * Inline notice for a CONNECTED wallet that cannot perform the current
- * action (per the SDK matrix). Renders nothing when the wallet supports
- * the action; when it does not, it explains why (matrix `caveat`) and
- * names the wallets that can, per the shared-UX spec's disabled-action
- * rule. Never hides the action — the host disables the button and shows
- * this alongside it.
+ * Inline notice for a CONNECTED wallet on an action page. The SDK's
+ * `walletActionNotice()` composes the whole second-person sentence (the
+ * reason plus the live list of wallets that can do it, computed from the
+ * matrix at call time); we print it verbatim, never appending or rewording
+ * it (round-2 §7.4). Two kinds:
  *
- * `Proven`-with-caveat statuses (e.g. UniSat/Wizz collections needing a
- * Taproot active address) are NOT a block: this component treats them as
- * supported and stays silent, leaving the actionable pre-check to the
- * host. Only `Unsupported` produces a notice.
+ *   - `blocked`  — the wallet cannot do it. The host disables the action
+ *                  button; this shows a red notice.
+ *   - `precheck` — it can, once the user changes something (e.g. switch to a
+ *                  Taproot address). The host keeps the button enabled; this
+ *                  shows a milder notice.
+ *
+ * Null when the wallet can do the action — renders nothing.
  */
 @Component({
   selector: 'app-wallet-capability-notice',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (blocked(); as b) {
-      <p class="wallet-capability-notice" role="note" data-testid="wallet-capability-notice">
-        <strong>{{ b.walletLabel }} can't do this:</strong> {{ b.reason }}.
-        {{ b.alternatives }}
+    @if (notice(); as n) {
+      <p
+        class="wallet-capability-notice"
+        [class.is-precheck]="n.kind === 'precheck'"
+        [attr.role]="n.kind === 'blocked' ? 'alert' : 'note'"
+        data-testid="wallet-capability-notice">
+        {{ n.message }}
       </p>
     }
   `,
@@ -45,6 +47,12 @@ import { detectWalletPlatform } from '../wallet-platform';
       font-size: 0.85rem;
       line-height: 1.35;
     }
+    // A precheck is not an error — it is a step the user can take. Amber, not red.
+    .wallet-capability-notice.is-precheck {
+      border-color: #b58105;
+      background: #fff3cd;
+      color: #664d03;
+    }
   `],
 })
 export class WalletCapabilityNotice {
@@ -52,43 +60,11 @@ export class WalletCapabilityNotice {
   readonly capability = input.required<WalletCapability>();
 
   /**
-   * Non-null only when the connected wallet is `Unsupported` for the
-   * action. Carries the wallet label, the matrix reason, and a
-   * comma-listed set of wallets that CAN do it on this platform.
+   * The SDK-composed action notice for the connected wallet, or null when
+   * the wallet can perform the action. Printed verbatim; the site never
+   * assembles the sentence (round-2 §7.4).
    */
-  readonly blocked = computed<{ walletLabel: string; reason: string; alternatives: string } | null>(() => {
-    const status = capabilityOf(this.wallet(), this.capability());
-    if (status.support !== CapabilitySupport.Unsupported) return null;
-
-    const walletLabel = walletMatrixEntry(this.wallet())?.label ?? 'This wallet';
-    // The template appends the sentence-final period; strip any the matrix
-    // caveat already carries so a caveat that ends in "." doesn't double up.
-    const reason = (status.caveat ?? 'this wallet cannot perform this action').replace(/[.\s]+$/, '');
-
-    const others = walletsSupporting(this.capability(), { platform: detectWalletPlatform() })
-      .filter((e) => e.wallet !== this.wallet());
-    const injected = others.filter((e) => e.signingMode === 'injected').map((e) => e.label);
-    const hasWatchOnly = others.some((e) => e.wallet === KnownOrdinalWalletType.xpub);
-
-    let alternatives = '';
-    if (injected.length > 0) {
-      alternatives = `Connect ${listWithOr(injected)}`;
-      alternatives += hasWatchOnly ? ', or use the watch-only path.' : '.';
-    } else if (hasWatchOnly) {
-      alternatives = 'Use the watch-only path.';
-    }
-    return { walletLabel, reason, alternatives };
-  });
+  readonly notice = computed<WalletActionNotice | null>(() =>
+    walletActionNotice(this.wallet(), this.capability(), { platform: detectWalletPlatform() }),
+  );
 }
-
-/** "A, B, or C" — Oxford-style list for the alternatives sentence. */
-function listWithOr(items: readonly string[]): string {
-  if (items.length === 0) return '';
-  if (items.length === 1) return items[0];
-  if (items.length === 2) return `${items[0]} or ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, or ${items[items.length - 1]}`;
-}
-
-/** The two trade actions this notice guards, re-exported for host convenience. */
-export const OFFER_CREATE_CAPABILITY = WalletCapability.Cat21OfferCreate;
-export const OFFER_ACCEPT_CAPABILITY = WalletCapability.Cat21OfferAccept;

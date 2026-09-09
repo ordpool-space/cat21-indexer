@@ -1,4 +1,3 @@
-import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, TemplateRef, computed, inject, input, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
@@ -6,26 +5,16 @@ import { NgbModal, NgbModalRef, NgbPopover, NgbPopoverModule } from '@ng-bootstr
 import {
   KnownOrdinalWalletType,
   KnownOrdinalWallets,
-  WALLET_MATRIX,
   WalletCapability,
-  WalletMatrixEntry,
+  WalletPickerRow,
   WalletPlatform,
   WalletService,
   WatchOnlyScriptType,
-  walletInAppBrowserDeepLink,
-  walletMatrixEntry,
+  walletPickerRows,
 } from 'ordpool-sdk';
 
 import { PendingCats } from '../pending-cats/pending-cats';
-import { signingModeWording } from '../wallet-capability-display';
 import { detectWalletPlatform } from '../wallet-platform';
-import {
-  CapabilityLine,
-  WalletPickerRow,
-  actionCapabilityLineFor,
-  buildInjectedPickerRows,
-  capabilityLinesFor,
-} from './wallet-picker-rows';
 import { WatchOnlyConnectService } from '../watch-only-connect.service';
 
 /**
@@ -35,15 +24,15 @@ import { WatchOnlyConnectService } from '../watch-only-connect.service';
  * truth for which wallet can do what, where): the list is the matrix
  * entries reachable on the current platform, cross-referenced with the
  * `WalletService` runtime detection to split installed (Connect) from
- * not-installed (Download). Every row carries an info icon whose popover
- * reads its facts from the matrix. Once connected, the button shows the
- * wallet + addresses via a popover.
+ * not-installed (Install). Before connecting, a row is name + one button
+ * and nothing else: no capability disclosure lives at login. Once
+ * connected, the button shows the wallet + addresses via a popover.
  */
 @Component({
   selector: 'app-wallet-connect',
   templateUrl: './wallet-connect.html',
   styleUrl: './wallet-connect.scss',
-  imports: [RouterLink, NgbPopoverModule, PendingCats, NgTemplateOutlet],
+  imports: [RouterLink, NgbPopoverModule, PendingCats],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WalletConnect {
@@ -62,13 +51,12 @@ export class WalletConnect {
 
   /**
    * The action this picker connects a wallet FOR, when embedded in an
-   * action card (make-offer, accept-offer). Two effects, per shared-UX:
-   *   1. action-scopes the rows — wallets the matrix marks `Unsupported`
-   *      for this capability are dropped from the picker (no Alby in a
-   *      buy/sell dialog);
-   *   2. adds the "What this action needs" block to each row's popover.
+   * action card (make-offer, accept-offer). It action-scopes the rows:
+   * wallets the matrix marks `Unsupported` for this capability are dropped
+   * from the picker, so an incapable wallet is never offered in an action
+   * connect dialog (round-2 §7.3) and there is nothing to warn about.
    * Undefined for the global header picker, which offers every wallet
-   * reachable on the platform and omits the action block.
+   * reachable on the platform.
    */
   readonly capability = input<WalletCapability | undefined>(undefined);
 
@@ -85,33 +73,22 @@ export class WalletConnect {
    * incapable wallets in an action connect dialog). The pure builder lives
    * in `wallet-picker-rows.ts` and is unit-tested against the real matrix.
    */
+  /**
+   * The picker rows, straight from the SDK's `walletPickerRows()`: the single
+   * source of truth for row shape, button label, logo and reachability, so the
+   * three sites cannot drift. One row per reachable wallet (name + logo + one
+   * button); the watch-only entry arrives as a `connect-xpub` action row.
+   * `capability` action-scopes the list (incapable wallets are absent).
+   */
   readonly pickerRows = computed<WalletPickerRow[]>(() => {
-    // `wallets$` (detectedWallets) is only the re-emit TRIGGER: it strips
-    // `hiddenFromPicker` (Phantom/Binance) on EVERY platform, so a wallet
-    // detected inside its own mobile in-app browser would wrongly read as
-    // "not installed" (Download). Take the install set from the UNFILTERED
-    // `getInstalledWallets()`; the matrix `platforms` list governs which
-    // rows appear. Canonical X-1 fix (cross-session sync 2026-08-28).
-    this.detectedWallets(); // establish the reactive dependency (re-poll trigger)
-    const installedTypes = new Set(
-      this.walletService.getInstalledWallets().installedWallets.map((w) => w.type),
-    );
-    const targetUrl = typeof window !== 'undefined' ? window.location.href : '';
-    return buildInjectedPickerRows(
-      WALLET_MATRIX,
-      this.platform(),
-      installedTypes,
-      this.capability(),
-      targetUrl,
-      walletInAppBrowserDeepLink,
-    );
+    this.detectedWallets(); // re-run when runtime wallet detection re-emits
+    return walletPickerRows({
+      win: typeof window !== 'undefined' ? window : undefined,
+      platform: this.platform(),
+      capability: this.capability(),
+      currentUrl: typeof window !== 'undefined' ? window.location.href : undefined,
+    });
   });
-
-  readonly installedRows = computed(() => this.pickerRows().filter((r) => r.installed));
-  readonly notInstalledRows = computed(() => this.pickerRows().filter((r) => !r.installed));
-
-  /** The watch-only (xpub) matrix entry, for its own picker row + info popover. */
-  readonly xpubEntry = walletMatrixEntry(KnownOrdinalWalletType.xpub);
 
   // --- Watch-only (xpub) paste flow ---
   readonly xpubMode = signal(false);                 // paste form open?
@@ -142,34 +119,6 @@ export class WalletConnect {
     return addr.length > 16 ? `${addr.slice(0, 8)}…${addr.slice(-6)}` : addr;
   }
 
-  // --- Info popover: everything sourced from the matrix + the shared-UX wording tables ---
-
-  /** Platform badges for a wallet, e.g. "Desktop · Mobile". */
-  platformLabel(entry: WalletMatrixEntry): string {
-    return entry.platforms
-      .map((p) => (p === WalletPlatform.Desktop ? 'Desktop' : 'Mobile'))
-      .join(' · ');
-  }
-
-  signingModeLabel(entry: WalletMatrixEntry): string {
-    return signingModeWording(entry.signingMode);
-  }
-
-  /** All seven capabilities for a wallet, in display order, with icon + wording. */
-  capabilityLines(entry: WalletMatrixEntry): CapabilityLine[] {
-    return capabilityLinesFor(entry.wallet);
-  }
-
-  /**
-   * The "What this action needs" popover line: the current page action's
-   * capability and this wallet's status for it (shared-UX §2 item 2).
-   * Null when the picker is not action-scoped (the header picker), so the
-   * block is omitted.
-   */
-  actionCapabilityLine(entry: WalletMatrixEntry): CapabilityLine | null {
-    return actionCapabilityLineFor(entry.wallet, this.capability());
-  }
-
   open(): void {
     this.platform.set(detectWalletPlatform());
     this.connectButtonDisabled.set(false);
@@ -177,6 +126,10 @@ export class WalletConnect {
     this.modalRef = this.modalService.open(this.connectTemplate(), {
       ariaLabelledBy: 'wallet-connect-title',
       centered: true,
+      // Solid, high-contrast modal surface (styles.scss). The site's body
+      // background is orange; without this the modal inherits it and white
+      // text lands on orange, below WCAG AA.
+      windowClass: 'wallet-connect-modal',
     });
   }
 

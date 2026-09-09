@@ -201,3 +201,32 @@ a.btn {
     background: white;
   }
 }
+
+// --- Wallet connect modal + connected-wallet popover ---
+// The site body is orange ($body-bg), which Bootstrap inherits as the
+// modal/popover background, landing white text on orange (below WCAG AA).
+// Give both a solid dark surface so the white pixel text + borders read
+// clearly, and cap the popover height so it never exceeds the viewport.
+.wallet-connect-modal {
+  --bs-modal-bg: #282828;
+  --bs-modal-color: #fff;
+  --bs-modal-border-color: #fff;
+  --bs-modal-border-width: 2px;
+
+  .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+}
+
+.wallet-popover.popover {
+  --bs-popover-bg: #282828;
+  --bs-popover-body-color: #fff;
+  --bs-popover-header-bg: #1c1c1c;
+  --bs-popover-header-color: #fff;
+  --bs-popover-border-color: #fff;
+  --bs-popover-max-width: 320px;
+  border-width: 2px;
+
+  .popover-body {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+}
