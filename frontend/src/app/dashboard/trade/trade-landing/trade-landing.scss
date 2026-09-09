@@ -12,23 +12,21 @@
   display: flex;
   flex-direction: column;
   padding: 1.25rem 1.5rem;
-  // Explicit dark panel — do NOT "tidy" this back to var(--bs-tertiary-bg).
-  // The document sets no data-bs-theme, so a bare Bootstrap semantic colour
-  // var resolves to its LIGHT default here (--bs-tertiary-bg = #f8f9fa), and
-  // the card's white text is invisible on it (the bug this replaced). So set
-  // the dark background explicitly, matching the connect modal and the
-  // trade/transfer forms. Proper root fix is data-bs-theme=dark on the app
-  // root (see the frontend "Bootstrap semantic vars" note in
-  // cat21-indexer/.claude/CLAUDE.md); a focused follow-up.
+  // Orange-theme panel: a white border on the transparent orange body, with
+  // white text — the site's pixel-panel look, matching the dashboard/mint
+  // connect cards. Do NOT swap this for var(--bs-tertiary-bg): with no
+  // data-bs-theme it resolves to Bootstrap's LIGHT default (#f8f9fa) and the
+  // white text is invisible (the bug this replaced). Dark surfaces are for
+  // popups only; the normal site stays orange. See the "Bootstrap semantic
+  // vars" note in cat21-indexer/.claude/CLAUDE.md.
   border: 2px solid #fff;
-  background: #282828;
+  background: transparent;
   color: inherit;
   text-decoration: none;
   transition: border-color 0.15s, transform 0.15s;
 
   &:hover, &:focus {
-    // Orange accent on hover; --bs-primary (#555) is nearly invisible on dark.
-    border-color: #FF9900;
+    border-color: var(--bs-primary);
     transform: translateY(-2px);
   }
 
@@ -37,12 +35,10 @@
     margin: 0 0 0.5rem;
   }
 
-  strong { color: #fff; }
-
   .trade-card-cta {
+    // Inherits the card's white; bold weight sets it apart. An orange accent
+    // would vanish on the orange body, so it stays white here.
     margin-top: auto;
-    // Orange call-to-action, readable on the dark card (--bs-primary #555 is not).
-    color: #FF9900;
     font-weight: 600;
   }
 }

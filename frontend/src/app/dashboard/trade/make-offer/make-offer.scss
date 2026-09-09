@@ -2,24 +2,16 @@
 .make-offer-section {
   margin: 1.5rem 0;
   padding: 1rem 1.25rem;
-  // Explicit dark panel — do NOT "tidy" this back to var(--bs-tertiary-bg).
-  // The document sets no data-bs-theme, so a bare Bootstrap semantic colour
-  // var resolves to its LIGHT default here (--bs-tertiary-bg = #f8f9fa), and
-  // the site's white $body-color is invisible on it (the bug this replaced).
-  // So the panel sets its own dark background, matching the connect modal and
-  // popover. Proper root fix is data-bs-theme=dark on the app root (see the
-  // frontend "Bootstrap semantic vars" note in cat21-indexer/.claude/CLAUDE.md);
-  // a focused follow-up, not a change to make inside this file.
+  // Orange-theme panel: a white border on the transparent orange body, with
+  // white text — the site's pixel-panel look, matching the dashboard/mint
+  // connect cards. Do NOT swap this for var(--bs-tertiary-bg): the document
+  // sets no data-bs-theme, so that var resolves to Bootstrap's LIGHT default
+  // (#f8f9fa, near-white) and the site's white text is invisible on it (the
+  // bug this replaced). Dark surfaces are for popups only (the connect modal);
+  // the normal site stays orange. See the "Bootstrap semantic vars" note in
+  // cat21-indexer/.claude/CLAUDE.md.
   border: 2px solid #fff;
-  background: #282828;
-  // .text-muted / .lbl read this var; Bootstrap's light-mode value is a dark
-  // grey (unreadable on the dark panel), so lift it to a light grey here. The
-  // subtle-bg alert boxes below set their own bg+text and are unaffected.
-  --bs-secondary-color: rgba(255, 255, 255, 0.75);
-
-  // The global `strong { color: $primary }` (#555, dark grey) is unreadable on
-  // this dark panel; take the panel's white so bold text stays legible.
-  strong { color: #fff; }
+  background: transparent;
 }
 
 .make-offer-section-heading {
