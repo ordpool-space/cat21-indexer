@@ -172,7 +172,19 @@ environment exists rather than shipped blind. Track it here:
   rewritten (no PSBT / input 0 / nLockTime / UTXO / first sat), but the copy
   behind a connected wallet (e.g. "PSBT" in the make-offer bid/success states)
   almost certainly carries the same class. Review it *rendered* in the connected
-  environment; don't blind-edit copy you can't see.
+  environment; don't blind-edit copy you can't see. The blocked-notice reason
+  sentences come from the SDK's `walletActionNotice` (source-owned there), so
+  register fixes to those go in `ordpool-sdk`, not here.
+
+- **Bumping the `ordpool-sdk` pin costs a peer-dependency fight.** A fresh
+  `npm install` after changing the SHA hits a pre-existing conflict between
+  `@ng-bootstrap/ng-bootstrap`'s peer range and `@angular/* 21.2.x`; npm wants
+  `--legacy-peer-deps`. Do NOT force it for a hygiene bump — a lockfile forced
+  past a peer conflict freezes a bad resolve (workspace lockfile-discipline
+  rule). Bundle the pin bump into the connected-state pass, where the strings it
+  carries (`walletCustodyCaveat`, the reworded notice reasons) can actually be
+  seen and the peer resolution is handled deliberately. The underlying
+  ng-bootstrap/Angular-21 peer mismatch is a separate maintainer follow-up.
 
 ### Commands
 ```bash
