@@ -32,4 +32,12 @@ module.exports = {
     '/node_modules/',
     '<rootDir>/src/app/shared/cat21-api/',
   ],
+  // Regression floor, enforced in CI via `npm test -- --coverage`. Owned-code
+  // only (codegen excluded above). Route/page components are covered by the
+  // e2e regtest lanes, not unit tests, so this floor tracks the services +
+  // pure logic + pipes. Set below the achieved level as a ratchet: raise it as
+  // coverage climbs; never lower it to make a regression pass.
+  coverageThreshold: {
+    global: { lines: 45, statements: 44, branches: 40, functions: 42 },
+  },
 };

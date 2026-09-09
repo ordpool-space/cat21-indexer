@@ -30,7 +30,7 @@ jobs:
 
     - name: Unit tests (Jest)
       working-directory: frontend
-      run: npm test
+      run: npm test -- --coverage
 
     - name: Production build
       working-directory: frontend
