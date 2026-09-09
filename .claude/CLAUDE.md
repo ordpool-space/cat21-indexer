@@ -112,6 +112,30 @@ served by the backend via `GET /api/cat/:catNumber/image.svg` (and
 during sync and they're cached at the Cloudflare edge for a year (immutable).
 Trait data comes through the OpenAPI client from `GET /api/cat/:catNumber`.
 
+#### Bootstrap semantic vars resolve LIGHT (no `data-bs-theme`)
+
+The app sets `$body-bg: #FF9900` / `$body-color: white` (a dark-on-orange
+look) but sets **`data-bs-theme` nowhere** — not on `<html>`, not on the
+app root. So every Bootstrap semantic colour var resolves to its **light-mode
+default**: `--bs-tertiary-bg` is `#f8f9fa` (near-white), `--bs-secondary-color`
+/ `--bs-emphasis-color` are dark greys/near-black, etc. Any surface that reads
+one of these *bare* (a background from the var, text from the site's white
+`$body-color`, or vice versa) renders white-on-near-white or dark-on-dark and
+is unreadable. This is why the connect modal, the popover, and the
+trade/transfer/accept/trade-landing panels all set their dark surface
+**explicitly** (`#282828` + white border) instead of using `var(--bs-tertiary-bg)`
+— and why a "cleanup" that swaps those back for the semantic var reintroduces
+the bug. Paired uses (a `*-bg-subtle` background with its matching
+`*-text-emphasis` on the same element) are safe: both come from Bootstrap and
+can't drift apart.
+
+**Proper root fix (a focused follow-up, not done):** set `data-bs-theme="dark"`
+on the app root — the sibling cubes frontend does exactly this (`app.component.ts`)
+and is immune to the whole class — plus `$body-bg-dark` / `$body-color-dark` in
+`_adjust-bootstrap.scss` to keep the orange body. That flips every Bootstrap
+surface at once, so it needs a full visual pass across the site, which is why
+it's deferred rather than bundled into a contrast fix.
+
 ### Commands
 ```bash
 cd frontend

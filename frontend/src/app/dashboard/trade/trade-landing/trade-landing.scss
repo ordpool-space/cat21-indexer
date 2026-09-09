@@ -12,9 +12,14 @@
   display: flex;
   flex-direction: column;
   padding: 1.25rem 1.5rem;
-  // Dark panel, matching the site's other dark surfaces (the connect modal,
-  // the trade/transfer forms). The card's text is the site's white
-  // $body-color, unreadable on Bootstrap's light --bs-tertiary-bg.
+  // Explicit dark panel — do NOT "tidy" this back to var(--bs-tertiary-bg).
+  // The document sets no data-bs-theme, so a bare Bootstrap semantic colour
+  // var resolves to its LIGHT default here (--bs-tertiary-bg = #f8f9fa), and
+  // the card's white text is invisible on it (the bug this replaced). So set
+  // the dark background explicitly, matching the connect modal and the
+  // trade/transfer forms. Proper root fix is data-bs-theme=dark on the app
+  // root (see the frontend "Bootstrap semantic vars" note in
+  // cat21-indexer/.claude/CLAUDE.md); a focused follow-up.
   border: 2px solid #fff;
   background: #282828;
   color: inherit;
