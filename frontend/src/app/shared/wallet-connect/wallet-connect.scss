@@ -196,9 +196,14 @@
 }
 
 
-.no-installed {
-  opacity: 0.8;
-  font-size: 0.9rem;
+// Empty-state diagnostic line (round-2 §7.2): "No wallet detected in this
+// browser." Sits below the list, one line, nothing after it.
+.no-wallet-detected {
+  margin: 0.25rem 0 0;
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  opacity: 0.85;
 }
 
 .connect-error {

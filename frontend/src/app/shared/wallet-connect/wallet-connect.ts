@@ -18,13 +18,11 @@ import { WatchOnlyConnectService } from '../watch-only-connect.service';
 /**
  * Wallet connection control for the header.
  *
- * The picker is driven by the SDK's `WALLET_MATRIX` (the single source of
- * truth for which wallet can do what, where): the list is the matrix
- * entries reachable on the current platform, cross-referenced with the
- * `WalletService` runtime detection to split installed (Connect) from
- * not-installed (Install). Before connecting, a row is name + one button
- * and nothing else: no capability disclosure lives at login. Once
- * connected, the button shows the wallet + addresses via a popover.
+ * The picker is driven by the SDK's `walletPickerRows()`, the single source
+ * of truth for row shape, button label, logo and reachability, so the three
+ * sites cannot drift. Each row is logo + name + one button and nothing else:
+ * no capability disclosure lives at login (round-2 §7.2). Once connected, the
+ * button shows the wallet + addresses via a popover.
  */
 @Component({
   selector: 'app-wallet-connect',
@@ -56,22 +54,9 @@ export class WalletConnect {
   readonly capability = input<WalletCapability | undefined>(undefined);
 
   /**
-   * The picker rows: every INJECTED (in-browser signing) matrix entry
-   * reachable on this platform, each tagged installed/not from runtime
-   * detection and carrying its mobile deep link where one applies. Oyl
-   * never appears (no matrix row); Phantom/Binance never appear on desktop
-   * (matrix marks them Mobile-only). Watch-only (xpub) is a separate row
-   * (no runtime detection; a paste flow) — see below.
-   *
-   * When `capability` is set (an action card), rows the matrix marks
-   * `Unsupported` for that action are excluded (shared-UX §1: don't offer
-   * incapable wallets in an action connect dialog). The pure builder lives
-   * in `wallet-picker-rows.ts` and is unit-tested against the real matrix.
-   */
-  /**
    * The picker rows, straight from the SDK's `walletPickerRows()`: the single
    * source of truth for row shape, button label, logo and reachability, so the
-   * three sites cannot drift. One row per reachable wallet (name + logo + one
+   * three sites cannot drift. One row per reachable wallet (logo + name + one
    * button); the watch-only entry arrives as a `connect-xpub` action row.
    * `capability` action-scopes the list (incapable wallets are absent).
    */
@@ -87,6 +72,19 @@ export class WalletConnect {
       currentUrl: typeof window !== 'undefined' ? window.location.href : undefined,
     });
   });
+
+  /**
+   * `true` when no real wallet provider is reachable in this browser: no row
+   * carries the `connect` action (installs, the mobile in-app bounce, and the
+   * always-present watch-only paste flow are not detected providers). Drives
+   * the one diagnostic line "No wallet detected in this browser." (round-2
+   * §7.2) so a person whose wallet is installed-but-unreachable (disabled
+   * extension, wrong profile, fresh container) reads that we looked and found
+   * none, rather than that the site is broken.
+   */
+  readonly noWalletDetected = computed<boolean>(() =>
+    this.pickerRows().every((row) => row.action !== 'connect'),
+  );
 
   // --- Watch-only (xpub) paste flow ---
   readonly xpubMode = signal(false);                 // paste form open?

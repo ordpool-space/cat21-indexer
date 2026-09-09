@@ -42,7 +42,11 @@
                 </a>
               }
               @case ('connect-xpub') {
-                <button class="wallet-pick" data-testid="wallet-pick-xpub" [attr.aria-expanded]="xpubMode()" (click)="toggleXpubMode()">
+                <!-- Watch-only needs no install, so it works right now in this
+                     browser: solid primary, like Connect (round-2 §7.2). In the
+                     empty state it is the only actionable row, so it should be
+                     what the eye lands on. -->
+                <button class="wallet-pick wallet-pick-primary" data-testid="wallet-pick-xpub" [attr.aria-expanded]="xpubMode()" (click)="toggleXpubMode()">
                   {{ row.actionLabel }}
                 </button>
               }
@@ -50,8 +54,14 @@
           </li>
         }
       </ul>
-    } @else {
-      <p class="no-installed">No supported wallets available in this browser.</p>
+    }
+
+    @if (noWalletDetected()) {
+      <!-- Empty state: one diagnostic line, nothing after it (round-2 §7.2).
+           "We looked and found none", not a second list of options — every
+           Install row already says Install, and the mobile Open-in button is
+           its own message. -->
+      <p class="no-wallet-detected">No wallet detected in this browser.</p>
     }
 
     <!-- Watch-only (xpub): a paste flow, revealed by the connect-xpub row's
