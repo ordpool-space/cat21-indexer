@@ -4,19 +4,16 @@ import { KnownOrdinalWalletType, WalletCapability, detectWalletPlatform, walletA
 
 import { WalletCapabilityNotice } from './wallet-capability-notice';
 
-// Round-2 §7.4: the SDK composes the whole action sentence; the site prints
-// it VERBATIM, never appending or rewording. These specs pin exactly that,
-// against the live SDK (no mocking), so a matrix or wording change surfaces
-// here and any local rewording of the sentence turns them red.
+// Round-2 §7.4/§7: the SDK provides the notice PARTS (reason, alternatives,
+// actionPhrase); the site lays them out as a scannable list, printing each
+// verbatim and NEVER truncating the alternatives (the reader's question is
+// "is the wallet I already have in the list", which a cap can't answer). These
+// specs assert exactly that against the live SDK, so a matrix/wording change
+// surfaces here and any dropped alternative or reworded reason turns them red.
 //
-// The component computes its platform via detectWalletPlatform(); the test
-// resolves the same value so the expected notice matches what the component
-// asks the SDK for.
+// The component derives its platform via the SDK's detectWalletPlatform(win);
+// the test resolves the same value so expected == what the component asks for.
 const PLATFORM = detectWalletPlatform(typeof window !== 'undefined' ? window : undefined);
-
-function expectedMessage(wallet: KnownOrdinalWalletType, capability: WalletCapability): string | null {
-  return walletActionNotice(wallet, capability, { platform: PLATFORM })?.message ?? null;
-}
 
 describe('WalletCapabilityNotice', () => {
   let fixture: ComponentFixture<WalletCapabilityNotice>;
@@ -35,29 +32,37 @@ describe('WalletCapabilityNotice', () => {
     return fixture.nativeElement.querySelector('[data-testid="wallet-capability-notice"]');
   }
 
-  it.each([
-    [KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate],
-    [KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferAccept],
-    [KnownOrdinalWalletType.xverse, WalletCapability.Cat21OfferCreate],
-    [KnownOrdinalWalletType.leather, WalletCapability.Cat21OfferAccept],
-    [KnownOrdinalWalletType.unisat, WalletCapability.InscriptionParentChild],
-  ])('prints the SDK notice VERBATIM (or renders nothing) for %s / %s', (wallet, capability) => {
-    const node = el(wallet, capability);
-    expect(node ? node.textContent!.trim() : null).toBe(expectedMessage(wallet, capability));
-  });
+  function normText(node: HTMLElement): string {
+    return node.textContent!.replace(/\s+/g, ' ').trim();
+  }
 
-  it('renders a blocked notice with role=alert for Alby creating an offer', () => {
+  it('renders the reason + EVERY alternative (never truncated) for Alby creating an offer', () => {
     const notice = walletActionNotice(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate, { platform: PLATFORM });
-    expect(notice?.kind).toBe('blocked'); // matrix sanity: Alby cannot create offers
+    expect(notice?.kind).toBe('blocked');
+    expect(notice!.alternatives.length).toBeGreaterThan(1); // sanity: there IS a list to scan
+
     const node = el(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferCreate);
     expect(node).not.toBeNull();
     expect(node!.getAttribute('role')).toBe('alert');
-    expect(node!.classList.contains('is-precheck')).toBe(false);
-    expect(node!.textContent!.trim()).toBe(notice!.message);
+
+    const text = normText(node!);
+    expect(text).toContain(notice!.reason);        // reason, verbatim
+    expect(text).toContain(notice!.actionPhrase);  // "…can sell a cat" heading
+    for (const alt of notice!.alternatives) {
+      expect(text).toContain(alt);                 // every wallet named; a truncated list drops one
+    }
+  });
+
+  it('renders the reason + every alternative for Alby accepting an offer', () => {
+    const notice = walletActionNotice(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferAccept, { platform: PLATFORM });
+    const text = normText(el(KnownOrdinalWalletType.alby, WalletCapability.Cat21OfferAccept)!);
+    expect(text).toContain(notice!.reason);
+    for (const alt of notice!.alternatives) {
+      expect(text).toContain(alt);
+    }
   });
 
   it('renders nothing for a capable wallet (Xverse creating an offer)', () => {
-    // matrix sanity: the SDK reports Xverse can create offers, so no notice
     expect(walletActionNotice(KnownOrdinalWalletType.xverse, WalletCapability.Cat21OfferCreate, { platform: PLATFORM })).toBeNull();
     expect(el(KnownOrdinalWalletType.xverse, WalletCapability.Cat21OfferCreate)).toBeNull();
   });

@@ -27,13 +27,26 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (notice(); as n) {
-      <p
+      <div
         class="wallet-capability-notice"
         [class.is-precheck]="n.kind === 'precheck'"
         [attr.role]="n.kind === 'blocked' ? 'alert' : 'note'"
         data-testid="wallet-capability-notice">
-        {{ n.message }}
-      </p>
+        <p class="wcn-reason">{{ n.reason }}</p>
+        @if (n.alternatives.length > 0) {
+          <!-- Render the alternatives as a scannable list, never as prose and
+               never truncated: the reader's question is "is the wallet I
+               already have in here?", which a paragraph buries and a cap can't
+               answer (round-2 §7). The reason + labels come verbatim from the
+               SDK; we only lay them out. -->
+          <p class="wcn-alt-heading">Wallets that can {{ n.actionPhrase }}:</p>
+          <ul class="wcn-alt-list">
+            @for (w of n.alternatives; track w) {
+              <li>{{ w }}</li>
+            }
+          </ul>
+        }
+      </div>
     }
   `,
   styles: [`
@@ -52,6 +65,18 @@ import {
       background: #fff3cd;
       color: #664d03;
     }
+    .wcn-reason { margin: 0; }
+    .wcn-alt-heading { margin: 0.5rem 0 0.15rem; font-weight: bold; }
+    // Scannable column of wallet names — one per line so the eye can find its own.
+    .wcn-alt-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.15rem 0.75rem;
+    }
+    .wcn-alt-list li { white-space: nowrap; }
   `],
 })
 export class WalletCapabilityNotice {
