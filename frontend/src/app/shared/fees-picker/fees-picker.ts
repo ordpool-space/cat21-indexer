@@ -1,4 +1,3 @@
-import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -33,7 +32,7 @@ const TIERS: readonly TierOption[] = [
   selector: 'app-fees-picker',
   templateUrl: './fees-picker.html',
   styleUrl: './fees-picker.scss',
-  imports: [DecimalPipe, FormsModule],
+  imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FeesPicker {
@@ -107,6 +106,19 @@ export class FeesPicker {
         this.feeRateChange.emit(fees.fastestFee);
       }
     });
+  }
+
+  /**
+   * A tier's rate as a display string, formatted in the BROWSER locale (the
+   * default `toLocaleString` locale) — the same one the native
+   * `<input type="number">` beside it renders with. This keeps the presets
+   * and the manual field from showing one fee rate under two decimal
+   * conventions (a preset "2.5" next to an input "2,5" on a German browser).
+   * Caps at two fraction digits, matching the manual field's min-relay 0.1
+   * sat/vB precision.
+   */
+  formatRate(rate: number): string {
+    return rate.toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
 
   pickTier(t: TierOption): void {

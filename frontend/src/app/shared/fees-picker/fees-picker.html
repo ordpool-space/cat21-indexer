@@ -11,7 +11,7 @@
         [attr.data-active]="activeTier() === t.key"
       >
         <span class="tier-label">{{ t.label }}</span>
-        <span class="tier-rate">{{ fees() ? (fees()![t.payloadKey] | number:'1.0-2') : '…' }} sat/vB</span>
+        <span class="tier-rate">{{ fees() ? formatRate(fees()![t.payloadKey]) : '…' }} sat/vB</span>
       </button>
     }
   </div>
