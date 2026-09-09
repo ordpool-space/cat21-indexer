@@ -266,3 +266,143 @@ describe('CatsController', () => {
   });
 
 });
+
+describe('CatsController — extended health, image endpoints, pagination clamps', () => {
+  const VALID_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff9900"/></svg>';
+
+  function make(svc: Partial<CatsService> = {}) {
+    const service = {
+      getExtendedHealth: jest.fn(),
+      getCatByNumber: jest.fn(),
+      getCatSvg: jest.fn(),
+      getCats: jest.fn(),
+      getCatNumbers: jest.fn(),
+      ...svc,
+    } as unknown as CatsService;
+    return { controller: new CatsController(service), service };
+  }
+
+  describe('getExtendedHealth', () => {
+    it('sets no-store and returns the report when healthy', async () => {
+      const health = { status: 'ok' } as never;
+      const { controller, service } = make({ getExtendedHealth: jest.fn().mockResolvedValue(health) });
+      const reply = createMockReply();
+      const out = await controller.getExtendedHealth(reply);
+      expect(out).toBe(health);
+      expect(service.getExtendedHealth).toHaveBeenCalled();
+      expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    });
+
+    it('throws 503 ServiceUnavailable (carrying the report) when status is down', async () => {
+      const health = { status: 'down', db: { reachable: false } } as never;
+      const { controller } = make({ getExtendedHealth: jest.fn().mockResolvedValue(health) });
+      const reply = createMockReply();
+      const { ServiceUnavailableException } = await import('@nestjs/common');
+      let thrown: unknown;
+      try { await controller.getExtendedHealth(reply); } catch (e) { thrown = e; }
+      expect(thrown).toBeInstanceOf(ServiceUnavailableException);
+      expect((thrown as InstanceType<typeof ServiceUnavailableException>).getResponse()).toMatchObject({ status: 'down' });
+    });
+  });
+
+  describe('getCatSvg', () => {
+    it('sends the svg with immutable cache + svg content-type', async () => {
+      const { controller } = make({ getCatSvg: jest.fn().mockResolvedValue(VALID_SVG) });
+      const reply = createMockReply();
+      await controller.getCatSvg(0, reply);
+      expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/svg+xml');
+      expect(reply.send).toHaveBeenCalledWith(VALID_SVG);
+    });
+
+    it('404s with no-store when the cat has no svg', async () => {
+      const { controller } = make({ getCatSvg: jest.fn().mockResolvedValue(null) });
+      const reply = createMockReply();
+      await expect(controller.getCatSvg(999, reply)).rejects.toBeInstanceOf(NotFoundException);
+      expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    });
+  });
+
+  describe('getCatWebp', () => {
+    it('renders a WebP buffer from the svg and sends it with immutable cache', async () => {
+      const { controller } = make({ getCatSvg: jest.fn().mockResolvedValue(VALID_SVG) });
+      const reply = createMockReply();
+      await controller.getCatWebp(0, reply);
+      expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/webp');
+      const sent = reply.send.mock.calls[0][0];
+      expect(Buffer.isBuffer(sent)).toBe(true);
+      expect(sent.length).toBeGreaterThan(0);
+    });
+
+    it('404s with no-store when the cat has no svg', async () => {
+      const { controller } = make({ getCatSvg: jest.fn().mockResolvedValue(null) });
+      const reply = createMockReply();
+      await expect(controller.getCatWebp(999, reply)).rejects.toBeInstanceOf(NotFoundException);
+      expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    });
+
+    it('500s with no-store when the svg cannot be rendered', async () => {
+      const { controller } = make({ getCatSvg: jest.fn().mockResolvedValue('this is not valid svg or image data') });
+      const reply = createMockReply();
+      await expect(controller.getCatWebp(0, reply)).rejects.toBeInstanceOf(InternalServerErrorException);
+      expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    });
+  });
+
+  describe('getCatSocialCard', () => {
+    it('composites a 1200x630 PNG card and sends it', async () => {
+      const { controller } = make({
+        getCatByNumber: jest.fn().mockResolvedValue({ backgroundColors: ['#123456'] }),
+        getCatSvg: jest.fn().mockResolvedValue(VALID_SVG),
+      });
+      const reply = createMockReply();
+      await controller.getCatSocialCard(0, reply);
+      expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/png');
+      const sent = reply.send.mock.calls[0][0] as Buffer;
+      // PNG magic + IHDR: signature is 8 bytes; width/height are big-endian
+      // u32 at byte offsets 16 and 20. Pins the 1200x630 og:image card size.
+      expect(sent.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      expect(sent.readUInt32BE(16)).toBe(1200);
+      expect(sent.readUInt32BE(20)).toBe(630);
+    });
+
+    it('404s with no-store when the cat is missing', async () => {
+      const { controller } = make({ getCatByNumber: jest.fn().mockResolvedValue(null) });
+      const reply = createMockReply();
+      await expect(controller.getCatSocialCard(999, reply)).rejects.toBeInstanceOf(NotFoundException);
+      expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    });
+
+    it('500s with no-store when the art cannot be rendered', async () => {
+      const { controller } = make({
+        getCatByNumber: jest.fn().mockResolvedValue({ backgroundColors: ['#123456'] }),
+        getCatSvg: jest.fn().mockResolvedValue('not valid svg'),
+      });
+      const reply = createMockReply();
+      await expect(controller.getCatSocialCard(0, reply)).rejects.toBeInstanceOf(InternalServerErrorException);
+      expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    });
+  });
+
+  describe('pagination clamps', () => {
+    it('getCats clamps itemsPerPage to <=100 and page to >=1', async () => {
+      const { controller, service } = make({ getCats: jest.fn().mockResolvedValue({ items: [] }) });
+      await controller.getCats(500, 0);
+      expect(service.getCats).toHaveBeenCalledWith(100, 1);
+    });
+
+    it('getCats raises itemsPerPage to >=1', async () => {
+      const { controller, service } = make({ getCats: jest.fn().mockResolvedValue({ items: [] }) });
+      await controller.getCats(0, 3);
+      expect(service.getCats).toHaveBeenCalledWith(1, 3);
+    });
+
+    it('getCatNumbers clamps + maps sort=rarity through, defaulting everything else to newest', async () => {
+      const { controller, service } = make({ getCatNumbers: jest.fn().mockResolvedValue({ items: [] }) });
+      await controller.getCatNumbers(500, 0, 'rarity');
+      expect(service.getCatNumbers).toHaveBeenCalledWith(100, 1, 'rarity');
+      await controller.getCatNumbers(25, 1, 'something-else');
+      expect(service.getCatNumbers).toHaveBeenCalledWith(25, 1, 'newest');
+    });
+  });
+});
