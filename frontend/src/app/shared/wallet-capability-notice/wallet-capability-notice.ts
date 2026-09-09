@@ -67,16 +67,15 @@ import {
     }
     .wcn-reason { margin: 0; }
     .wcn-alt-heading { margin: 0.5rem 0 0.15rem; font-weight: bold; }
-    // Scannable column of wallet names — one per line so the eye can find its own.
+    // Scannable column of wallet names, one per line so the eye finds its own
+    // (the reader's whole question is "is the wallet I have in here?"). A
+    // wrapped multi-per-line flow reads as a run-on at narrow width.
     .wcn-alt-list {
       list-style: none;
       margin: 0;
       padding: 0;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.15rem 0.75rem;
     }
-    .wcn-alt-list li { white-space: nowrap; }
+    .wcn-alt-list li { white-space: nowrap; line-height: 1.4; }
   `],
 })
 export class WalletCapabilityNotice {
