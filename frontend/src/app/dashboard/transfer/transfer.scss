@@ -2,9 +2,16 @@
 .transfer-section {
   margin: 1.5rem 0;
   padding: 1rem 1.25rem;
-  border: 1px solid var(--bs-border-color);
-  border-radius: var(--bs-border-radius);
-  background: var(--bs-tertiary-bg);
+  // Dark panel, matching the site's other dark surfaces (the connect modal,
+  // the popover). Content here inherits the site's white $body-color, which
+  // is unreadable on Bootstrap's light --bs-tertiary-bg; the dark fill and
+  // white border give the pixel-panel look the readable surface it needs.
+  border: 2px solid #fff;
+  background: #282828;
+  // .text-muted / .lbl read this var; Bootstrap's light-mode value is a dark
+  // grey (unreadable on the dark panel), so lift it to a light grey here. The
+  // subtle-bg alert boxes below set their own bg+text and are unaffected.
+  --bs-secondary-color: rgba(255, 255, 255, 0.75);
 }
 
 .transfer-section-heading {
