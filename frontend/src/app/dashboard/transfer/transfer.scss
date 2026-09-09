@@ -12,6 +12,10 @@
   // grey (unreadable on the dark panel), so lift it to a light grey here. The
   // subtle-bg alert boxes below set their own bg+text and are unaffected.
   --bs-secondary-color: rgba(255, 255, 255, 0.75);
+
+  // The global `strong { color: $primary }` (#555, dark grey) is unreadable on
+  // this dark panel; take the panel's white so bold text stays legible.
+  strong { color: #fff; }
 }
 
 .transfer-section-heading {

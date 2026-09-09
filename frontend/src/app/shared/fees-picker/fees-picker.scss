@@ -46,8 +46,12 @@
 }
 
 .tier-btn-active {
+  // Selected tier inverts to a white fill (the site's active-state signal,
+  // plus the Norton shadow stripe below as a non-colour affordance). The text
+  // must go DARK here: orange-on-white is 2.14:1 and this is the fee rate the
+  // person is about to pay, the one number that has to be legible.
   background: white;
-  color: #FF9900;
+  color: #282828;
 }
 
 .tier-btn-active::after {
