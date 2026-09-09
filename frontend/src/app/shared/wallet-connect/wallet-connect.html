@@ -1,6 +1,8 @@
 <ng-template #connectModal let-modal>
   <div class="modal-header">
-    <h4 class="modal-title" id="wallet-connect-title">Connect wallet</h4>
+    <!-- Initial focus on the title, not the close X (whose focus ring rendered
+         as a stray grey box). ngbAutofocus is what ng-bootstrap focuses on open. -->
+    <h4 class="modal-title" id="wallet-connect-title" ngbAutofocus tabindex="-1">Connect wallet</h4>
     <button type="button" class="btn-close" aria-label="Close" (click)="modal.dismiss()"></button>
   </div>
   <div class="modal-body">
@@ -24,7 +26,7 @@
 
             @switch (row.action) {
               @case ('connect') {
-                <button class="wallet-pick" [attr.data-testid]="'wallet-pick-' + row.wallet" [disabled]="connectButtonDisabled()" (click)="connectWallet(row.wallet)">
+                <button class="wallet-pick wallet-pick-primary" [attr.data-testid]="'wallet-pick-' + row.wallet" [disabled]="connectButtonDisabled()" (click)="connectWallet(row.wallet)">
                   {{ row.actionLabel }}
                 </button>
               }

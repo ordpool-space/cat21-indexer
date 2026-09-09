@@ -75,6 +75,17 @@
   &:disabled { opacity: 0.5; cursor: progress; }
 }
 
+// Ranking: the row a person can actually act on (their installed wallet) is
+// the primary action, so Connect is FILLED while Install / Connect (xpub) stay
+// outline. Both read as clickable; the eye lands on the wallet you have.
+.wallet-pick-primary {
+  background: white;
+  border-color: white;
+  color: #FF9900;
+
+  &:hover:not(:disabled) { background: #f5f5f5; }
+}
+
 // Mobile in-app-browser bounce — filled to read as the primary action.
 .wallet-pick-deeplink {
   background: white;
