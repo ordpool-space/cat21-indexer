@@ -37,14 +37,10 @@
   <div class="connect-card" data-testid="make-offer-cta">
     <h2>Connect your wallet to make an offer</h2>
     <p class="mb-3">
-      You sign the buyer-side inputs of the PSBT. The seller's input 0
-      stays unsigned until they accept — that's what makes the offer
-      a "buy-offer" artifact rather than a broadcastable tx.
-    </p>
-    <p class="mb-3">
-      <strong>Safe wallets:</strong> Xverse and Leather. Unisat works
-      but uses one address for both payments and ordinals, so be
-      careful there.
+      Offer a price for someone's cat. You approve your side now, but
+      nothing leaves your wallet until the seller accepts. If they do,
+      you pay the price and the cat is yours; if they don't, your coins
+      stay put.
     </p>
     <app-wallet-connect [capability]="offerCreateCapability" />
   </div>

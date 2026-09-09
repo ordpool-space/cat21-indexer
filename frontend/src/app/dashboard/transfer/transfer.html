@@ -22,17 +22,9 @@
   <div class="connect-card" data-testid="transfer-cta">
     <h2>Connect your wallet to transfer a cat</h2>
     <p class="mb-3">
-      A cat is transferred by sending its UTXO as the first input of a
-      new transaction with <code>nLockTime = 21</code>. The cat's UTXO
-      travels intact to the first sat of the first output, the
-      recipient's address (its sats stay with the cat, whatever its
-      size). A separate funding UTXO from your payment address covers
-      the miner fee.
-    </p>
-    <p class="mb-3">
-      <strong>Safe wallets:</strong> Xverse and Leather won't accidentally
-      spend cat sats. Unisat is also supported but uses a single address
-      for payments and ordinals — be cautious there.
+      Send one of your cats to another address. The cat moves intact to
+      the recipient. You cover the network fee from your wallet's other
+      coins, so you'll need a little Bitcoin on top of the cat itself.
     </p>
     <app-wallet-connect />
   </div>
