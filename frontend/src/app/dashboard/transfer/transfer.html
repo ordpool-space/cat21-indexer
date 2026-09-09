@@ -26,7 +26,7 @@
       the recipient. You cover the network fee from your wallet's other
       coins, so you'll need a little Bitcoin on top of the cat itself.
     </p>
-    <app-wallet-connect />
+    <app-wallet-connect [capability]="transferCapability" />
   </div>
 } @else {
   @if (state() === 'loading-utxos' || holdingsResource.isLoading()) {

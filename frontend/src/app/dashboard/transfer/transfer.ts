@@ -9,6 +9,7 @@ import {
   Cat21TransferOrchestrator,
   TransferSnapshot,
   TxnOutput,
+  WalletCapability,
   WalletService,
   parseTransferQueryParams,
   toScureNetwork,
@@ -49,6 +50,13 @@ export class Transfer {
   private snap = signal<TransferSnapshot>(this.orch.getSnapshot());
 
   readonly txLinkBase = 'https://ordpool.space/tx/';
+
+  /**
+   * Action-scopes the connect picker to wallets that can transfer, so an
+   * incapable wallet (Alby) is never offered here — same treatment the
+   * make-offer / accept-offer pickers already use for their capabilities.
+   */
+  readonly transferCapability = WalletCapability.Cat21Transfer;
 
   /**
    * Query param `?catNumber=<n>` from a "Send" click on
