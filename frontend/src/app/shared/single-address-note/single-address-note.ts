@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { singleAddressCaveat, usesSingleAddress, WalletService } from 'ordpool-sdk';
+import { KnownOrdinalWallets, singleAddressCaveat, usesSingleAddress, WalletService } from 'ordpool-sdk';
 
 /**
  * A calm, info-register note about single-address custody, shown beside a
@@ -30,6 +30,16 @@ export class SingleAddressNote {
 
   readonly isSingleAddress = computed<boolean>(() => usesSingleAddress(this.connectedWallet()));
 
-  /** SDK-owned copy, cats-worded for this site. Full sentences, info register. */
-  readonly note = singleAddressCaveat('cats');
+  /**
+   * SDK-owned copy, cats-worded for this site, and named for the connected
+   * wallet ("Your UniSat wallet keeps..."). The SDK handles labels that
+   * already end in "wallet" (e.g. "Binance Web3 Wallet"), so we pass the plain
+   * display label. Only rendered when `isSingleAddress()` is true, which
+   * implies a connected wallet, so the label is always present here.
+   */
+  readonly note = computed<string>(() => {
+    const wallet = this.connectedWallet();
+    const label = wallet ? KnownOrdinalWallets[wallet.type].label : undefined;
+    return singleAddressCaveat('cats', label);
+  });
 }

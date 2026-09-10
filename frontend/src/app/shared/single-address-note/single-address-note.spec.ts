@@ -48,6 +48,10 @@ describe('SingleAddressNote', () => {
     // full-sentence info copy, cats-worded — not a truncated label
     expect(el?.textContent?.toLowerCase()).toContain('keeps your coins and your cats');
     expect(el?.textContent?.toLowerCase()).toContain('fresh address');
+    // named for the connected wallet ("Your UniSat wallet…"), not the generic
+    // "This wallet…" fallback — proves the label is threaded through
+    expect(el?.textContent?.toLowerCase()).toContain('your unisat wallet');
+    expect(el?.textContent?.toLowerCase()).not.toContain('this wallet');
     // info register, not a warning: no alert role, no dismiss control, no icon glyph
     expect(el?.getAttribute('role')).toBeNull();
     expect(el?.querySelector('button')).toBeNull();
