@@ -1,35 +1,23 @@
-// Match .cover-container in app.scss so the nav sits flush with the
-// page content's right edge (otherwise the wallet button drifts past
-// the right viewport edge on narrow screens — the cover-container has
-// 1em padding, the bare header didn't).
+// One clean header row: brand (Genesis Cat + CAT-21 wordmark) on the left,
+// nav + wallet on the right. Matches .cover-container width so it lines up
+// with the page content. The white hairline + dithered Norton drop strip
+// turn it into a distinct DOS-dialog band.
 .header-nav {
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
-  margin-bottom: 12px; // make room for the dithered drop strip below
-  padding: 0.5rem 1rem 0.5rem 1rem;
+  margin-bottom: 16px; // room for the dithered drop strip below
+  padding: 0.6rem 1rem;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
   flex-wrap: wrap;
-  // White hairline at the bottom turns the nav into a distinct band.
-  // The Norton-shadow strip below the border separates the nav from
-  // the page content underneath.
   border-bottom: 2px solid white;
-  // The Genesis Cat SVG that follows has a solid orange background
-  // (#ff9900) and renders with negative top margin (mt-n5), drifting
-  // up into this row. Stack the nav above it so links + wallet-connect
-  // (and the shadow strip below) stay visible instead of getting
-  // covered by orange.
   position: relative;
   z-index: 2;
 }
 
-// Dithered Norton-Commander drop shadow under the nav band. Same SVG
-// checkerboard as .norton-shadow on panels; positioned absolute so it
-// hangs off the bottom of the nav without affecting layout. Offset to
-// the right by a few pixels for the classic DOS-dialog look.
 .header-nav::after {
   content: '';
   position: absolute;
@@ -40,6 +28,42 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
   background-repeat: repeat;
   pointer-events: none;
+}
+
+// Brand lockup — the Genesis Cat and the CAT-21 wordmark read as one logo.
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  flex: 0 0 auto;
+
+  &:hover { text-decoration: none; opacity: 0.9; }
+}
+
+.brand-cat {
+  width: 44px;
+  height: 44px;
+  image-rendering: pixelated;
+  flex: 0 0 auto;
+}
+
+.brand-word {
+  font-family: "Public Pixel", sans-serif;
+  font-weight: 700;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: white;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.nav-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .nav-link {
@@ -57,43 +81,15 @@
   }
 }
 
-// Selected page in the nav — minimal underline marker so users still
-// see where they are. The whole nav band's bottom shadow handles the
-// "separator" visual; per-link shadows just added noise.
 .nav-link-active {
   text-decoration: underline;
 }
 
-h1.logo {
-  width: 400px;
-  color: white;
-  font-size: 50px;
-}
-
-// Phone-sized viewports: shrink the wordmark + the inline genesis-cat
-// next to it. The CAT-21 text gets narrower naturally as the font
-// drops, and the smaller cat keeps the mt-n5 lift from spilling all
-// the way up into the wrapped nav row.
-@media (max-width: 600px) {
-  h1.logo {
-    width: auto;
-    font-size: 34px;
-  }
-
-  // Big-header hero on the home page.
-  header > a > img {
-    max-width: 70%;
-    height: auto;
-  }
-
-  // Inline cat next to the CAT-21 wordmark on every other page.
-  // Override the desktop mt-n5 (-3rem lift) and center the smaller
-  // cat on the wordmark's optical middle instead — the desktop lift
-  // was tuned to 50px text + 100px cat, neither of which applies here.
-  h1.logo img {
-    width: 70px !important;
-    height: 70px !important;
-    margin-top: 0 !important;
-    vertical-align: middle;
-  }
+// Phones: shrink the wordmark + cat a touch; the nav wraps to its own line
+// under the brand when it can't fit, which stays tidy because the brand is
+// pinned left.
+@media (max-width: 560px) {
+  .brand-cat { width: 36px; height: 36px; }
+  .brand-word { font-size: 1.25rem; }
+  .nav-link { padding: 0.4rem 0.4rem; }
 }

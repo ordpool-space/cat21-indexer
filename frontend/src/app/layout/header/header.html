@@ -1,26 +1,16 @@
 <nav class="header-nav">
-  <a routerLink="/search" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-search">Search</a>
-  <a routerLink="/orderbook" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-orderbook">Orderbook</a>
-  @if (connectedWallet()) {
-    <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-dashboard">Dashboard</a>
-  }
-  <a routerLink="/about" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-about">About</a>
-  <app-wallet-connect />
-</nav>
-
-@if (smallHeader()) {
-  <div>
-    <h1 class="logo mx-auto d-block mt-3 mb-2">
-      <a routerLink="/" class="text-decoration-none text-white">CAT-21</a><a routerLink="/cat/0"><img
-      ngSrc="genesis-cat.svg" width="100" height="100" title="The Genesis Cat" priority
-      class="mt-n5"></a>
-    </h1>
-  </div>
-} @else {
-  <a routerLink="/cat/0">
-    <img
-      ngSrc="genesis-cat.svg" width="400" height="400" class="mx-auto d-block mt-n5" title="The Genesis Cat" priority
-      style="max-width: 100%;"
-      >
+  <a routerLink="/" class="brand" aria-label="CAT-21 — home" data-testid="brand-home">
+    <img ngSrc="genesis-cat.svg" width="44" height="44" alt="" priority class="brand-cat" />
+    <span class="brand-word">CAT-21</span>
   </a>
-}
+
+  <div class="nav-links">
+    <a routerLink="/search" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-search">Search</a>
+    <a routerLink="/orderbook" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-orderbook">Orderbook</a>
+    @if (connectedWallet()) {
+      <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-dashboard">Dashboard</a>
+    }
+    <a routerLink="/about" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-about">About</a>
+    <app-wallet-connect />
+  </div>
+</nav>

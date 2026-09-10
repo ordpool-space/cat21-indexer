@@ -1,22 +1,17 @@
-<h1 class="mt-2">CAT-21</h1>
+<section class="home-hero">
+  <a routerLink="/cat/0" class="hero-cat-link" title="The Genesis Cat — cat #0">
+    <img src="genesis-cat.svg" width="240" height="240" alt="The Genesis Cat" class="hero-cat" />
+  </a>
+  <h1 class="hero-title">Every Bitcoin transaction hides a cat.</h1>
+  <p class="hero-lead">
+    Mint one and rescue it onto Bitcoin forever. You pay only the miner
+    fee, and the more you pay, the rarer its colours. No marketplace, no
+    middleman: just you and the chain.
+  </p>
+  <a routerLink="/dashboard/mint" class="hero-cta" data-testid="hero-mint">Mint a cat →</a>
+</section>
 
-<p class="mt-2">
-  Did you know? Every Bitcoin transaction can reveal a hidden cat.
-  Mint the cats and be part of the movement!
-</p>
-
-<h2 class="mt-5" id="mint">Mint a cat</h2>
-
-<nav aria-label="Minting options">
-  <ul type="square">
-    <li><a href="https://ordpool.space/cat21-mint" target="_blank" rel="noopener">with ordpool.space</a></li>
-    <!-- <li><a href="https://ordimint.com/inscribe/cat-21" target="_blank" rel="noopener">with Ordimint</a></li> -->
-    <!-- <li><a href="https://github.com/ordpool-space/cat21/blob/main/HOWTO.md" target="_blank" rel="noopener">or manually with Electrum</a></li> -->
-
-  </ul>
-</nav>
-
-<h2 class="mt-5" id="latest">Minted cats</h2>
+<h2 class="mt-2" id="latest">Minted cats</h2>
 
 @if (statusResource.value(); as status) {
   <p class="mb-2">

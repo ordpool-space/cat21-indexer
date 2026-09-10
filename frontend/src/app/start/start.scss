@@ -1,0 +1,54 @@
+// Homepage hero. The Genesis Cat is the star; the CAT-21 wordmark already
+// lives in the header, so the hero leads with the cat + a punchy line + one
+// primary action, framed in generous whitespace.
+.home-hero {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 0 3.5rem;
+}
+
+.hero-cat-link {
+  display: inline-block;
+  line-height: 0;
+  &:hover { opacity: 0.92; }
+}
+
+.hero-cat {
+  width: min(240px, 62vw);
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.hero-title {
+  font-family: "Public Pixel", sans-serif;
+  color: white;
+  font-size: clamp(1.6rem, 6.2vw, 2.6rem);
+  line-height: 1.18;
+  margin: 1.25rem auto 0.85rem;
+  max-width: 16ch;
+}
+
+.hero-lead {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  margin: 0 auto 1.75rem;
+  max-width: 44ch;
+}
+
+// Primary action. White fill with dark text so the one button a first-time
+// visitor reaches for is unmistakably legible on the orange page.
+.hero-cta {
+  display: inline-block;
+  font-family: "Public Pixel", sans-serif;
+  font-weight: bold;
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: white;
+  color: #282828;
+  border: 2px solid white;
+  text-decoration: none;
+  image-rendering: pixelated;
+
+  &:hover { background: #f2f2f2; opacity: 1; }
+}

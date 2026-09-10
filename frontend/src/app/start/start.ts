@@ -39,6 +39,7 @@ const CATEGORY_MIN: Record<string, number> = {
 @Component({
   selector: 'app-start',
   templateUrl: './start.html',
+  styleUrl: './start.scss',
   imports: [RouterLink, NgbPagination, NgbPaginationEllipsis, NgbPaginationFirst, NgbPaginationLast, NgbPaginationPrevious, NgbPaginationNext, CatGallery, CategoryTabs, DecimalPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
