@@ -11,7 +11,9 @@
   padding: 1rem;
   border: 2px solid white;
   background: transparent;
-  color: white;
+  // Inherit the orange body's dark text (the title stays white via the global
+  // h2 rule); like the trade cards, white border + white heading + dark body.
+  color: inherit;
   text-decoration: none;
   font-family: "Public Pixel", sans-serif;
   image-rendering: pixelated;

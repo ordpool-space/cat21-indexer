@@ -112,6 +112,64 @@ served by the backend via `GET /api/cat/:catNumber/image.svg` (and
 during sync and they're cached at the Cloudflare edge for a year (immutable).
 Trait data comes through the OpenAPI client from `GET /api/cat/:catNumber`.
 
+#### Colour brand guide (cat21.space)
+
+The site is a **custom orange theme with dark body text**. This is the source
+of truth for colour; the code follows it.
+
+**Palette**
+
+| Token | Value | Role |
+|---|---|---|
+| Bitcoin orange | `#FF9900` (`$bitcoin` / `$body-bg`) | brand colour + page background of the whole normal site |
+| Ink | `#282828` (`$body-color`) | body text on orange; ALSO the dark popup surface |
+| White | `#fff` | pixel headings, header nav + logo, pixel-button chrome, and all text inside the dark popups |
+| Danger red | `#dc3545` / `#f8d7da` | error notices (red border, pink fill, dark-red text) |
+
+**The contrast rule (why body text is dark, not white).** White on `#FF9900`
+is **2.14:1** and fails WCAG AA (needs 4.5:1 for normal text, 3.0:1 for large).
+`#282828` on `#FF9900` is **6.89:1** and passes. So **normal-size body copy is
+dark**; only the large pixel headings may be white (they clear the large-text
+bar and read as brand type, not copy).
+
+**What is white vs dark**
+
+- **White** (stays white): pixel **headings** (`h1`–`h4`), the header **nav +
+  logo**, the **pixel-button chrome** (`.category-tab`, `.page-link`,
+  `.pixel-select`, `.wallet-button`, `.wallet-pick`, `.trait`, the fee-picker
+  tiles) — white text + white border on the transparent orange body — and
+  **everything inside the dark popups**.
+- **Dark** (`#282828`): all **body copy** — paragraphs, labels, values, list
+  text, `strong`, and **links** (dark + underline) — on the orange surfaces.
+- **Dark popups** (the connect modal, the connected-wallet popover): a solid
+  `#282828` surface with white text, set via `--bs-modal-color` /
+  `--bs-popover-*`, NOT via `$body-color`.
+
+**The mechanism, and the don't-revert rules**
+
+- `$body-color: #282828` in `_adjust-bootstrap.scss` makes body text dark by
+  default; Bootstrap derives `--bs-secondary-color` = `rgba($body-color, .75)`,
+  so muted text follows automatically. Do NOT set it back to `white`.
+- `h1,h2,h3,h4 { color: white }` in `styles.scss` — headings white on the
+  orange body AND on the dark popup title bars.
+- **Surface-aware `color: inherit`** on anything that renders on BOTH an orange
+  surface and a dark popup: `strong`, `a`, `.tool-card`, `pending-cats`. Inherit
+  so it's dark on orange and white in the popup. **Never hardcode `color: white`
+  on a shared or body element** — it lands white-on-orange (the 2.14:1 strain) or
+  dark-on-dark when the same component shows in a popup.
+- The dark popups keep white through their own Bootstrap colour vars; they do
+  not depend on `$body-color`.
+
+**Active / selected state.** White fill. Text is **orange** for nav / tabs /
+buttons (the brand-accent inversion), but **dark `#282828`** anywhere a value
+must be read precisely (the selected fee tier), because orange-on-white is
+2.14:1.
+
+**Known residual (not a bug):** the fee-picker's INACTIVE tier rates + the
+manual input are white-pixel control chrome (white-on-orange); only the SELECTED
+tier is dark-on-white for legibility. If a future pass wants every fee number to
+clear AA, darken those controls; it was left as control-chrome by choice.
+
 #### Bootstrap semantic vars resolve LIGHT (no `data-bs-theme`)
 
 The app is a **custom orange theme**: `$body-bg: #FF9900`, `$body-color: white`,

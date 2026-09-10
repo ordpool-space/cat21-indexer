@@ -9,7 +9,9 @@
   font-family: "Public Pixel", sans-serif;
   font-size: 0.85rem;
   margin: 0 0 0.5rem 0;
-  color: white;
+  // Surface-aware: this component renders on the dark popover (white) AND the
+  // orange my-cats page (dark). Inherit so it's readable on both.
+  color: inherit;
 }
 
 .pending-list {
@@ -35,10 +37,10 @@
 }
 
 .pending-link {
-  color: white;
+  color: inherit;
   text-decoration: underline;
 
-  &:hover { color: white; opacity: 0.85; }
+  &:hover { opacity: 0.85; }
 }
 
 .pending-txid {

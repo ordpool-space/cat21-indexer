@@ -17,9 +17,15 @@ $danger: #dc3545;
 $light-gray: #e9ecef;
 $dark-gray: #6c757d;
 
-// Customize Bootstrap colors for dark mode
+// Orange brand theme. The page background is Bitcoin-orange; body text is a
+// near-black (#282828) so normal-size copy clears WCAG AA on orange
+// (dark-on-#FF9900 = 6.89:1; white-on-orange was 2.14:1 and failed). White is
+// reserved for the pixel headings, the pixel-button chrome, and the dark
+// popups (which set their own white via --bs-modal-color / --bs-popover-*).
+// Bootstrap derives --bs-secondary-color = rgba($body-color, .75), so muted
+// text follows automatically. See the "Colour brand guide" in .claude/CLAUDE.md.
 $body-bg: $bitcoin;
-$body-color: white;
+$body-color: #282828;
 
 $theme-colors: (
   "primary": $primary,

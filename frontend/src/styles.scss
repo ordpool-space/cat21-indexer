@@ -10,23 +10,30 @@ hr {
   border-top: 4px solid white;
 }
 
+// Bold takes its surface's colour (dark on the orange body, white inside the
+// dark popups) — no explicit colour, so it can't land dark-on-dark in a popup.
 strong {
   font-weight: 700;
-  color: $primary;
 }
 
+// Pixel headings stay white everywhere: on the orange body and on the dark
+// popup title bars. They read as brand type, not body copy.
 h1, h2, h3, h4 {
   font-family: "Public Pixel", sans-serif;
   font-weight: 700;
+  color: white;
 }
 
+// Links take their surface's colour and lean on the underline for the
+// clickable affordance: dark on the orange body (readable, consistent with
+// body copy), white inside the dark popups. Nav links + the pop-link keep
+// their own explicit white.
 a {
-  color: white;
+  color: inherit;
   text-decoration: underline;
 }
 
 a:hover {
-  color: white;
   opacity: 0.8;
 }
 
