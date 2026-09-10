@@ -20,6 +20,7 @@ import {
   bucketOf,
   calculateRecommendedFundingSats,
   runeNamesFromContent,
+  usesSingleAddress,
 } from 'ordpool-sdk';
 
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
@@ -27,6 +28,7 @@ import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
+import { SingleAddressNote } from '../../shared/single-address-note/single-address-note';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 
 interface ViableUtxoRow {
@@ -40,7 +42,7 @@ interface ViableUtxoRow {
   selector: 'app-mint',
   templateUrl: './mint.html',
   styleUrl: './mint.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect],
+  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect, SingleAddressNote],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Mint {
@@ -177,18 +179,15 @@ export class Mint {
 
   /**
    * Whether the connected wallet exposes one address for both payments
-   * and ordinals. Detected via address equality — no SDK flag for this.
-   * Unisat: same. Xverse / Leather / OKX / Phantom / Magic Eden Wallet:
-   * different. On a single-address wallet, every UTXO at the payment
-   * address is also potentially an ordinals-bearing UTXO; the picker
-   * has to warn the user before they accidentally spend an inscription /
-   * rune / cat sat as transaction change.
+   * and ordinals. Uses the SDK's `usesSingleAddress` (ground truth: it
+   * compares the two addresses the wallet actually returned). Unisat / OKX
+   * / Wizz / Binance / Alby: same. Xverse / Leather / Phantom / Cat21
+   * Wallet: different. On a single-address wallet, every UTXO at the
+   * payment address is also potentially an ordinals-bearing UTXO; the
+   * picker has to warn the user before they accidentally spend an
+   * inscription / rune / cat sat as transaction change.
    */
-  readonly isSingleAddressWallet = computed<boolean>(() => {
-    const w = this.connectedWallet();
-    if (!w) return false;
-    return w.ordinalsAddress === w.paymentAddress;
-  });
+  readonly isSingleAddressWallet = computed<boolean>(() => usesSingleAddress(this.connectedWallet()));
 
   /**
    * Whether to show the "small UTXO on single-address wallet" warning

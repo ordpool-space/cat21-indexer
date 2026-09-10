@@ -25,6 +25,7 @@ import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { PsbtExportBridgeService } from '../../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { FeesPicker } from '../../../shared/fees-picker/fees-picker';
 import { OrdApiService } from '../../../shared/ord-api.service';
+import { SingleAddressNote } from '../../../shared/single-address-note/single-address-note';
 import { UtxoPicker } from '../../../shared/utxo-picker/utxo-picker';
 import { WalletCapabilityNotice } from '../../../shared/wallet-capability-notice/wallet-capability-notice';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
@@ -41,7 +42,7 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
   selector: 'app-make-offer',
   templateUrl: './make-offer.html',
   styleUrl: './make-offer.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect, WalletCapabilityNotice],
+  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect, WalletCapabilityNotice, SingleAddressNote],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MakeOffer {

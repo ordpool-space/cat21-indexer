@@ -1,0 +1,21 @@
+// Information, not a warning. The "quiet" register the maintainer asked for
+// lives in what is ABSENT — no icon, no amber, no alert role, no dismiss — and
+// NEVER in greyed letters. So the text keeps full body-ink contrast.
+//
+// Colour MUST stay dark ink #282828. The site's orange ground (#FF9900) is a
+// two-sided contrast trap: text-muted #6c757d measures 2.19:1 and white 2.14:1,
+// both unreadable; only #282828 works (6.89:1). Do not "tastefully grey" this
+// note into fine print, and do not switch it to white on the orange panel.
+//
+// No left border / left padding: the note aligns flush with the surrounding
+// flow content instead of an accent bar jutting into the margin. Vertical
+// margin matches the section rhythm so it reads as a calm line beside the
+// action, not a box bolted on.
+.single-address-note {
+  margin: 1.25rem 0;
+  color: #282828;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  max-width: 56ch;
+  text-align: left;
+}
