@@ -12,7 +12,7 @@
 
   <app-pending-cats
     [addresses]="[connectedWallet.ordinalsAddress]"
-    heading="Pending cats — not yet confirmed" />
+    heading="Pending cats, not yet confirmed" />
 
   @if (catsResource.value(); as data) {
     <h2 data-testid="my-cats-count">You hold {{ catNumbers().length }} cats</h2>
@@ -29,11 +29,11 @@
   <div class="connect-card" data-testid="my-cats-cta">
     <h2>Connect your wallet to see your cats</h2>
     <p class="mb-3">
-      CAT-21 cats live on Bitcoin sats. Connect the wallet that holds them —
-      we'll ask ord for the current owner of each cat sat and show you what you own.
+      CAT-21 cats live on Bitcoin sats. Connect the wallet that holds them,
+      and we'll ask ord for the current owner of each cat sat and show you what you own.
     </p>
     <p class="mb-4">
-      This page is read-only — it never signs anything and can't spend your
+      This page is read-only: it never signs anything and can't spend your
       cats, so any wallet that holds them is safe to connect here.
     </p>
     <app-wallet-connect />
