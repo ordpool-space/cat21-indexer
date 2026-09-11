@@ -83,7 +83,7 @@
 .nav-link {
   position: relative;
   font-family: "Public Pixel", sans-serif;
-  font-size: 0.8rem;
+  font-size: var(--fs-base);
   font-weight: bold;
   color: white;
   text-decoration: none;
@@ -95,8 +95,14 @@
   }
 }
 
-.nav-link-active {
-  text-decoration: underline;
+// The current page is "locked in": a filled dark-ink box, not a thin
+// underline (a hairline fights the pixel CI). White text on the dark fill
+// reads as the pressed / active tab.
+.nav-link-active,
+.nav-link-active:hover {
+  background: #282828;
+  color: #fff;
+  text-decoration: none;
 }
 
 // Hamburger toggle. Hidden on desktop (the inline nav is shown instead), shown
@@ -139,20 +145,26 @@
 @media (max-width: 900px) {
   .nav-toggle { display: flex; }
 
-  // Top row stays brand + actions (Connect + burger). `order` puts the actions
-  // before the nav in visual order; the nav takes order 3 + full width so it
-  // wraps onto its own line BELOW that row, as the burger dropdown.
-  .header-actions { order: 2; }
-
+  // The open dropdown OVERLAYS the page (absolute, anchored under the bar), it
+  // does NOT push the content down. The header is position:relative + z-index 2,
+  // so an absolute panel at top:100% renders above the page below it. Solid
+  // orange fill + a border + shadow separate it from the content it covers.
   .nav-links {
-    order: 3;
     display: none;
-    flex-basis: 100%;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 3;
     flex-direction: column;
     align-items: stretch;
-    justify-content: flex-start;
     gap: 0;
-    margin-top: 0.5rem;
+    background: #FF9900;
+    border-bottom: 2px solid #fff;
+    padding: 0.25rem 1rem 0.75rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.35);
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
 
     &.is-open { display: flex; }
   }
