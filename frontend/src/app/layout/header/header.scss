@@ -90,11 +90,73 @@
   text-decoration: underline;
 }
 
-// Phones: shrink the wordmark + cat a touch; the nav wraps to its own line
-// under the brand when it can't fit, which stays tidy because the brand is
-// pinned left.
+// Hamburger toggle. Hidden on desktop (the inline nav is shown instead), shown
+// below the burger breakpoint. White pixel bars + white border, matching the
+// header's DOS chrome. Open state morphs the three bars into an X.
+.nav-toggle {
+  display: none;
+  flex: 0 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 42px;
+  height: 34px;
+  padding: 0 8px;
+  background: transparent;
+  border: 2px solid white;
+  border-radius: 0;
+  cursor: pointer;
+  image-rendering: pixelated;
+
+  &:hover { background: rgba(0, 0, 0, 0.15); }
+  &:focus-visible { outline: 2px solid black; outline-offset: 2px; }
+}
+
+.nav-toggle-bar {
+  display: block;
+  height: 3px;
+  width: 100%;
+  background: white;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.nav-toggle.is-open {
+  .nav-toggle-bar:nth-child(1) { transform: translateY(8px) rotate(45deg); }
+  .nav-toggle-bar:nth-child(2) { opacity: 0; }
+  .nav-toggle-bar:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
+}
+
+// --- Burger breakpoint: the inline row no longer fits the wide pixel nav. ---
+@media (max-width: 900px) {
+  .nav-toggle { display: flex; }
+
+  // The nav collapses behind the burger: hidden until opened, then a
+  // full-width vertical dropdown below the brand + toggle row. flex-basis 100%
+  // wraps it onto its own line (the header is already flex-wrap: wrap).
+  .nav-links {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+    margin-top: 0.5rem;
+
+    &.is-open { display: flex; }
+  }
+
+  .nav-link {
+    padding: 0.7rem 0.4rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  app-wallet-connect {
+    margin-top: 0.6rem;
+  }
+}
+
+// Phones: shrink the wordmark + cat a touch so the brand + burger fit one row.
 @media (max-width: 560px) {
   .brand-cat { width: 36px; height: 36px; }
   .brand-word { font-size: 1.25rem; }
-  .nav-link { padding: 0.4rem 0.4rem; }
 }

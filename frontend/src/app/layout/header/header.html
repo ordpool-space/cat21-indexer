@@ -4,14 +4,31 @@
     <span class="brand-word">CAT-21</span>
   </a>
 
-  <div class="nav-links">
-    <a routerLink="/dashboard/mint" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-mint">Mint</a>
-    <a routerLink="/search" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-search">Search</a>
-    <a routerLink="/orderbook" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-orderbook">Orderbook</a>
+  <!-- Burger: shown only below the nav breakpoint (CSS). Toggles the nav
+       dropdown; hidden from assistive tech is NOT wanted here, so it carries a
+       label + aria-expanded + aria-controls pointing at the nav it reveals. -->
+  <button
+    type="button"
+    class="nav-toggle"
+    [class.is-open]="menuOpen()"
+    (click)="toggleMenu()"
+    [attr.aria-expanded]="menuOpen()"
+    aria-controls="primary-nav"
+    aria-label="Menu"
+    data-testid="nav-toggle">
+    <span class="nav-toggle-bar" aria-hidden="true"></span>
+    <span class="nav-toggle-bar" aria-hidden="true"></span>
+    <span class="nav-toggle-bar" aria-hidden="true"></span>
+  </button>
+
+  <div id="primary-nav" class="nav-links" [class.is-open]="menuOpen()">
+    <a routerLink="/dashboard/mint" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-mint" (click)="closeMenu()">Mint</a>
+    <a routerLink="/search" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-search" (click)="closeMenu()">Search</a>
+    <a routerLink="/orderbook" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-orderbook" (click)="closeMenu()">Orderbook</a>
     @if (connectedWallet()) {
-      <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-dashboard">Dashboard</a>
+      <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-dashboard" (click)="closeMenu()">Dashboard</a>
     }
-    <a routerLink="/about" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-about">About</a>
+    <a routerLink="/about" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-about" (click)="closeMenu()">About</a>
     <app-wallet-connect />
   </div>
 </nav>
