@@ -34,7 +34,7 @@
   background: transparent;
   color: var(--bs-primary, #0d6efd);
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
 
   &:hover { background: var(--bs-primary, #0d6efd); color: white; }
   &.utxo-pick-override {
@@ -45,7 +45,7 @@
 }
 
 .utxo-id {
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
   color: var(--bs-secondary, #6c757d);
   word-break: break-all;
 }
@@ -57,7 +57,7 @@
 }
 
 .utxo-bucket {
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
   padding: 0.125rem 0.5rem;
   border-radius: 999px;
   white-space: nowrap;
@@ -75,7 +75,7 @@
   color: var(--bs-primary, #0d6efd);
   cursor: pointer;
   padding: 0;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   text-decoration: underline;
 }
 
@@ -89,7 +89,7 @@
 }
 
 .utxo-asset-tag {
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
   padding: 0.125rem 0.5rem;
   background: #fff3cd;
   color: #664d03;

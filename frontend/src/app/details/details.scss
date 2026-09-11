@@ -16,7 +16,7 @@
   background: var(--bs-primary-bg-subtle);
   color: var(--bs-emphasis-color);
   text-align: center;
-  font-size: 0.95rem;
+  font-size: var(--fs-base);
 }
 
 .cat-actions {
@@ -54,7 +54,7 @@
 .cat-bundle-note {
   display: block;
   margin-top: 0.25rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
   opacity: 0.85;
 }
 
@@ -63,7 +63,7 @@
   margin: 1rem auto 0;
 
   .cat-bids-heading {
-    font-size: 1rem;
+    font-size: var(--fs-base);
     margin-bottom: 0.5rem;
   }
 
@@ -77,6 +77,6 @@
   }
 
   .cat-bids-buyer-cell code {
-    font-size: 0.85rem;
+    font-size: var(--fs-base);
   }
 }

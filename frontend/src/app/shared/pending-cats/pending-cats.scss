@@ -7,7 +7,7 @@
 
 .pending-heading {
   font-family: "Public Pixel", sans-serif;
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
   margin: 0 0 0.5rem 0;
   // Surface-aware: this component renders on the dark popover (white) AND the
   // orange my-cats page (dark). Inherit so it's readable on both.
@@ -29,7 +29,7 @@
   align-items: center;
   gap: 0.5rem 0.8rem;
   font-family: monospace;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   padding: 0.25rem 0;
   border-bottom: 1px dashed rgba(255, 255, 255, 0.35);
 
@@ -44,13 +44,13 @@
 }
 
 .pending-txid {
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
   background: rgba(0, 0, 0, 0.2);
   padding: 0.1rem 0.3rem;
 }
 
 .pending-fee,
 .pending-seen {
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
   opacity: 0.85;
 }

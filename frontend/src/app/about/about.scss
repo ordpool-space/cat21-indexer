@@ -2,22 +2,22 @@
   margin-top: 2rem;
 
   h2 {
-    font-size: 1.1rem;
+    font-size: var(--fs-lg);
     margin-bottom: 0.5rem;
   }
 
   h3 {
-    font-size: 0.95rem;
+    font-size: var(--fs-base);
     margin-top: 1.25rem;
     margin-bottom: 0.4rem;
   }
 
   p, ul {
-    font-size: 0.85rem;
+    font-size: var(--fs-base);
     line-height: 1.55;
   }
 
-  .lede { font-size: 0.95rem; line-height: 1.6; }
+  .lede { font-size: var(--fs-base); line-height: 1.6; }
 }
 
 .credits-list {

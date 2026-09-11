@@ -16,7 +16,7 @@
 
 .accept-offer-section-heading {
   margin-top: 0;
-  font-size: 1.1rem;
+  font-size: var(--fs-lg);
 }
 
 .accept-offer-deal {
@@ -36,7 +36,7 @@
   justify-content: space-between;
   align-items: baseline;
 
-  .lbl { color: var(--bs-secondary-color); font-size: 0.9rem; }
+  .lbl { color: var(--bs-secondary-color); font-size: var(--fs-base); }
   .val { font-family: var(--bs-font-monospace); word-break: break-all; text-align: right; }
 }
 

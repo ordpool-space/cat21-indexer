@@ -17,7 +17,7 @@
   border: 2px solid white;
   color: white;
   font-family: "Public Pixel", sans-serif;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   // Bottom padding leaves room for the active-tier Norton shadow
   // INSIDE the button's own box so the pseudo-element never extends
   // beyond the button bounds. Previously the shadow used right: -6px
@@ -71,11 +71,11 @@
 }
 
 .tier-label {
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
 }
 
 .tier-rate {
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
 }
 
 .manual-row {
@@ -83,7 +83,7 @@
   align-items: center;
   gap: 0.5rem;
   font-family: "Public Pixel", sans-serif;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 
 .manual-label {
@@ -97,7 +97,7 @@
   color: white;
   padding: 0.3rem 0.45rem;
   font-family: "Public Pixel", sans-serif;
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
   appearance: textfield;
 
   &::-webkit-inner-spin-button,
@@ -105,6 +105,6 @@
 }
 
 .manual-unit {
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
   opacity: 0.85;
 }

@@ -6,6 +6,44 @@
 
 @import "public-pixel.scss";
 
+// ---------------------------------------------------------------------------
+// TYPE SCALE — the single source of size truth. Every font-size on the site
+// comes from one of these six steps (never an ad-hoc rem value), so the nav,
+// body copy, footer and headings all read from one harmonious scale. The
+// Public Pixel face is wide, so the scale is anchored low (base 0.9rem) to
+// keep dense UI (nav, footer, tables) legible without overflowing.
+//   xs   chips / badges / fine meta
+//   sm   secondary + dense text (table values, footer text, controls)
+//   base PRIMARY reading text: body copy, nav links, buttons
+//   lg   sub-headings (h3/h4), section leads
+//   xl   section titles (h2)
+//   2xl  page titles / hero (h1)
+// ---------------------------------------------------------------------------
+:root {
+  --fs-xs: 0.7rem;
+  --fs-sm: 0.8rem;
+  --fs-base: 0.9rem;
+  --fs-lg: 1.1rem;
+  --fs-xl: 1.4rem;
+  --fs-2xl: 1.9rem;
+
+  // Bootstrap body copy reads from the scale too.
+  --bs-body-font-size: var(--fs-base);
+}
+
+// Phones + small tablets: step the two largest sizes down so page titles and
+// section headings don't dominate a narrow viewport in the wide pixel face.
+@media (max-width: 575px) {
+  :root {
+    --fs-2xl: 1.45rem;
+    --fs-xl: 1.2rem;
+  }
+}
+
+body {
+  font-size: var(--fs-base);
+}
+
 hr {
   border-top: 4px solid white;
 }
@@ -27,6 +65,10 @@ h1, h2, h3, h4 {
   font-weight: 700;
   color: inherit;
 }
+h1 { font-size: var(--fs-2xl); }
+h2 { font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); }
+h4 { font-size: var(--fs-lg); }
 
 // Links take their surface's colour and lean on the underline for the
 // clickable affordance: dark on the orange body (readable, consistent with

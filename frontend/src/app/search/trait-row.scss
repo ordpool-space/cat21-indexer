@@ -8,7 +8,7 @@
 .trait-row-label {
   flex: 0 0 6rem;
   font-family: "Public Pixel", sans-serif;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -31,7 +31,7 @@
   border: 2px solid white;
   color: white;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
   cursor: pointer;
   border-radius: 0;
   image-rendering: pixelated;
