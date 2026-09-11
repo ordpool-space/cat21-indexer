@@ -2,7 +2,8 @@
   border: 2px solid white;
   padding: 1.5rem;
   margin-top: 1rem;
-  max-width: 640px;
+  // Full width: the mint intro is the whole point of this page, so the box
+  // uses the available space rather than a narrow column.
 
   h2 {
     margin-top: 0;
