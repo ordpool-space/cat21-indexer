@@ -21,8 +21,13 @@
 .header-nav::after {
   content: '';
   position: absolute;
+  // Inset on both sides, never past the nav's edge. A negative right poked
+  // 6px beyond the nav, and since the nav is full-width below ~1200px that
+  // spilled past the viewport and gave every narrow screen a 6px horizontal
+  // scroll. The drop strip reads the same inset; the vertical drop (bottom)
+  // is what carries the DOS-dialog shadow.
   left: 6px;
-  right: -6px;
+  right: 6px;
   bottom: -8px;
   height: 6px;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
