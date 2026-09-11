@@ -39,6 +39,7 @@
 // Primary action. White fill with dark text so the one button a first-time
 // visitor reaches for is unmistakably legible on the orange page.
 .hero-cta {
+  position: relative;
   display: inline-block;
   font-family: "Public Pixel", sans-serif;
   font-weight: bold;
@@ -51,4 +52,18 @@
   image-rendering: pixelated;
 
   &:hover { background: #f2f2f2; opacity: 1; }
+}
+
+// The dithered DOS drop strip below the button, the same Norton shadow the
+// header carries, so the primary CTA reads as a raised pixel button.
+.hero-cta::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: -8px;
+  height: 6px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
+  background-repeat: repeat;
+  pointer-events: none;
 }
