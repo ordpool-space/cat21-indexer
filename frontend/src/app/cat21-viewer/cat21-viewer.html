@@ -105,6 +105,10 @@
                 <td><a href="{{ env.ordpoolExplorer }}/tx/{{ cat.txHash }}" target="_blank" rel="noopener" class="text-white">» {{ cat.txHash | shortenString }}</a></td>
               </tr>
               <tr>
+                <td><b ngbTooltip="What the minter paid to put this cat on Bitcoin: the total fee of the mint transaction, in sats, with today's USD value beside it. The sats are fixed; the USD moves with the Bitcoin price.">i</b>Mint Price</td>
+                <td>{{ mintPrice() }}</td>
+              </tr>
+              <tr>
                 <td><b ngbTooltip="The satoshi that is associated with the cat, according to the ordinal theory.">i</b>Sat</td>
                 <td><a [routerLink]="['/sat', cat.sat]" class="text-white">{{ cat.sat }}</a></td>
               </tr>

@@ -18,6 +18,9 @@ const host = typeof location !== 'undefined' ? location.hostname : 'localhost';
 export const environment = {
   production: false,
   api: `http://${host}:3333`,
+  // No price source on regtest: the USD suffix is hidden (PriceService
+  // returns null on an empty base), so tests never depend on a live rate.
+  mempoolApiUrl: '',
   ordpoolExplorer: `http://${host}:4200`,
   ordExplorer: `http://${host}:8080`,
   /**

@@ -21,6 +21,7 @@ import { Cat21BidsService, PersistedCat21Bid } from '../shared/cat21-bids.servic
 import { Cat21ListingService, CreateListingError, PersistedCat21Listing } from '../shared/cat21-listing.service';
 import { CatUtxoLookupService } from '../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../shared/ord-api.service';
+import { PriceService } from '../shared/price.service';
 import { rxResourceFixed } from '../shared/rx-resource-fixed';
 
 /**
@@ -72,6 +73,7 @@ export class Details {
   private catUtxoLookup = inject(CatUtxoLookupService);
   private listingService = inject(Cat21ListingService);
   private bidsService = inject(Cat21BidsService);
+  private priceService = inject(PriceService);
 
   readonly catNumber = input(0, { transform: numberAttribute });
 
@@ -241,6 +243,16 @@ export class Details {
   });
 
   lastSynced = computed(() => this.statusResource.value()?.lastSyncedCatNumber ?? 0);
+
+  /**
+   * Current BTC/USD for the sat readouts (mint price today), or null when we
+   * have no trustworthy rate (regtest, cold-start sentinel, fetch error). The
+   * viewer hides the USD suffix on null; the sats always stand alone.
+   */
+  private btcUsdResource = rxResourceFixed({
+    stream: () => this.priceService.getBtcUsd(),
+  });
+  readonly btcUsd = computed(() => this.btcUsdResource.value() ?? null);
 
   // ---------- Wallet + ownership ----------
 
