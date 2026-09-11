@@ -51,6 +51,10 @@
   max-width: 60ch;
   margin: 0 auto 1.75rem;
   text-align: center;
+  // Each sentence is too wide for a phone in this pixel face, so it wraps.
+  // Balance the wrap so the two lines are even (no lone "money." / "cat.");
+  // the <br> keeps the two sentences apart, balance evens each one's lines.
+  text-wrap: balance;
 }
 
 .family-grid {
