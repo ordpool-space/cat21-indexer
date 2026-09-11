@@ -218,9 +218,13 @@ a.btn {
   width: 14px;
 }
 .norton-shadow::after {
-  // bottom strip — flush past the panel's outer bottom edge
+  // bottom strip — flush past the panel's outer bottom edge. It STOPS where the
+  // right strip begins (right: -2px = the right strip's inner edge) so the two
+  // meet at the corner instead of both covering it. Running it to -16px like the
+  // right strip double-covered the bottom-right corner, and the two offset
+  // dither layers there interleaved into a solid block ("too many pixels").
   left: 12px;
-  right: -16px;
+  right: -2px;
   bottom: -16px;
   height: 14px;
 }

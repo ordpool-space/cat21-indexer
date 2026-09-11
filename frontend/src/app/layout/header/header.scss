@@ -148,7 +148,8 @@
   // The open dropdown OVERLAYS the page (absolute, anchored under the bar), it
   // does NOT push the content down. The header is position:relative + z-index 2,
   // so an absolute panel at top:100% renders above the page below it. Solid
-  // orange fill + a border + shadow separate it from the content it covers.
+  // orange fill + a white bottom border + the dithered Norton drop strip (below)
+  // separate it from the content it covers.
   .nav-links {
     display: none;
     position: absolute;
@@ -162,11 +163,24 @@
     background: #FF9900;
     border-bottom: 2px solid #fff;
     padding: 0.25rem 1rem 0.75rem;
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.35);
-    max-height: calc(100vh - 64px);
-    overflow-y: auto;
 
     &.is-open { display: flex; }
+
+    // Norton drop: a dithered strip below the panel, NOT a soft CSS shadow, so
+    // the overlay reads in the same ASCII-shadow language as the rest of the
+    // site. Bottom-only (the panel is full-width, so an L's right strip would
+    // spill past the viewport).
+    &.is-open::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      height: 6px;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='4'><rect width='2' height='2' fill='%23d4d4d4'/><rect x='2' y='2' width='2' height='2' fill='%23d4d4d4'/></svg>");
+      background-repeat: repeat;
+      pointer-events: none;
+    }
   }
 
   .nav-link {
