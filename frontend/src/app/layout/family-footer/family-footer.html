@@ -8,17 +8,26 @@
 
     <ul class="family-grid">
       @for (m of members; track m.key) {
-        <li
-          class="family-card"
-          [class.family-card-current]="m.key === currentKey"
-          [attr.data-testid]="'family-member-' + m.key">
+        <li class="family-cell">
           @if (m.key === currentKey) {
-            <span class="family-here">You're here</span>
-            <span class="family-name">{{ m.name }}</span>
-            <span class="family-line">{{ m.line }}</span>
+            <div class="family-card family-card-current" [attr.data-testid]="'family-member-' + m.key">
+              <span class="family-name-row">
+                <span class="family-name">{{ m.name }}</span>
+                <span class="family-here">You're here</span>
+              </span>
+              <span class="family-line">{{ m.line }}</span>
+            </div>
           } @else {
-            <a class="family-card-link" [href]="m.url" target="_blank" rel="noopener">
-              <span class="family-name">{{ m.name }}<span class="family-arrow" aria-hidden="true">&nbsp;→</span></span>
+            <a
+              class="family-card family-card-link"
+              [href]="m.url"
+              target="_blank"
+              rel="noopener"
+              [attr.data-testid]="'family-member-' + m.key">
+              <span class="family-name-row">
+                <span class="family-name">{{ m.name }}</span>
+                <span class="family-arrow" aria-hidden="true">→</span>
+              </span>
               <span class="family-line">{{ m.line }}</span>
             </a>
           }

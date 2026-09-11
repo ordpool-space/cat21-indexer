@@ -1,14 +1,15 @@
 // The Ordpool-family strip. Structure mirrors ordpool.space's lead (round-4:
 // ordpool leads, the others match) — centered logo + heading + lede, then a
-// grid of member cards, a hover-lift + arrow-nudge on each link, and the
-// current site as a DASHED card with a "You're here" pill. "Similar" is
+// grid of member cards. The WHOLE card is the link (an <a> wrapping name +
+// line), not just the name; the current site is a non-link <div>. "Similar" is
 // structure/hierarchy/rhythm, NOT hex: ordpool's ground is black and leans on
 // light text; cat21.space's ground is #FF9900 orange, which has no light side.
 //
 // COLOUR RULE (binding, measured): on #FF9900 white is 2.14:1 and muted grey is
-// 2.19:1, both unreadable; only dark ink #282828 works (6.89:1). So every text
-// element here is #282828 where ordpool uses light. Lightness is the one axis
-// this ground doesn't have — distinction comes from size, weight, spacing.
+// 2.19:1, both unreadable; only dark ink #282828 works (6.89:1). Every text
+// element is #282828, pinned EXPLICITLY (never `inherit`), because the card is a
+// link now and an inherited link colour on this ground would be orange-on-orange
+// (~1:1) and the claim line would silently vanish.
 .family-footer {
   margin-top: 3.5rem;
   padding: 2.25rem 0 2.75rem;
@@ -21,8 +22,6 @@
   padding: 0 1.5rem;
 }
 
-// Centered header: cat mark + heading, lede beneath — matches the lead's
-// centered masthead.
 .family-head {
   display: flex;
   align-items: center;
@@ -63,105 +62,109 @@
   gap: 1rem;
 }
 
-// A member card: white pixel border on the transparent orange ground — the
-// site's own panel motif, so the strip belongs to cat21.space and can't be
-// lifted onto a black or flat sister site unchanged.
-.family-card {
-  border: 2px solid #fff;
-  background: transparent;
+.family-cell {
   display: flex;
-  flex-direction: column;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 
-// Hover lifts the card, darkens its border, underlines the name and nudges the
-// arrow — the lead's whole-card-is-clickable cue, in my palette (border to dark
-// ink, since the lead's hover-to-orange would be orange-on-orange here).
-.family-card:not(.family-card-current):hover {
-  border-color: #282828;
-  transform: translateY(-2px);
-
-  .family-name { text-decoration: underline; }
-  .family-arrow { transform: translateX(4px); }
-}
-
-.family-card-link {
+// The card = the whole click target. White pixel border on the transparent
+// orange ground — cat21.space's own panel motif, so the strip belongs here and
+// can't be lifted onto a black or flat sister site unchanged.
+.family-card {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  padding: 0.9rem 1rem 1rem;
-  height: 100%;
+  padding: 0.85rem 0.95rem 0.95rem;
+  border: 2px solid #fff;
+  background: transparent;
+  color: #282828;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+// Linked cards: the whole card navigates. Hover lifts it, darkens the border,
+// underlines the name and nudges the arrow (border-to-dark, not the lead's
+// border-to-orange, which would be orange-on-orange here).
+.family-card-link {
   text-decoration: none;
-  color: inherit;
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: #282828;
+
+    .family-name { text-decoration: underline; }
+    .family-arrow { transform: translateX(4px); }
+  }
 
   &:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #282828; }
 }
 
-// Name is the anchor. On the orange ground it is dark ink like everything else
-// (ordpool's accent-orange name would be orange-on-orange here, ~1:1 and
-// invisible), so the name/claim separation is carried by WEIGHT + SIZE, never
-// hue — the one axis this ground doesn't have.
-.family-name {
-  font-family: "Public Pixel", sans-serif;
-  font-size: 1rem;
-  font-weight: bold;
-  color: #282828;
-  line-height: 1.25;
+// The current site: NOT a link, DASHED border, full-contrast dark ink so it
+// reads as current rather than disabled.
+.family-card-current {
+  border-style: dashed;
 }
 
-// Trailing arrow nudges right on hover — the "this is a door" cue, matching the
-// lead. Movement, not colour, carries the affordance on this ground.
+// First line: name + arrow (or name + "You're here" pill) stay TOGETHER on one
+// line — the arrow never wraps below. nowrap + a name sized to fit the widest
+// domain (cubes.haushoppe.art) in the wide pixel font at the 4-col width.
+.family-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.family-name {
+  font-family: "Public Pixel", sans-serif;
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: #282828;
+  line-height: 1.3;
+}
+
+// Trailing arrow nudges right on hover — the door cue, matching the lead.
+// Movement, not colour, carries the affordance on this ground. aria-hidden.
 .family-arrow {
   display: inline-block;
+  color: #282828;
   transition: transform 0.12s ease;
 }
 
-.family-card-link:hover .family-arrow { transform: translateX(4px); }
-
-.family-line {
-  color: #282828;
-  font-size: 0.875rem;
-  line-height: 1.45;
-  flex: 1 1 auto;
-}
-
-// The current site: NOT a link, DASHED border (the lead's self-row treatment),
-// full-contrast dark ink so it reads as current rather than disabled, with a
-// "You're here" pill. No hover-lift (nowhere to go).
-.family-card-current {
-  border-style: dashed;
-  padding: 0.9rem 1rem 1rem;
-  gap: 0.4rem;
-}
-
-// The "You're here" chip. The lead FILLS its chip with accent orange; on this
-// ground orange fills invisibly, so it's filled with dark ink instead (the
-// inverse) to pop, white text at ~15:1. Sharp corners, not the lead's rounded
-// pill, because cat21.space is a sharp pixel site — structure mirrored, shape
-// in my own aesthetic.
+// "You're here" chip — INLINE with the name on the first line (like the lead),
+// not stacked above it. Dark-filled (the lead fills with accent orange, which
+// is invisible on the orange ground), white text, ~15:1.
 .family-here {
-  align-self: flex-start;
+  flex: 0 0 auto;
   font-family: "Public Pixel", sans-serif;
-  font-size: 0.58rem;
+  font-size: 0.5rem;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: #fff;
   background: #282828;
-  padding: 0.2rem 0.55rem;
-  margin-bottom: 0.15rem;
+  padding: 0.15rem 0.4rem;
+  line-height: 1.4;
 }
 
-// Narrow: 4 -> 2 (tablet) -> 1 (phone), matching the lead's breakpoints. Each
-// card is short (name + line), so the stack is a page ending, not a wall; and
-// cat21.space has no footer beyond it, so nothing is blocked by the stack.
+// The claim line. Pinned #282828 explicitly — being inside a link now, an
+// inherited colour would be the orange-on-orange trap. Full body weight, not
+// caption grey; the claim is what earns the click.
+.family-line {
+  color: #282828;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+// Narrow: 4 -> 2 (tablet) -> 1 (phone). Cards get wider as columns drop, so the
+// name comfortably fits; each card is short (name + line), so the stack is a
+// page ending, not a wall (and cat21.space has no footer beyond it).
 @media (max-width: 900px) {
   .family-grid { grid-template-columns: repeat(2, 1fr); }
+  .family-name { font-size: 0.9rem; }
 }
 
 @media (max-width: 560px) {
   .family-grid { grid-template-columns: 1fr; gap: 0.6rem; }
-  .family-card-link,
-  .family-card-current { padding: 0.7rem 0.85rem 0.8rem; }
   .family-footer { margin-top: 2.5rem; padding: 1.75rem 0 2rem; }
   .family-heading { font-size: 1.1rem; }
 }
