@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, linkedSignal, numberAttribute, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, numberAttribute, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 
@@ -62,12 +62,6 @@ const DEFAULT_CATEGORY = 'sub1k';
 const CATEGORY_TABS = TRAIT_DEFINITIONS.category.options.map(([value]) => value);
 
 const ITEMS_PER_PAGE = 48;
-
-// Precomputed lookup tables: URL value ↔ display label (the second element
-// of the tuple). The keyword box reads/writes labels because that's what
-// the user sees on the buttons; we translate to URL values when routing.
-const VALUE_TO_LABEL = buildValueToLabel();
-const LABEL_TO_VALUE = buildLabelToValue();
 
 @Component({
   selector: 'app-search',
@@ -158,39 +152,6 @@ export class Search {
   readonly hasAnyFilter = computed(() =>
     CHIP_TRAIT_KEYS.some((key) => this.selected()[key].length > 0),
   );
-
-  readonly keywordOpen = signal(false);
-
-  // A curated rotation of trait combinations that each return a healthy
-  // number of cats. The shown example is randomized whenever the user
-  // opens the keyword box, so they see syntax variety on repeat visits.
-  // Each entry uses broad-population traits (e.g. pose + color + eyes)
-  // whose intersections are stable as new cats mint.
-  private readonly KEYWORD_EXAMPLES = [
-    'pose:sleeping expression:smile glasses:cool',
-    'color:orange,yellow pose:standing background:cyberpunk',
-    'eyes:red,blue pattern:striped expression:grumpy',
-    'pose:pouncing color:green background:block9',
-    'crown:gold expression:smile background:orange',
-    'pattern:eyepatch glasses:black,cool pose:stalking',
-    'color:fire eyes:red pose:standing',
-    'background:whitepaper pose:sleeping expression:shy',
-  ] as const;
-
-  readonly currentExample = signal(this.pickExample());
-
-  private pickExample(): string {
-    const i = Math.floor(Math.random() * this.KEYWORD_EXAMPLES.length);
-    return this.KEYWORD_EXAMPLES[i];
-  }
-
-  // Linked to `selected()` so trait changes overwrite the user's draft.
-  // The alternative (an independent signal) lets traits and text drift
-  // out of sync silently.
-  readonly keywordDraft = linkedSignal({
-    source: () => this.selected(),
-    computation: (sel) => serializeSelected(sel),
-  });
 
   resultsResource = rxResourceFixed({
     params: () => ({
@@ -338,19 +299,6 @@ export class Search {
     this.navigateWithSelected({ ...this.selected(), category: [value] }, 1);
   }
 
-  /** Show/hide the keyword input. Refreshes the example placeholder
-   *  each time the box opens so users see syntax variety. */
-  toggleKeyword(): void {
-    this.keywordOpen.update((v) => !v);
-    if (this.keywordOpen()) this.currentExample.set(this.pickExample());
-  }
-
-  /** Enter / blur on the keyword box: parse the draft text, navigate to
-   *  the resulting filter set, URL re-binds the chips through `selected()`. */
-  submitKeyword(): void {
-    this.navigateWithSelected(parseKeyword(this.keywordDraft()), 1);
-  }
-
   /**
    * Lucky pick. Hits /cats/search/random with the current filters and
    * routes to the cat detail page on success. A 404 from the backend
@@ -427,80 +375,3 @@ function filtersToHttpParams(filters: Record<FilterKey, string[]>): HttpParams {
   return httpParams;
 }
 
-/**
- * Serialize chip state to the keyword-box format:
- *   `eyes:red,blue pose:sleeping background:cyberpunk`
- *
- * Each token is `key:label[,label,…]`. Values are emitted as **labels**
- * (what the user sees on the buttons), not the URL/backend values, so
- * the box stays readable and round-trips back to the same chips
- * through `parseKeyword`.
- */
-function serializeSelected(sel: Record<FilterKey, string[]>): string {
-  const parts: string[] = [];
-  for (const key of FILTER_KEYS) {
-    if (sel[key].length > 0) {
-      const labels = sel[key].map((v) => VALUE_TO_LABEL[key][v] ?? v);
-      parts.push(`${key}:${labels.join(',')}`);
-    }
-  }
-  return parts.join(' ');
-}
-
-/**
- * Parse the keyword box back into chip state. Forgiving:
- * - case-insensitive on the label side
- * - extra whitespace is fine
- * - unknown keys / labels are silently dropped (don't poison the URL)
- * - empty / whitespace-only input → empty selection (clears everything)
- */
-function parseKeyword(text: string): Record<FilterKey, string[]> {
-  const result = emptySelected();
-  const tokens = text.trim().split(/\s+/).filter((t) => t.length > 0);
-
-  for (const token of tokens) {
-    const colon = token.indexOf(':');
-    if (colon <= 0) continue;
-    const key = token.slice(0, colon).toLowerCase();
-    const valueList = token.slice(colon + 1);
-    if (!isFilterKey(key) || !valueList) continue;
-
-    for (const rawLabel of valueList.split(',')) {
-      const label = rawLabel.trim().toLowerCase();
-      if (!label) continue;
-      const value = LABEL_TO_VALUE[key][label];
-      if (value && !result[key].includes(value)) {
-        result[key].push(value);
-      }
-    }
-  }
-  return result;
-}
-
-function isFilterKey(s: string): s is FilterKey {
-  return (FILTER_KEYS as readonly string[]).includes(s);
-}
-
-function buildValueToLabel(): Record<FilterKey, Record<string, string>> {
-  const result = {} as Record<FilterKey, Record<string, string>>;
-  for (const key of FILTER_KEYS) {
-    const map: Record<string, string> = {};
-    for (const [value, label] of TRAIT_DEFINITIONS[key].options) {
-      map[value] = label;
-    }
-    result[key] = map;
-  }
-  return result;
-}
-
-function buildLabelToValue(): Record<FilterKey, Record<string, string>> {
-  const result = {} as Record<FilterKey, Record<string, string>>;
-  for (const key of FILTER_KEYS) {
-    const map: Record<string, string> = {};
-    for (const [value, label] of TRAIT_DEFINITIONS[key].options) {
-      map[label.toLowerCase()] = value;
-    }
-    result[key] = map;
-  }
-  return result;
-}

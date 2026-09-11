@@ -2,38 +2,12 @@
 
 <p class="mt-2 mb-3">
   Pick a collection below, then filter by traits inside it.
-  Or use <a (click)="toggleKeyword()" role="button" class="keyword-search-link">keyword search</a>.
 </p>
 
 <app-category-tabs
   [tabs]="visibleCategoryTabs()"
   [active]="activeCategory()"
   (categoryChange)="setCategory($event)" />
-
-@if (keywordOpen()) {
-  <div class="mb-3">
-    <input
-      type="text"
-      class="form-control keyword-input"
-      spellcheck="false"
-      autocomplete="off"
-      autocapitalize="off"
-      autocorrect="off"
-      placeholder="eyes:red pose:sleeping background:cyberpunk"
-      [value]="keywordDraft()"
-      (input)="keywordDraft.set($any($event.target).value)"
-      (keydown.enter)="submitKeyword()"
-      (blur)="submitKeyword()"
-      aria-label="Search by keywords"
-    />
-    <p class="mt-1 mb-0 small">
-      Format <code>trait:label</code>. Comma-separates values within a trait (OR);
-      space-separates across traits (AND). Case-insensitive. Press Enter to apply.
-      <br>
-      Try: <code>{{ currentExample() }}</code>
-    </p>
-  </div>
-}
 
 <div class="category-panel norton-shadow trait-rows mb-3">
   @for (trait of visibleTraits(); track trait.key) {
