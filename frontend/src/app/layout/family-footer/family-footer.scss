@@ -164,7 +164,13 @@
 }
 
 @media (max-width: 560px) {
+  .family-inner { padding: 0 0.5rem; }
   .family-grid { grid-template-columns: 1fr; gap: 0.6rem; }
   .family-footer { margin-top: 2.5rem; padding: 1.75rem 0 2rem; }
   .family-heading { font-size: 1.1rem; }
+  // Shrink the tagline so each of its two sentences stays on ONE line at phone
+  // widths — the hard break is meant to give two lines, not two that each wrap
+  // into four in the wide pixel font. (Combined with the reduced side padding
+  // above, this holds two lines down to ~375px.)
+  .family-lede { font-size: 0.6rem; letter-spacing: 0; }
 }

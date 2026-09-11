@@ -4,7 +4,11 @@
       <img class="family-logo" src="genesis-cat.svg" alt="" aria-hidden="true" width="40" height="40" />
       <h2 class="family-heading">{{ heading }}</h2>
     </div>
-    <p class="family-lede">{{ lede }}</p>
+    <p class="family-lede">
+      @for (line of ledeLines; track $index) {
+        {{ line }}@if (!$last) {<br />}
+      }
+    </p>
 
     <ul class="family-grid">
       @for (m of members; track m.key) {
@@ -21,8 +25,6 @@
             <a
               class="family-card family-card-link"
               [href]="m.url"
-              target="_blank"
-              rel="noopener"
               [attr.data-testid]="'family-member-' + m.key">
               <span class="family-name-row">
                 <span class="family-name">{{ m.name }}</span>

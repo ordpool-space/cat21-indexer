@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { ORDPOOL_FAMILY, ORDPOOL_FAMILY_HEADING, ordpoolFamilyLede } from 'ordpool-sdk';
+import { ORDPOOL_FAMILY, ORDPOOL_FAMILY_HEADING } from 'ordpool-sdk';
 
 /**
  * The Ordpool-family strip at the foot of every page: a heading, a one-line
@@ -17,10 +17,17 @@ import { ORDPOOL_FAMILY, ORDPOOL_FAMILY_HEADING, ordpoolFamilyLede } from 'ordpo
 })
 export class FamilyFooter {
   readonly heading = ORDPOOL_FAMILY_HEADING;
-  /** Per-site lede; cat21's tail is "…a pixelated cat". The coin-check clause
-   *  lives at the action (singleAddressCaveat), not here — a footer greets
-   *  every visitor and shouldn't lead with a caution. */
-  readonly lede = ordpoolFamilyLede('cat21');
+  /**
+   * cat21.space's own tagline, one sentence per line. The per-site tagline is
+   * written and formatted here, NOT read from the SDK: the SDK owns the shared
+   * heading and the member lines, but each site owns its own tagline. The
+   * coin-check clause lives at the action (singleAddressCaveat), not here — a
+   * footer greets every visitor and shouldn't lead with a caution.
+   */
+  readonly ledeLines = [
+    'Sometimes Bitcoin is hard money.',
+    'Sometimes Bitcoin is a pixelated cat.',
+  ];
   readonly members = ORDPOOL_FAMILY;
 
   /** This site's key in the family, so its own row renders as "you're here". */
