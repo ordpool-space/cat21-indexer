@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
+import { FamilyFooter } from './layout/family-footer/family-footer';
 import { Header } from './layout/header/header';
 import { RoutingStateService } from './services/routing-state.service';
 
@@ -12,6 +13,7 @@ import { RoutingStateService } from './services/routing-state.service';
     imports: [
         Header,
         RouterOutlet,
+        FamilyFooter,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush
 })

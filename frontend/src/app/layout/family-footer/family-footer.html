@@ -1,0 +1,29 @@
+<footer class="family-footer" data-testid="family-footer">
+  <div class="family-inner">
+    <div class="family-head">
+      <img class="family-logo" src="genesis-cat.svg" alt="" aria-hidden="true" width="40" height="40" />
+      <h2 class="family-heading">{{ heading }}</h2>
+    </div>
+    <p class="family-lede">{{ lede }}</p>
+
+    <ul class="family-grid">
+      @for (m of members; track m.key) {
+        <li
+          class="family-card"
+          [class.family-card-current]="m.key === currentKey"
+          [attr.data-testid]="'family-member-' + m.key">
+          @if (m.key === currentKey) {
+            <span class="family-here">You're here</span>
+            <span class="family-name">{{ m.name }}</span>
+            <span class="family-line">{{ m.line }}</span>
+          } @else {
+            <a class="family-card-link" [href]="m.url" target="_blank" rel="noopener">
+              <span class="family-name">{{ m.name }}<span class="family-arrow" aria-hidden="true">&nbsp;→</span></span>
+              <span class="family-line">{{ m.line }}</span>
+            </a>
+          }
+        </li>
+      }
+    </ul>
+  </div>
+</footer>
