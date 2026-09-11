@@ -18,3 +18,20 @@ b {
   color: #FF9900;
   margin-right: 8px;
 }
+
+// Phones: the trait table's value column holds unbreakable strings (the 16-digit
+// Sat number, shortened ids). Left alone, their min-content pushes the table
+// wider than the viewport and the whole page scrolls sideways. Fix the layout so
+// the columns fit the viewport and let the values wrap inside their cell, so the
+// table fits with no scrollbar rather than overflowing.
+@media (max-width: 575px) {
+  // Only the VALUE column breaks its long unbreakable strings (the 16-digit Sat
+  // number, shortened ids). With auto table layout the label column then sizes
+  // to its whole word (so the wide pixel labels never hyphenate) and the value
+  // column takes the rest, so the table fits the viewport with no side-scroll.
+  // NOT table-layout: fixed, which would force the wide single-word labels to
+  // break mid-word.
+  .table td + td {
+    overflow-wrap: anywhere;
+  }
+}
