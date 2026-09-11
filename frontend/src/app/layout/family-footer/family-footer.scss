@@ -125,7 +125,11 @@
   font-family: "Public Pixel", sans-serif;
   // Sized so the widest domain (cubes.haushoppe.art), which cannot wrap, fits
   // one equal 4-column track. The wider 2-col / 1-col layouts restore 0.9rem.
-  font-size: 0.72rem;
+  // The name is the card's header, so it must read LARGER than the claim line
+  // below it (family-line, 0.7rem regular): the wide pixel face at 0.78rem
+  // clears the narrower regular line, the same name-over-claim hierarchy the
+  // ordpool.space footer uses.
+  font-size: 0.78rem;
   font-weight: bold;
   color: #282828;
   line-height: 1.3;
@@ -154,12 +158,13 @@
   line-height: 1.4;
 }
 
-// The claim line. Pinned #282828 explicitly — being inside a link now, an
-// inherited colour would be the orange-on-orange trap. Full body weight, not
-// caption grey; the claim is what earns the click.
+// The claim line. Pinned #282828 explicitly (inside a link, an inherited
+// colour would be the orange-on-orange trap). Set a step BELOW the pixel name
+// so the name reads as the card's header; the regular face stays readable at
+// this size where the wide pixel face could not.
 .family-line {
   color: #282828;
-  font-size: 0.82rem;
+  font-size: 0.7rem;
   line-height: 1.45;
 }
 
