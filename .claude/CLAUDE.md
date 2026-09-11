@@ -122,15 +122,21 @@ of truth for colour; the code follows it.
 | Token | Value | Role |
 |---|---|---|
 | Bitcoin orange | `#FF9900` (`$bitcoin` / `$body-bg`) | brand colour + page background of the whole normal site |
-| Ink | `#282828` (`$body-color`) | body text on orange; ALSO the dark popup surface |
-| White | `#fff` | pixel headings, header nav + logo, pixel-button chrome, and all text inside the dark popups |
+| Ink | `#282828` (`$body-color`) | body text AND headings on the orange body; ALSO the dark popup surface |
+| White | `#fff` | header nav + logo, pixel-button chrome, and all text (headings included) inside the dark popups |
 | Danger red | `#dc3545` / `#f8d7da` | error notices (red border, pink fill, dark-red text) |
 
-**The contrast rule (why body text is dark, not white).** White on `#FF9900`
-is **2.14:1** and fails WCAG AA (needs 4.5:1 for normal text, 3.0:1 for large).
-`#282828` on `#FF9900` is **6.89:1** and passes. So **normal-size body copy is
-dark**; only the large pixel headings may be white (they clear the large-text
-bar and read as brand type, not copy).
+**The contrast rule (why headings and body text are both dark, not white).**
+White on `#FF9900` is **2.14:1** and fails WCAG AA **at any size** — it is
+*below* the 3.0 large-text allowance, not above it (2.14 < 3.0). `#282828` on
+`#FF9900` is **6.89:1** and passes. So **all text on the orange ground is dark
+ink**: body copy AND the pixel headings (`h1`–`h4`), which take their surface's
+colour via `color: inherit` — dark on the orange body, white only inside the
+dark popups. Headings read as brand type through the pixel font + weight + size,
+never through lightness (the one axis this ground doesn't have). Do NOT restore
+white headings on the orange body: a heading is not exempt from contrast for
+being brand type, and "they clear the large-text bar" was a false premise (the
+number two sentences up disproves it).
 
 **What is white vs dark**
 
@@ -150,8 +156,10 @@ bar and read as brand type, not copy).
 - `$body-color: #282828` in `_adjust-bootstrap.scss` makes body text dark by
   default; Bootstrap derives `--bs-secondary-color` = `rgba($body-color, .75)`,
   so muted text follows automatically. Do NOT set it back to `white`.
-- `h1,h2,h3,h4 { color: white }` in `styles.scss` — headings white on the
-  orange body AND on the dark popup title bars.
+- `h1,h2,h3,h4 { color: inherit }` in `styles.scss` — headings take their
+  surface's colour: **dark `#282828` on the orange body (6.89:1)**, white on the
+  dark popup title bars. Do NOT set them back to `color: white`; white on the
+  orange body is the 2.14:1 strain and fails at any size.
 - **Surface-aware `color: inherit`** on anything that renders on BOTH an orange
   surface and a dark popup: `strong`, `a`, `.tool-card`, `pending-cats`. Inherit
   so it's dark on orange and white in the popup. **Never hardcode `color: white`

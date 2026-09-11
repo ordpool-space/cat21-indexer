@@ -16,12 +16,16 @@ strong {
   font-weight: 700;
 }
 
-// Pixel headings stay white everywhere: on the orange body and on the dark
-// popup title bars. They read as brand type, not body copy.
+// Pixel headings take their surface's colour, like body copy and links below:
+// dark ink #282828 on the orange body (6.89:1), white inside the dark popups.
+// White on #FF9900 is 2.14:1 and fails even the 3.0 large-text bar at any size,
+// so a heading is NOT exempt from contrast for being brand type — the pixel
+// font + weight + size carry "brand type", never lightness (the one axis this
+// orange ground doesn't have).
 h1, h2, h3, h4 {
   font-family: "Public Pixel", sans-serif;
   font-weight: 700;
-  color: white;
+  color: inherit;
 }
 
 // Links take their surface's colour and lean on the underline for the
