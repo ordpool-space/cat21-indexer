@@ -38,14 +38,29 @@ export class Cat21Viewer {
   readonly env = environment;
 
   /**
-   * The mint price: the total fee paid to mine the mint transaction, in sats,
-   * with a current-USD equivalent. This is what the minter actually spent to
-   * put the cat on Bitcoin (the whole tx fee, witness included) — the sats are
-   * the stable record, the USD floats with today's price.
+   * The mint price: the whole amount the minter converted into this cat, in
+   * sats, with a current-USD equivalent. That is the cat UTXO's own value (the
+   * sats that now live on the cat) PLUS the fee paid to mine the mint tx: the
+   * net liquid sats that left the minter's wallet (funding minus change). Fee
+   * alone understates it; the value is locked on the cat, so it is part of what
+   * the cat cost. The sats are the stable record; the USD floats with today's
+   * price.
    */
   readonly mintPrice = computed(() => {
     const cat = this.cat();
-    return cat ? formatSatsWithUsd(cat.fee, this.btcUsd()) : '';
+    return cat ? formatSatsWithUsd(cat.value + cat.fee, this.btcUsd()) : '';
+  });
+
+  /**
+   * The Mint Price row shows for every cat EXCEPT the Genesis Cat (#0). Cat #0
+   * carries a static lore Price of 21 BTC; showing its mint fee beside that
+   * would read as a second, contradictory price on the one cat whose price is
+   * fixed by the lore. Every other cat has no lore price, so the mint fee is
+   * the only price it has.
+   */
+  readonly showMintPrice = computed(() => {
+    const cat = this.cat();
+    return !!cat && cat.catNumber !== 0;
   });
 
   constructor() {

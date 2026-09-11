@@ -441,7 +441,12 @@ export class Details {
 
   openSellModal(): void {
     if (this.sellButtonState() !== 'enabled') return;
-    this.askInput.set('');
+    // Default the ask to the whole amount the minter put into this cat: the
+    // sats on the cat UTXO plus the mint fee (the same "Mint Price" shown on the
+    // detail page). It gives the seller a sensible floor to adjust from rather
+    // than a blank field; empty only when the cat data isn't loaded.
+    const cat = this.catResource.value();
+    this.askInput.set(cat ? String(cat.value + cat.fee) : '');
     this.copyStatus.set('idle');
     this.modalRef = this.modalService.open(this.sellModalTemplate(), {
       ariaLabelledBy: 'sell-listing-title',
