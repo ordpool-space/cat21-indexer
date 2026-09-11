@@ -3,6 +3,9 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { NgbModal, NgbModalRef, NgbPopover, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import {
+  CONNECT_BUTTON_ACCESSIBLE_NAME,
+  CONNECT_BUTTON_LABEL,
+  CONNECT_PANEL_HEADING,
   KnownOrdinalWalletType,
   KnownOrdinalWallets,
   WalletCapability,
@@ -115,6 +118,18 @@ export class WalletConnect {
   readonly knownOrdinalWallets = KnownOrdinalWallets;
   readonly connectButtonDisabled = signal(false);
   readonly connectError = signal<string | null>(null);
+
+  /**
+   * The connect-entry strings, SDK-owned so every site reads identically:
+   * the button's visible verb ("Connect"), the panel's full heading
+   * ("Connect a wallet"), and the button's accessible name. The accessible
+   * name is the LONG form on purpose: a screen reader meets the label without
+   * the wallet icon beside it, so the bare verb would lose the noun the icon
+   * carries. Kept distinct from the visible label for that reason.
+   */
+  readonly connectLabel = CONNECT_BUTTON_LABEL;
+  readonly panelHeading = CONNECT_PANEL_HEADING;
+  readonly connectAccessibleName = CONNECT_BUTTON_ACCESSIBLE_NAME;
 
   private connectTemplate = viewChild.required<TemplateRef<unknown>>('connectModal');
   private modalRef: NgbModalRef | undefined;

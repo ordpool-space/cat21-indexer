@@ -30,6 +30,36 @@
   &:hover { background: #f5f5f5; }
 }
 
+// Disconnected connect button: the site's primary CTA, so it is FILLED white
+// (the wallet button's own convention — the connected state is filled too) and
+// its content is dark ink #282828. Two reasons for the dark ink, not the white
+// the surrounding header chrome uses: the wallet icon is a non-text element
+// owing 3:1, and white on the orange body is 2.14:1 (fails), while dark ink on
+// this white fill is ~15:1; and a white-filled dark block is what makes this
+// control impossible to miss in a header that is otherwise white outlines.
+.wallet-button-connect {
+  background: white;
+  border-color: white;
+  color: #282828;
+
+  &:hover { background: #f5f5f5; }
+}
+
+// The pixelated wallet glyph. cat21.space draws its own (the family shares the
+// connect WORDS via the SDK, never the icon); crispEdges keeps the pixel look.
+// Inherits the button's dark ink via currentColor, so it clears 3:1 on the
+// white fill without a hardcoded colour that could drift from the label.
+.wallet-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  image-rendering: pixelated;
+}
+
+.wallet-connect-label {
+  font-size: 0.8rem;
+}
+
 .wallet-label {
   font-size: 0.75rem;
 }

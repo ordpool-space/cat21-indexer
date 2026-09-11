@@ -2,7 +2,7 @@
   <div class="modal-header">
     <!-- Initial focus on the title, not the close X (whose focus ring rendered
          as a stray grey box). ngbAutofocus is what ng-bootstrap focuses on open. -->
-    <h4 class="modal-title" id="wallet-connect-title" ngbAutofocus tabindex="-1">Connect wallet</h4>
+    <h4 class="modal-title" id="wallet-connect-title" ngbAutofocus tabindex="-1">{{ panelHeading }}</h4>
     <button type="button" class="btn-close" aria-label="Close" (click)="modal.dismiss()"></button>
   </div>
   <div class="modal-body">
@@ -163,7 +163,27 @@
     <button type="button" class="disconnect-btn" (click)="disconnect(walletPopover)">Disconnect</button>
   </ng-template>
 } @else {
-  <button type="button" class="wallet-button wallet-button-connect" (click)="open()" data-testid="wallet-connect-btn">
-    Connect wallet
+  <!-- Entry point to every signing flow: the one control a person must not
+       fail to find. Wallet icon + the verb "Connect" (the icon carries the
+       noun); the accessible name restores the noun a screen reader can't see
+       from the icon, so it is the LONG form and stays distinct from the label.
+       The pixelated wallet glyph is cat21.space's own (the family shares the
+       words, each site draws its own icon), dark ink on the white fill so it
+       clears the 3:1 non-text bar the orange ground denies a white glyph. -->
+  <button
+    type="button"
+    class="wallet-button wallet-button-connect"
+    [attr.aria-label]="connectAccessibleName"
+    (click)="open()"
+    data-testid="wallet-connect-btn">
+    <svg class="wallet-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" shape-rendering="crispEdges" aria-hidden="true" focusable="false">
+      <!-- billfold body: a 2px pixel frame (outer rect minus inner) -->
+      <path fill-rule="evenodd" d="M1 4H15V13H1V4ZM3 6V11H13V6H3Z" />
+      <!-- fold line across the front -->
+      <path d="M3 8H13V9H3V8Z" />
+      <!-- snap button on the fold -->
+      <path d="M10 7H12V10H10V7Z" />
+    </svg>
+    <span class="wallet-connect-label">{{ connectLabel }}</span>
   </button>
 }

@@ -67,3 +67,57 @@ describe('WalletConnect — empty-state (§7.2)', () => {
     expect(component.noWalletDetected()).toBe(false);
   });
 });
+
+/**
+ * Round-5 connect button. The icon carries the noun visually and the label is
+ * just the verb, so a screen reader (which never sees the icon) must get the
+ * noun back via a LONGER accessible name. The invariant the SDK flagged: the
+ * accessible name must NOT collapse into the visible label. Asserted on the
+ * rendered DOM so a regression that set `aria-label` equal to the text turns
+ * this red.
+ */
+describe('WalletConnect — connect button (round-5)', () => {
+  let fixture: ComponentFixture<WalletConnect>;
+
+  beforeEach(() => {
+    delete (window as unknown as Record<string, unknown>)['unisat'];
+    TestBed.configureTestingModule({
+      imports: [WalletConnect],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: WalletService, useValue: new WalletServiceStub() },
+        {
+          provide: cat21Config,
+          useValue: {
+            mempoolApiUrl: 'https://api.ordpool.space',
+            cat21ApiUrl: 'https://backend2.cat21.space',
+            ordApiUrl: 'https://ord.ordpool.space',
+            cat21OrdApiUrl: 'https://ord.cat21.space',
+          },
+        },
+      ],
+    });
+    fixture = TestBed.createComponent(WalletConnect);
+    fixture.detectChanges();
+  });
+
+  it('renders the disconnected button with a hidden icon + visible verb, and a longer accessible name', () => {
+    const btn = fixture.nativeElement.querySelector('[data-testid="wallet-connect-btn"]') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+
+    const icon = btn.querySelector('svg.wallet-icon');
+    expect(icon).toBeTruthy(); // the wallet glyph is present
+    expect(icon!.getAttribute('aria-hidden')).toBe('true'); // and hidden from AT
+
+    const visibleLabel = btn.querySelector('.wallet-connect-label')!.textContent!.trim();
+    const accessibleName = btn.getAttribute('aria-label')!;
+
+    expect(visibleLabel).toBe('Connect'); // the verb only
+    expect(accessibleName).toBe('Connect a wallet'); // the noun restored for AT
+    // The load-bearing assertion: the two are DIFFERENT. Setting aria-label to
+    // the visible label (the mistake the SDK warned against) fails here.
+    expect(accessibleName).not.toBe(visibleLabel);
+    expect(accessibleName.length).toBeGreaterThan(visibleLabel.length);
+  });
+});

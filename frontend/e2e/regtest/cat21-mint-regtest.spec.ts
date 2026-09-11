@@ -207,9 +207,8 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // (27482094562, 27490459274, 27493343785) before this fix.
   const knownPagesBeforeConnect = new Set(context.pages());
 
-  // The wallet-connect trigger inside the CTA reads "Connect wallet".
-  // It's `.wallet-button-connect` so we pin by class to dodge anything
-  // else that might match "connect" on the page.
+  // The wallet-connect trigger inside the CTA (an icon + "Connect"). Pinned by
+  // its data-testid rather than text so the visible label can change freely.
   await page.getByTestId('wallet-connect-btn').first().click();
 
   // The modal lists supported wallets — click Xverse. Pick by testid
