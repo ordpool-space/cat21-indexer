@@ -40,4 +40,18 @@ describe('Search currentPage fallback', () => {
     fixture.componentRef.setInput('currentPage', '3');
     expect(component.currentPage()).toBe(3);
   });
+
+  it('clamps a hand-typed /search/0 to 1', () => {
+    // numberAttribute('0', 1) === 0; without the clamp the pager showed
+    // "page 0" and next linked to the same cats.
+    fixture.componentRef.setInput('currentPage', '0');
+    expect(component.currentPage()).toBe(1);
+  });
+
+  it('clamps a negative page to 1, never hitting the backend with it', () => {
+    // -1 is truthy, so `currentPage() || 1` would NOT save us here; the clamp
+    // must happen in the transform so the fetch never sees a negative page.
+    fixture.componentRef.setInput('currentPage', '-1');
+    expect(component.currentPage()).toBe(1);
+  });
 });
