@@ -71,6 +71,15 @@
   justify-content: flex-end;
 }
 
+// Connect + burger. Always on the top row (never collapses into the dropdown),
+// so Connect is one tap away on every screen.
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
 .nav-link {
   position: relative;
   font-family: "Public Pixel", sans-serif;
@@ -130,10 +139,13 @@
 @media (max-width: 900px) {
   .nav-toggle { display: flex; }
 
-  // The nav collapses behind the burger: hidden until opened, then a
-  // full-width vertical dropdown below the brand + toggle row. flex-basis 100%
-  // wraps it onto its own line (the header is already flex-wrap: wrap).
+  // Top row stays brand + actions (Connect + burger). `order` puts the actions
+  // before the nav in visual order; the nav takes order 3 + full width so it
+  // wraps onto its own line BELOW that row, as the burger dropdown.
+  .header-actions { order: 2; }
+
   .nav-links {
+    order: 3;
     display: none;
     flex-basis: 100%;
     flex-direction: column;
@@ -149,14 +161,14 @@
     padding: 0.7rem 0.4rem;
     border-top: 1px solid rgba(255, 255, 255, 0.3);
   }
-
-  app-wallet-connect {
-    margin-top: 0.6rem;
-  }
 }
 
-// Phones: shrink the wordmark + cat a touch so the brand + burger fit one row.
+// Phones: shrink the wordmark + cat and tighten the gap so brand + Connect +
+// burger sit on ONE row (Connect stays out of the burger, so the top row must
+// hold all three).
 @media (max-width: 560px) {
-  .brand-cat { width: 36px; height: 36px; }
-  .brand-word { font-size: 1.25rem; }
+  .header-nav { column-gap: 0.6rem; }
+  .brand-cat { width: 32px; height: 32px; }
+  .brand-word { font-size: 1.1rem; }
+  .header-actions { gap: 0.4rem; }
 }

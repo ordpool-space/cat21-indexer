@@ -4,23 +4,9 @@
     <span class="brand-word">CAT-21</span>
   </a>
 
-  <!-- Burger: shown only below the nav breakpoint (CSS). Toggles the nav
-       dropdown; hidden from assistive tech is NOT wanted here, so it carries a
-       label + aria-expanded + aria-controls pointing at the nav it reveals. -->
-  <button
-    type="button"
-    class="nav-toggle"
-    [class.is-open]="menuOpen()"
-    (click)="toggleMenu()"
-    [attr.aria-expanded]="menuOpen()"
-    aria-controls="primary-nav"
-    aria-label="Menu"
-    data-testid="nav-toggle">
-    <span class="nav-toggle-bar" aria-hidden="true"></span>
-    <span class="nav-toggle-bar" aria-hidden="true"></span>
-    <span class="nav-toggle-bar" aria-hidden="true"></span>
-  </button>
-
+  <!-- The nav links. Inline on desktop; a full-width dropdown behind the burger
+       on mobile (CSS orders it below the brand + actions row). The Connect
+       control is NOT in here: on mobile it stays out on the top row. -->
   <div id="primary-nav" class="nav-links" [class.is-open]="menuOpen()">
     <a routerLink="/dashboard/mint" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-mint" (click)="closeMenu()">Mint</a>
     <a routerLink="/search" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-search" (click)="closeMenu()">Search</a>
@@ -29,6 +15,25 @@
       <a routerLink="/dashboard" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-dashboard" (click)="closeMenu()">Dashboard</a>
     }
     <a routerLink="/about" routerLinkActive="nav-link-active" class="nav-link" data-testid="nav-about" (click)="closeMenu()">About</a>
+  </div>
+
+  <!-- Always on the top row: the connect control and (mobile only) the burger.
+       Connect stays reachable in one tap on every screen; only the nav links
+       collapse behind the burger. -->
+  <div class="header-actions">
     <app-wallet-connect />
+    <button
+      type="button"
+      class="nav-toggle"
+      [class.is-open]="menuOpen()"
+      (click)="toggleMenu()"
+      [attr.aria-expanded]="menuOpen()"
+      aria-controls="primary-nav"
+      aria-label="Menu"
+      data-testid="nav-toggle">
+      <span class="nav-toggle-bar" aria-hidden="true"></span>
+      <span class="nav-toggle-bar" aria-hidden="true"></span>
+      <span class="nav-toggle-bar" aria-hidden="true"></span>
+    </button>
   </div>
 </nav>
