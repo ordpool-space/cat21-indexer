@@ -83,7 +83,12 @@ export class Search {
 
   // Page comes from the route; trait selections come from query params.
   // All are read via withComponentInputBinding() from `app.config.ts`.
-  readonly currentPage = input(1, { transform: numberAttribute });
+  // Fallback to page 1, not NaN. On the bare `/search` route (no :currentPage)
+  // component-input-binding still binds the absent param as undefined, and
+  // `numberAttribute(undefined)` defaults to NaN — which renders as a blank in
+  // "page … of N" and breaks the `currentPage < totalPages` next-page guard.
+  // The explicit fallback keeps it a real page number everywhere.
+  readonly currentPage = input(1, { transform: (v: unknown) => numberAttribute(v, 1) });
 
   // One input() per trait family. Routes pass comma-separated strings (URL
   // shape: `?eyes=red,blue`) and we split them locally into arrays.
