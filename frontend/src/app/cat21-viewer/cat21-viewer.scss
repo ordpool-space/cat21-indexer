@@ -19,19 +19,44 @@ b {
   margin-right: 8px;
 }
 
-// Phones: the trait table's value column holds unbreakable strings (the 16-digit
-// Sat number, shortened ids). Left alone, their min-content pushes the table
-// wider than the viewport and the whole page scrolls sideways. Fix the layout so
-// the columns fit the viewport and let the values wrap inside their cell, so the
-// table fits with no scrollbar rather than overflowing.
+// Tablet band (481-575px): keep the two-column table but let the value column
+// break its long unbreakable strings (the 16-digit Sat number, shortened ids)
+// so the table fits with no side-scroll. Auto layout keeps the wide pixel labels
+// whole (never table-layout: fixed, which would hyphenate them).
 @media (max-width: 575px) {
-  // Only the VALUE column breaks its long unbreakable strings (the 16-digit Sat
-  // number, shortened ids). With auto table layout the label column then sizes
-  // to its whole word (so the wide pixel labels never hyphenate) and the value
-  // column takes the rest, so the table fits the viewport with no side-scroll.
-  // NOT table-layout: fixed, which would force the wide single-word labels to
-  // break mid-word.
   .table td + td {
     overflow-wrap: anywhere;
+  }
+}
+
+// Phones (<=480px): two columns can't hold a wide pixel label AND a value
+// side by side without cramming, so the label hyphenates and the value wraps to
+// slivers. Linearize the table instead: each trait becomes label-over-value at
+// full width, cleanly readable with no hyphenation and no side-scroll.
+@media (max-width: 480px) {
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: auto;
+  }
+
+  .table tr {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  .table td {
+    padding: 0;
+    overflow-wrap: anywhere;
+  }
+
+  // The label reads as the row's header; the value sits just beneath it.
+  .table td:first-child {
+    font-weight: bold;
+  }
+  .table td + td {
+    margin-top: 0.15rem;
   }
 }

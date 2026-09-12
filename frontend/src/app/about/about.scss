@@ -1,3 +1,11 @@
+// About is a text article: cap the line length to a comfortable reading width
+// (left-aligned, so it still starts at the same left edge as every other page)
+// rather than letting paragraphs run the full 1140px frame.
+:host {
+  display: block;
+  max-width: 760px;
+}
+
 .about-section {
   margin-top: 2rem;
 

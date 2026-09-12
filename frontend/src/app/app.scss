@@ -1,9 +1,13 @@
+// The single content frame every page shares — same width as the header and the
+// family footer (1140px) so all three align, and one consistent top padding so
+// every page's first element sits the same distance below the header (the gap
+// the orderbook page had, which reads best). Pages must NOT set their own
+// max-width or top margin; they fill this frame.
 .cover-container {
-  max-width: 1200px;
+  max-width: 1140px;
   margin-left: auto;
   margin-right: auto;
-  padding: 1em;
-  padding-top: 0;
+  padding: 1rem 1em 2rem;
 }
 
 .skip-link {
