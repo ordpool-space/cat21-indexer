@@ -76,15 +76,24 @@ export class Mint {
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
   /**
-   * Per-artifact review links for assets found on a funding UTXO. Each
-   * inscription id and each rune name resolves to exactly ONE ordinals.com
-   * page. A tx page is the wrong target here: a single UTXO can carry several
-   * inscriptions, so it could not know which one the user clicked, and ordpool
-   * has no per-inscription view. ordinals.com is standard shared infrastructure
-   * for viewing an inscription (by id) or a rune (by name).
+   * Review links for assets found on a funding UTXO.
+   *
+   * An inscription links to its tx-detail page on ordpool (in-family), with
+   * `?artifact=<id>` so the tx page opens THIS inscription: a UTXO can carry
+   * several and the tx page shows one artifact at a time. ordpool matches on the
+   * full inscription id and degrades an unrecognised param to the first artifact,
+   * so the link is a valid tx link before that reader ships and auto-selects
+   * the right one after. `txLinkBase` already ends in `/tx/`; the txid is the
+   * id's prefix before the `iN` index (txids are hex, never contain an `i`).
+   *
+   * A rune links to its ordinals.com page for now. The in-family target is the
+   * rune's etching tx, which needs an async name->txid resolve from the SDK; that
+   * rides in with the connected-state SDK-pin pass. ordinals.com is standard
+   * shared infrastructure for viewing a rune by name until then.
    */
   inscriptionReviewLink(inscriptionId: string): string {
-    return `https://ordinals.com/inscription/${inscriptionId}`;
+    const txid = inscriptionId.split('i')[0];
+    return `${this.txLinkBase}${txid}?artifact=${inscriptionId}`;
   }
   runeReviewLink(runeName: string): string {
     return `https://ordinals.com/rune/${runeName}`;

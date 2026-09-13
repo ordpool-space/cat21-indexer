@@ -802,9 +802,11 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(component.toNumber(1234n)).toBe(1234);
     });
 
-    it('M4: asset-review links resolve each artifact by id/name on ordinals.com (one UTXO can carry several)', () => {
-      const id = `${'a'.repeat(64)}i0`;
-      expect(component.inscriptionReviewLink(id)).toBe(`https://ordinals.com/inscription/${id}`);
+    it('M4: inscription links in-family to its tx page, deep-linked to that artifact (one UTXO can carry several); rune to its ordinals.com page', () => {
+      const txid = 'a'.repeat(64);
+      expect(component.inscriptionReviewLink(`${txid}i0`)).toBe(`https://ordpool.space/tx/${txid}?artifact=${txid}i0`);
+      // A double-digit index stays in the artifact param, never in the txid path.
+      expect(component.inscriptionReviewLink(`${txid}i12`)).toBe(`https://ordpool.space/tx/${txid}?artifact=${txid}i12`);
       expect(component.runeReviewLink('UNCOMMON•GOODS')).toBe('https://ordinals.com/rune/UNCOMMON•GOODS');
     });
   });
