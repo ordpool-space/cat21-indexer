@@ -802,11 +802,10 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(component.toNumber(1234n)).toBe(1234);
     });
 
-    it('M4: inscriptionTxLink points at ordpool tx page for the genesis txid (id prefix before the i-index)', () => {
-      const txid = 'a'.repeat(64);
-      expect(component.inscriptionTxLink(`${txid}i0`)).toBe(`https://ordpool.space/tx/${txid}`);
-      // A double-digit index must not change the txid prefix.
-      expect(component.inscriptionTxLink(`${txid}i12`)).toBe(`https://ordpool.space/tx/${txid}`);
+    it('M4: asset-review links resolve each artifact by id/name on ordinals.com (one UTXO can carry several)', () => {
+      const id = `${'a'.repeat(64)}i0`;
+      expect(component.inscriptionReviewLink(id)).toBe(`https://ordinals.com/inscription/${id}`);
+      expect(component.runeReviewLink('UNCOMMON•GOODS')).toBe('https://ordinals.com/rune/UNCOMMON•GOODS');
     });
   });
 

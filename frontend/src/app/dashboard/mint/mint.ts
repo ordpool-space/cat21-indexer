@@ -76,14 +76,18 @@ export class Mint {
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
   /**
-   * Review link for an inscription found on a funding UTXO. ordpool renders the
-   * inscription on its tx-detail page (and does so for unconfirmed txs too),
-   * keeping the user inside the family. The genesis txid is the id's prefix
-   * before the `i` index (`<txid>i<n>`); txids are hex, so they never contain
-   * an `i`, making the split unambiguous.
+   * Per-artifact review links for assets found on a funding UTXO. Each
+   * inscription id and each rune name resolves to exactly ONE ordinals.com
+   * page. A tx page is the wrong target here: a single UTXO can carry several
+   * inscriptions, so it could not know which one the user clicked, and ordpool
+   * has no per-inscription view. ordinals.com is standard shared infrastructure
+   * for viewing an inscription (by id) or a rune (by name).
    */
-  inscriptionTxLink(inscriptionId: string): string {
-    return this.txLinkBase + inscriptionId.split('i')[0];
+  inscriptionReviewLink(inscriptionId: string): string {
+    return `https://ordinals.com/inscription/${inscriptionId}`;
+  }
+  runeReviewLink(runeName: string): string {
+    return `https://ordinals.com/rune/${runeName}`;
   }
 
   /**
