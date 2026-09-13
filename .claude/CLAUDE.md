@@ -252,6 +252,28 @@ environment exists rather than shipped blind. Track it here:
   seen and the peer resolution is handled deliberately. The underlying
   ng-bootstrap/Angular-21 peer mismatch is a separate maintainer follow-up.
 
+- **Rune links on the funding-safety panel are the other job gated behind that
+  pin.** Inscriptions on a found UTXO already link in-family to
+  `ordpool.space/tx/<txid>?artifact=<inscriptionId>` (`inscriptionReviewLink` in
+  `dashboard/mint/mint.ts`), and ordpool.space's tx page reads that `artifact`
+  param to open the exact inscription (verified live; an unmatched param
+  degrades to the first artifact, never a 404). Runes should follow the same
+  shape, linking to the rune's ETCHING tx as
+  `ordpool.space/tx/<etchingTxid>?artifact=<runeName>`, but resolving a rune name
+  to its etching txid needs `ordpool-sdk`'s `lookupRuneEtching` (pin `60d6fbc` or
+  later, which also widens `formatRunePile` to accept the JSON number ord
+  `/output` sends). Until then `runeReviewLink` points at `ordinals.com/rune/<name>`.
+  Traps for that pass: coerce the amount with `BigInt(n)`, never `String(n)`
+  (`String(1e21)` is `"1e+21"`, which the SDK helper refuses, and the amount
+  vanishes silently); guard before calling so a throw can't take down a panel
+  someone is reading to decide whether to spend a coin; render the rune balance
+  via `formatRunePile`, never hand-formatted; and treat `lookupRuneEtching`'s
+  unknown result as "not etched YET" (a reserved rune like UNCOMMON•GOODS returns
+  an all-zero etching, and a name ord has no entry for can be etched in a later
+  block), so render plain text and NEVER cache that null. ordpool.space's reader
+  matches the rune name spacer- and case-insensitively, so send whatever form
+  ord `/output` hands you and confirm the exact form with that session then.
+
 ### Commands
 ```bash
 cd frontend
