@@ -75,8 +75,16 @@ export class Mint {
   /** Where successfully minted tx ids link out (ordpool owns the tx-detail page). */
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
-  /** Asset-detail link base sourced from cat21Config so dev / regtest / prod stay aligned with the scanner's own endpoints. */
-  readonly ordReviewBase = this.config.ordApiUrl;
+  /**
+   * Review link for an inscription found on a funding UTXO. ordpool renders the
+   * inscription on its tx-detail page (and does so for unconfirmed txs too),
+   * keeping the user inside the family. The genesis txid is the id's prefix
+   * before the `i` index (`<txid>i<n>`); txids are hex, so they never contain
+   * an `i`, making the split unambiguous.
+   */
+  inscriptionTxLink(inscriptionId: string): string {
+    return this.txLinkBase + inscriptionId.split('i')[0];
+  }
 
   /**
    * Sat-page link for the cats on a funding UTXO, shown in the "you are about

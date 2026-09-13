@@ -100,7 +100,7 @@
             <p>
               <strong>Inscription{{ sel.scan.content.inscriptionIds.length === 1 ? '' : 's' }}:</strong>
               @for (id of sel.scan.content.inscriptionIds; track id) {
-                <a [href]="ordReviewBase + '/inscription/' + id" target="_blank" rel="noopener">{{ id }}</a>
+                <a [href]="inscriptionTxLink(id)" target="_blank" rel="noopener">{{ id }}</a>
                 @if (!$last) { , }
               }
             </p>
@@ -109,8 +109,7 @@
             <p>
               <strong>Rune{{ runeNames(sel.scan.content).length === 1 ? '' : 's' }}:</strong>
               @for (name of runeNames(sel.scan.content); track name) {
-                <a [href]="ordReviewBase + '/rune/' + name" target="_blank" rel="noopener">{{ name }}</a>
-                @if (!$last) { , }
+                {{ name }}@if (!$last) { , }
               }
             </p>
           }
