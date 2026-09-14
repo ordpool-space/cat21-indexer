@@ -33,6 +33,11 @@ jobs:
     name: Regtest cat21.space mint via CAT-21 wallet
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # ordpool-sdk 6f4d6a7 (c790db7 onward) pins each compose stack to its own
+      # project, so the SDK default `ordpool-e2e-bitcoind` no longer exists —
+      # the consumer-environment's is the only bitcoind. rpc() must target it.
+      REGTEST_BITCOIND_CONTAINER: ordpool-e2e-consumer-bitcoind
     steps:
       - name: Checkout cat21-indexer
         uses: actions/checkout@v4
@@ -201,12 +206,10 @@ jobs:
         working-directory: sdk
         run: bash e2e/playwright/playwright-bootstrap.sh cat21wallet
 
-      - name: Bootstrap regtest funds (101 blocks, dump WIF)
-        working-directory: sdk
-        run: |
-          chmod +x e2e/regtest-bootstrap.sh
-          ./e2e/regtest-bootstrap.sh > regtest-bootstrap.json
-          cat regtest-bootstrap.json
+      # regtest-bootstrap.sh is DROPPED: consumer-environment-bootstrap.sh is a
+      # strict superset (same funder, same 101-block funding, same WIF), nothing
+      # reads regtest-bootstrap.json, and under pin 6f4d6a7's per-project stack
+      # isolation running both collides a second bitcoind on host :18443.
 
       - name: Patch cat21Config + bitcoinNetwork for regtest
         working-directory: frontend

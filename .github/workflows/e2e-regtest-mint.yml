@@ -38,6 +38,12 @@ jobs:
     name: Regtest cat21.space mint via Xverse
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # ordpool-sdk 6f4d6a7 (c790db7 onward) pins each compose stack to its own
+      # project, so the SDK's default bitcoind name `ordpool-e2e-bitcoind` no
+      # longer exists — the consumer-environment's is the only bitcoind. rpc()
+      # and the SDK onboarding's globalSetup must target it by name.
+      REGTEST_BITCOIND_CONTAINER: ordpool-e2e-consumer-bitcoind
     steps:
       - name: Checkout cat21-indexer
         uses: actions/checkout@v4
@@ -161,12 +167,12 @@ jobs:
         working-directory: sdk
         run: bash e2e/playwright/playwright-bootstrap.sh xverse
 
-      - name: Bootstrap regtest funds (101 blocks, dump WIF)
-        working-directory: sdk
-        run: |
-          chmod +x e2e/regtest-bootstrap.sh
-          ./e2e/regtest-bootstrap.sh > regtest-bootstrap.json
-          cat regtest-bootstrap.json
+      # regtest-bootstrap.sh is DROPPED: consumer-environment-bootstrap.sh (run
+      # above) is a strict superset — same funder identity, same 101-block
+      # funding, same funded WIF descriptor — and nothing downstream reads
+      # regtest-bootstrap.json. Since pin 6f4d6a7 isolates stacks by project,
+      # running both would stand up a second bitcoind that collides on host
+      # :18443. The consumer stack alone funds the chain for the onboarding seed.
 
       - name: Run SDK's Xverse onboarding (produces seeded user-data-dir)
         working-directory: sdk
