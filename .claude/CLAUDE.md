@@ -265,7 +265,11 @@ still needs a connected wallet + live electrs to REVIEW (not to build):
   (`rm -rf node_modules/ordpool-sdk && npm install --force`): npm caches the git
   build, and a stale dist silently omits new exports (the rune helpers were
   absent until the forced reinstall, and a suite run against the stale build is a
-  false green). The family-standard pin moves to **`fc11150`** once its lanes are
+  false green). Verify the bump took by grepping the installed `dist/` for a
+  symbol the new SHA INTRODUCES *and* one it does NOT carry yet (for the fc11150
+  bump: `formatSatsWithFiat` should be present); checking only that the new
+  symbol exists still passes on a newer-than-intended cached build, so the
+  second half is what confirms you are on exactly the SHA you pinned. The family-standard pin moves to **`fc11150`** once its lanes are
   green (adds `formatSatsWithFiat`; `formatSatsWithUsd` stays byte-identical, so
   cat21 needs no call-site change and keeps USD-only, no currency picker).
   ordpool.space does NOT take `formatSatsWithFiat` (its fork already has
