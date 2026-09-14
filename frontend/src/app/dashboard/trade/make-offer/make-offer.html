@@ -80,9 +80,9 @@
 
       <details class="mt-4">
         <summary class="text-muted small" style="cursor: pointer;">
-          Prefer the raw PSBT? (advanced — for wallets that don't handle the URL)
+          Prefer the raw offer text? (advanced: for wallets that don't handle the URL)
         </summary>
-        <label class="form-label mt-2" for="make-offer-artifact">Offer PSBT (base64)</label>
+        <label class="form-label mt-2" for="make-offer-artifact">Offer text (base64)</label>
         <textarea
           id="make-offer-artifact"
           class="form-control"
@@ -95,7 +95,7 @@
           class="btn btn-outline-secondary mt-2"
           (click)="onCopyArtifactClick()"
           data-testid="make-offer-copy-artifact-cta">
-          {{ copiedPsbt() ? '✓ Copied' : 'Copy PSBT' }}
+          {{ copiedPsbt() ? '✓ Copied' : 'Copy offer' }}
         </button>
       </details>
 
@@ -278,7 +278,7 @@
         <h2 class="make-offer-section-heading">4. Confirm</h2>
         <p class="text-warning small mb-2">
           <strong>Read carefully.</strong> Your wallet is about to sign
-          a PSBT paying these sats to this address. Once signed, the
+          an offer that pays these sats to this address. Once signed, the
           seller can broadcast it any time.
         </p>
         <div class="make-offer-summary">

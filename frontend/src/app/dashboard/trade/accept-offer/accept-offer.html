@@ -94,7 +94,7 @@
     </section>
 
     <section class="accept-offer-section" data-testid="accept-offer-paste-section">
-      <h2 class="accept-offer-section-heading">3. Paste the offer PSBT (base64 or hex)</h2>
+      <h2 class="accept-offer-section-heading">3. Paste the offer (base64 or hex)</h2>
       <textarea
         rows="4"
         class="form-control"
@@ -115,7 +115,7 @@
         <h2 class="accept-offer-section-heading">4. Review the offer</h2>
         <div class="accept-offer-summary">
           <div class="accept-offer-summary-row">
-            <span class="lbl">Your cat (input 0)</span>
+            <span class="lbl">Your cat</span>
             <code class="val">{{ offer.catUtxo.txid }}:{{ offer.catUtxo.vout }}</code>
           </div>
           <div class="accept-offer-summary-row">
@@ -125,8 +125,8 @@
         </div>
         <p class="text-muted small mt-2">
           By signing, you'll move the cat to the buyer's receive
-          address (encoded in the PSBT). The fee is already baked into
-          the offer — no extra cost to you.
+          address (encoded in the offer). The fee is already baked into
+          the offer, no extra cost to you.
         </p>
       </section>
     } @else if (state() === 'invalid' && humanRejection(); as rej) {
