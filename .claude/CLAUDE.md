@@ -242,15 +242,23 @@ environment exists rather than shipped blind. Track it here:
   sentences come from the SDK's `walletActionNotice` (source-owned there), so
   register fixes to those go in `ordpool-sdk`, not here.
 
-- **Bumping the `ordpool-sdk` pin costs a peer-dependency fight.** A fresh
-  `npm install` after changing the SHA hits a pre-existing conflict between
-  `@ng-bootstrap/ng-bootstrap`'s peer range and `@angular/* 21.2.x`; npm wants
-  `--legacy-peer-deps`. Do NOT force it for a hygiene bump — a lockfile forced
-  past a peer conflict freezes a bad resolve (workspace lockfile-discipline
-  rule). Bundle the pin bump into the connected-state pass, where the strings it
-  carries (`walletCustodyCaveat`, the reworded notice reasons) can actually be
-  seen and the peer resolution is handled deliberately. The underlying
-  ng-bootstrap/Angular-21 peer mismatch is a separate maintainer follow-up.
+- **The `ordpool-sdk` pin is `60d6fbc`, and it installs cleanly.** No peer
+  fight: `@ng-bootstrap/ng-bootstrap@20` peers `@angular/core ^21.0.0`, which
+  the installed `21.2.4` satisfies, so a plain `npm install` resolves with no
+  `ERESOLVE` and no `--legacy-peer-deps` (verified by dry-run then real install,
+  full suite + production build green). The SDK's own peer deps are
+  `@noble/curves`, `@playwright/test`, `@scure/btc-signer 1.2.x`, `rxjs`,
+  `sats-connect` — no Angular, no ng-bootstrap. `60d6fbc` is the family-standard
+  pin (carries `formatRunePile`, `resolveRuneEtchingTxid`, `lookupRuneEtching`,
+  the widened rune-amount type, and the swallowed-TypeError to `error`-state
+  fix). The `setContent` reshape caveat does NOT apply here: cat21 mints via
+  `Cat21MintOrchestrator` and never calls the inscribe `setContent`.
+
+  What still genuinely needs a connected wallet + live electrs to REVIEW (not to
+  build): the §7.6 protocol-vocabulary pass over the connected-state trade /
+  transfer copy, and the final rendered look of the funding-safety panel rows.
+  Build them against unit tests and the regtest e2e; do the rendered review in a
+  connected session before calling them done.
 
 - **Rune links on the funding-safety panel are the other job gated behind that
   pin.** Inscriptions on a found UTXO already link in-family to
