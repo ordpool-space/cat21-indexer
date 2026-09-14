@@ -12,6 +12,8 @@ import {
   UtxoScanState,
 } from 'ordpool-sdk';
 
+import { rareSatLabel } from '../rare-sat-label';
+
 /** Shape the picker renders per row. Consumers pass in raw `TxnOutput`s;
  *  the picker joins each against the shared scanner's state. */
 export interface UtxoPickerRow {
@@ -119,6 +121,9 @@ export class UtxoPicker {
   catSatLink(catSat: number): string {
     return `https://cat21.space/sat/${catSat}`;
   }
+
+  /** Shared rare-sat identity line (see rare-sat-label.ts); same on the mint panel. */
+  readonly rareSatLabel = rareSatLabel;
 
   bucketTooltip(bucket: UtxoScanBucket): string {
     switch (bucket) {

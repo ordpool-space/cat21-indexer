@@ -123,6 +123,12 @@
               }
             </p>
           }
+          @if (sel.scan.content.rareSat; as rare) {
+            <p>
+              <strong>Rare sat:</strong>
+              {{ rareSatLabel(rare) }}
+            </p>
+          }
         </div>
       } @else if (sel.bucket === 'unscanned') {
         <p class="mint-alert mint-alert-info" data-testid="unscanned-info">

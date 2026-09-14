@@ -781,6 +781,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(orch.selectedUtxo()).toBe(u);
       expect(component.selectedRow()!.bucket).toBe('assets');
     });
+
   });
 
   // -------------------------------------------------------------------

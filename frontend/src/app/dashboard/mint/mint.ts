@@ -28,6 +28,7 @@ import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
+import { rareSatLabel } from '../../shared/rare-sat-label';
 import { SingleAddressNote } from '../../shared/single-address-note/single-address-note';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 
@@ -98,6 +99,9 @@ export class Mint {
   runeReviewLink(runeName: string): string {
     return `https://ordinals.com/rune/${runeName}`;
   }
+
+  /** Shared rare-sat identity line (see rare-sat-label.ts); same on the picker. */
+  readonly rareSatLabel = rareSatLabel;
 
   /**
    * Sat-page link for the cats on a funding UTXO, shown in the "you are about
