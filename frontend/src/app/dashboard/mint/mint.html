@@ -105,11 +105,15 @@
               }
             </p>
           }
-          @if (runeNames(sel.scan.content).length > 0) {
+          @if (runeEntries(sel.scan.content).length > 0) {
             <p>
-              <strong>Rune{{ runeNames(sel.scan.content).length === 1 ? '' : 's' }}:</strong>
-              @for (name of runeNames(sel.scan.content); track name) {
-                <a [href]="runeReviewLink(name)" target="_blank" rel="noopener">{{ name }}</a>
+              <strong>Rune{{ runeEntries(sel.scan.content).length === 1 ? '' : 's' }}:</strong>
+              @for (entry of runeEntries(sel.scan.content); track entry[0]) {
+                @if (runeEtchingHref(entry[0]); as href) {
+                  <a [href]="href" target="_blank" rel="noopener">{{ runeRowLabel(entry[0], entry[1]) }}</a>
+                } @else {
+                  {{ runeRowLabel(entry[0], entry[1]) }}
+                }
                 @if (!$last) { , }
               }
             </p>

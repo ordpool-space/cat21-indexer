@@ -29,6 +29,9 @@ import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { rareSatLabel } from '../../shared/rare-sat-label';
+import { inscriptionReviewLink, runeEtchingReviewLink } from '../../shared/funding-asset-links';
+import { runeRowLabel } from '../../shared/rune-row-label';
+import { RuneEtchingService } from '../../shared/rune-etching.service';
 import { SingleAddressNote } from '../../shared/single-address-note/single-address-note';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 
@@ -49,6 +52,7 @@ interface ViableUtxoRow {
 export class Mint {
   private psbtBridge = inject(PsbtExportBridgeService);
   private scanner = inject(UtxoContentScanner);
+  private runeEtching = inject(RuneEtchingService);
   private walletService = inject(WalletService);
   private config = inject(cat21Config);
   private destroyRef = inject(DestroyRef);
@@ -76,32 +80,29 @@ export class Mint {
   /** Where successfully minted tx ids link out (ordpool owns the tx-detail page). */
   readonly txLinkBase = 'https://ordpool.space/tx/';
 
-  /**
-   * Review links for assets found on a funding UTXO.
-   *
-   * An inscription links to its tx-detail page on ordpool (in-family), with
-   * `?artifact=<id>` so the tx page opens THIS inscription: a UTXO can carry
-   * several and the tx page shows one artifact at a time. ordpool matches on the
-   * full inscription id and degrades an unrecognised param to the first artifact,
-   * so the link is a valid tx link before that reader ships and auto-selects
-   * the right one after. `txLinkBase` already ends in `/tx/`; the txid is the
-   * id's prefix before the `iN` index (txids are hex, never contain an `i`).
-   *
-   * A rune links to its ordinals.com page for now. The in-family target is the
-   * rune's etching tx, which needs an async name->txid resolve from the SDK; that
-   * rides in with the connected-state SDK-pin pass. ordinals.com is standard
-   * shared infrastructure for viewing a rune by name until then.
-   */
-  inscriptionReviewLink(inscriptionId: string): string {
-    const txid = inscriptionId.split('i')[0];
-    return `${this.txLinkBase}${txid}?artifact=${inscriptionId}`;
-  }
-  runeReviewLink(runeName: string): string {
-    return `https://ordinals.com/rune/${runeName}`;
-  }
+  /** In-family review link for an inscription found on a funding UTXO (shared). */
+  readonly inscriptionReviewLink = inscriptionReviewLink;
+
+  /** Shared rune-row balance formatter (formatRunePile + name); same on the picker. */
+  readonly runeRowLabel = runeRowLabel;
 
   /** Shared rare-sat identity line (see rare-sat-label.ts); same on the picker. */
   readonly rareSatLabel = rareSatLabel;
+
+  /** [name, balance-value] pairs on a scanned UTXO, for the rune rows. */
+  runeEntries(content: UtxoContent): [string, unknown][] {
+    return Object.entries(content.runes ?? {});
+  }
+
+  /**
+   * In-family etching-tx link for a rune, once its name has resolved, else null
+   * (render plain text). Resolution is kicked off per scan by the effect below,
+   * never per render.
+   */
+  runeEtchingHref(name: string): string | null {
+    const txid = this.runeEtching.etchings().get(name);
+    return txid ? runeEtchingReviewLink(txid, name) : null;
+  }
 
   /**
    * Sat-page link for the cats on a funding UTXO, shown in the "you are about
@@ -253,6 +254,17 @@ export class Mint {
     // Bind the orchestrator snapshot to a signal (fires immediately + on every
     // change). Unsubscribe on destroy.
     this.destroyRef.onDestroy(this.orch.subscribe((s) => this.snap.set(s)));
+
+    // Kick off rune-etching lookups when a flagged source is selected, not per
+    // render. Only the selected source shows a rune row here (the expert list
+    // shows value + fee), so resolving its names covers the panel; the service
+    // is idempotent and caches, so re-selecting the same coin costs nothing.
+    effect(() => {
+      const sel = this.selectedRow();
+      if (sel?.scan.kind === 'scanned-with-assets') {
+        this.runeEtching.resolve(this.runeNames(sel.scan.content));
+      }
+    });
 
     // Push wallet changes into the orchestrator; it (re)fetches the wallet's
     // UTXOs and recomputes. `setWallet` is async + dedupes internally, so a

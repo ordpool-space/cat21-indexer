@@ -50,13 +50,15 @@
         }
         @if (row.scan.kind === 'scanned-with-assets') {
           <div class="utxo-assets-detail">
-            @if (row.scan.content.inscriptionIds.length > 0) {
-              <span class="utxo-asset-tag">
-                {{ row.scan.content.inscriptionIds.length }} inscription{{ row.scan.content.inscriptionIds.length === 1 ? '' : 's' }}
-              </span>
+            @for (id of row.scan.content.inscriptionIds; track id) {
+              <a class="utxo-asset-tag" [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener" [title]="id">{{ id | shortenString: 13 }}</a>
             }
-            @for (rune of runeNames(row.scan.content); track rune) {
-              <span class="utxo-asset-tag">rune: {{ rune }}</span>
+            @for (entry of runeEntries(row.scan.content); track entry[0]) {
+              @if (runeEtchingHref(entry[0]); as href) {
+                <a class="utxo-asset-tag" [href]="href" target="_blank" rel="noopener">{{ runeRowLabel(entry[0], entry[1]) }}</a>
+              } @else {
+                <span class="utxo-asset-tag">{{ runeRowLabel(entry[0], entry[1]) }}</span>
+              }
             }
             @if (row.scan.content.catIds.length > 0) {
               @if (row.scan.content.catSat; as catSat) {

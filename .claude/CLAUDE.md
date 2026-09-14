@@ -209,38 +209,46 @@ app root — and is immune to this whole class, but that is *its* design (a dark
 site). It is **not** the fix here, because it would flip every Bootstrap surface
 dark and fight the orange identity.
 
-#### Deferred: connected-state UX pass (needs a wallet + electrs)
+#### Connected-state UX pass — built; rendered review still owed
 
-Some wallet-UX work can only be reviewed with a **connected wallet and a live
-electrs**, which dev doesn't have, so it is deliberately unbuilt until that
-environment exists rather than shipped blind. Track it here:
+Most of this shipped on the `60d6fbc` pin. What is DONE, and the one thing that
+still needs a connected wallet + live electrs to REVIEW (not to build):
 
-- **`walletCustodyCaveat()` is shipped in `ordpool-sdk` but NOT yet placed on
-  cat21.space.** It returns a wallet-level sentence (or `null`) describing a
-  wallet that keeps cats and spendable coins on one address (UniSat has one;
-  Xverse / Leather / Cat21 Wallet return `null`). Treat it as **pending, not
-  live** — an unplaced safety string everyone assumes is showing is worse than
-  one known to be pending. Placement, by cat direction (a custody warning only
-  makes sense where the cat STAYS with the connected wallet):
+- **Custody caveat — DONE.** `walletCustodyCaveat()` is `@deprecated` in the SDK;
+  do NOT reach for it (it gates on the matrix record, not the two addresses the
+  wallet actually returned, and it is being removed). The live replacement is
+  `usesSingleAddress()` (gate) + `singleAddressCaveat()` (sentence), which cat21
+  uses through `SingleAddressNote`, placed on the two screens where the connected
+  wallet ENDS UP HOLDING a cat:
 
-  | Screen | Capability | Cat direction | Show caveat |
-  |---|---|---|---|
-  | mint | `Cat21Mint` | arrives | **yes** |
-  | make-offer | `Cat21OfferCreate` | you're the BUYER; lands with you on accept, and connecting here chooses its destination | **yes** |
-  | accept-offer | `Cat21OfferAccept` | you're the SELLER; the cat leaves | no |
-  | transfer | `Cat21Transfer` | you're sending; the cat leaves | no |
+  | Screen | Cat direction | Note |
+  |---|---|---|
+  | mint | arrives | shown |
+  | make-offer | you're the BUYER; lands with you on accept | shown |
+  | accept-offer | you're the SELLER; the cat leaves | not shown |
+  | transfer | you're sending; the cat leaves | not shown |
 
-  Read the *direction*, not the verb: "accept-offer" is the seller, so the cat
-  leaves and the caveat would be nonsensical there.
+  Read the *direction*, not the verb.
 
-- **The connected form / blocked / success copy on the trade + transfer screens
-  is unreviewed for §7.6 protocol vocabulary.** The pre-connect CTA panels were
-  rewritten (no PSBT / input 0 / nLockTime / UTXO / first sat), but the copy
-  behind a connected wallet (e.g. "PSBT" in the make-offer bid/success states)
-  almost certainly carries the same class. Review it *rendered* in the connected
-  environment; don't blind-edit copy you can't see. The blocked-notice reason
-  sentences come from the SDK's `walletActionNotice` (source-owned there), so
-  register fixes to those go in `ordpool-sdk`, not here.
+- **Rune row — DONE.** The funding-safety panel renders a rune as its ord-style
+  balance (`formatRunePile`) + name, linked to its ETCHING tx via
+  `ordpool.space/tx/<etchingTxid>?artifact=<runeName>`. Pieces:
+  `shared/rune-row-label.ts` (the balance, with the `BigInt(n)`-not-`String(n)`
+  coercion and a throw-safe fallback to the bare name),
+  `shared/rune-etching.service.ts` (four-case `lookupRuneEtching`: cache `etched`
+  + `not-etched` forever so UNCOMMON•GOODS never re-asks; never cache `unknown` /
+  `unavailable`), and `shared/funding-asset-links.ts` (`inscriptionReviewLink` +
+  `runeEtchingReviewLink`). Wired in both the mint panel and the picker; lookups
+  kick off on scan-arrival, and a name renders plain text until its own lookup
+  answers. ordpool.space's reader matches the rune name spacer- and
+  case-insensitively.
+
+- **§7.6 connected copy — PSBT scrubbed.** The connected trade/transfer copy no
+  longer names "PSBT" or "input 0" where the visitor doesn't handle the byte
+  ("Paste the offer", "Copy offer", "sign an offer that pays…"). "UTXO" stays: it
+  is the agreed coin-safety vocabulary ("Use this UTXO"). The blocked-notice
+  reason sentences come from the SDK's `walletActionNotice` (source-owned there),
+  so register fixes to those in `ordpool-sdk`, not here.
 
 - **The `ordpool-sdk` pin is `60d6fbc`, and it installs cleanly.** No peer
   fight: `@ng-bootstrap/ng-bootstrap@20` peers `@angular/core ^21.0.0`, which
@@ -252,35 +260,23 @@ environment exists rather than shipped blind. Track it here:
   pin (carries `formatRunePile`, `resolveRuneEtchingTxid`, `lookupRuneEtching`,
   the widened rune-amount type, and the swallowed-TypeError to `error`-state
   fix). The `setContent` reshape caveat does NOT apply here: cat21 mints via
-  `Cat21MintOrchestrator` and never calls the inscribe `setContent`.
+  `Cat21MintOrchestrator` and never calls the inscribe `setContent`. When bumping
+  a github: dep by SHA, force a clean reinstall
+  (`rm -rf node_modules/ordpool-sdk && npm install --force`): npm caches the git
+  build, and a stale dist silently omits new exports (the rune helpers were
+  absent until the forced reinstall, and a suite run against the stale build is a
+  false green). The family-standard pin moves to **`fc11150`** once its lanes are
+  green (adds `formatSatsWithFiat`; `formatSatsWithUsd` stays byte-identical, so
+  cat21 needs no call-site change and keeps USD-only, no currency picker).
+  ordpool.space does NOT take `formatSatsWithFiat` (its fork already has
+  upstream's whole fiat system).
 
-  What still genuinely needs a connected wallet + live electrs to REVIEW (not to
-  build): the §7.6 protocol-vocabulary pass over the connected-state trade /
-  transfer copy, and the final rendered look of the funding-safety panel rows.
-  Build them against unit tests and the regtest e2e; do the rendered review in a
-  connected session before calling them done.
-
-- **Rune links on the funding-safety panel are the other job gated behind that
-  pin.** Inscriptions on a found UTXO already link in-family to
-  `ordpool.space/tx/<txid>?artifact=<inscriptionId>` (`inscriptionReviewLink` in
-  `dashboard/mint/mint.ts`), and ordpool.space's tx page reads that `artifact`
-  param to open the exact inscription (verified live; an unmatched param
-  degrades to the first artifact, never a 404). Runes should follow the same
-  shape, linking to the rune's ETCHING tx as
-  `ordpool.space/tx/<etchingTxid>?artifact=<runeName>`, but resolving a rune name
-  to its etching txid needs `ordpool-sdk`'s `lookupRuneEtching` (pin `60d6fbc` or
-  later, which also widens `formatRunePile` to accept the JSON number ord
-  `/output` sends). Until then `runeReviewLink` points at `ordinals.com/rune/<name>`.
-  Traps for that pass: coerce the amount with `BigInt(n)`, never `String(n)`
-  (`String(1e21)` is `"1e+21"`, which the SDK helper refuses, and the amount
-  vanishes silently); guard before calling so a throw can't take down a panel
-  someone is reading to decide whether to spend a coin; render the rune balance
-  via `formatRunePile`, never hand-formatted; and treat `lookupRuneEtching`'s
-  unknown result as "not etched YET" (a reserved rune like UNCOMMON•GOODS returns
-  an all-zero etching, and a name ord has no entry for can be etched in a later
-  block), so render plain text and NEVER cache that null. ordpool.space's reader
-  matches the rune name spacer- and case-insensitively, so send whatever form
-  ord `/output` hands you and confirm the exact form with that session then.
+- **Still owed: the RENDERED review.** The funding-safety panel rows (rune,
+  inscription, rare-sat, cat) and the reworded connected trade/transfer copy have
+  unit tests plus the family logic, but their final rendered look needs a
+  connected wallet + live electrs, which dev can't fake (a scanned-with-assets
+  coin needs a real asset-bearing UTXO). Do that review in a connected session,
+  or via the regtest e2e, before calling the panel visually signed off.
 
 ### Commands
 ```bash

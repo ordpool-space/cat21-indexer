@@ -803,12 +803,14 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(component.toNumber(1234n)).toBe(1234);
     });
 
-    it('M4: inscription links in-family to its tx page, deep-linked to that artifact (one UTXO can carry several); rune to its ordinals.com page', () => {
+    it('M4: exposes the shared inscription link, and a rune renders as plain text until its etching resolves', () => {
       const txid = 'a'.repeat(64);
+      // Link construction itself is proven in funding-asset-links.spec; here we
+      // pin that the panel delegates to it rather than building its own URL.
       expect(component.inscriptionReviewLink(`${txid}i0`)).toBe(`https://ordpool.space/tx/${txid}?artifact=${txid}i0`);
-      // A double-digit index stays in the artifact param, never in the txid path.
-      expect(component.inscriptionReviewLink(`${txid}i12`)).toBe(`https://ordpool.space/tx/${txid}?artifact=${txid}i12`);
-      expect(component.runeReviewLink('UNCOMMON•GOODS')).toBe('https://ordinals.com/rune/UNCOMMON•GOODS');
+      // Nothing resolved yet → no link, so the row shows the balance as text and
+      // one slow name never blocks the panel.
+      expect(component.runeEtchingHref('UNCOMMON•GOODS')).toBeNull();
     });
   });
 

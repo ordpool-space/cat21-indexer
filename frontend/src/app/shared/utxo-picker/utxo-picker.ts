@@ -13,6 +13,10 @@ import {
 } from 'ordpool-sdk';
 
 import { rareSatLabel } from '../rare-sat-label';
+import { inscriptionReviewLink, runeEtchingReviewLink } from '../funding-asset-links';
+import { runeRowLabel } from '../rune-row-label';
+import { RuneEtchingService } from '../rune-etching.service';
+import { ShortenString } from '../shorten-string';
 
 /** Shape the picker renders per row. Consumers pass in raw `TxnOutput`s;
  *  the picker joins each against the shared scanner's state. */
@@ -47,11 +51,12 @@ export interface UtxoPickerRow {
   selector: 'app-utxo-picker',
   templateUrl: './utxo-picker.html',
   styleUrl: './utxo-picker.scss',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, ShortenString],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UtxoPicker {
   private scanner = inject(UtxoContentScanner);
+  private runeEtching = inject(RuneEtchingService);
 
   /** Candidate funding UTXOs to enumerate + scan. */
   readonly utxos = input.required<readonly TxnOutput[]>();
@@ -97,6 +102,16 @@ export class UtxoPicker {
       this.scanner.autoScan(this.utxos().map((u) => ({ txid: u.txid, vout: u.vout, value: u.value })));
     });
 
+    // Resolve rune etchings for every rune on every scanned row, when scans
+    // arrive (not per render). The service is idempotent + caches, so this is
+    // safe to run on each rows() change.
+    effect(() => {
+      const names = this.rows().flatMap((r) =>
+        r.scan.kind === 'scanned-with-assets' ? runeNamesFromContent(r.scan.content) : [],
+      );
+      if (names.length > 0) this.runeEtching.resolve(names);
+    });
+
     // No auto-pick here: the consumer's orchestrator auto-selects a
     // content-clean covering coin via the SDK's `fundingRecommendation$`
     // (safe-auto), so this shared picker is purely display + click-to-select
@@ -117,12 +132,25 @@ export class UtxoPicker {
     return runeNamesFromContent(content);
   }
 
+  /** [name, balance-value] pairs on a scanned UTXO, for the rune chips. */
+  runeEntries(content: UtxoContent): [string, unknown][] {
+    return Object.entries(content.runes ?? {});
+  }
+
+  /** In-family etching-tx link for a rune once resolved, else null (plain text). */
+  runeEtchingHref(name: string): string | null {
+    const txid = this.runeEtching.etchings().get(name);
+    return txid ? runeEtchingReviewLink(txid, name) : null;
+  }
+
   /** cat21.space sat page listing the cats on this UTXO. All share offset 0. */
   catSatLink(catSat: number): string {
     return `https://cat21.space/sat/${catSat}`;
   }
 
-  /** Shared rare-sat identity line (see rare-sat-label.ts); same on the mint panel. */
+  /** Shared funding-row helpers; identical to the mint panel so the two can't drift. */
+  readonly inscriptionReviewLink = inscriptionReviewLink;
+  readonly runeRowLabel = runeRowLabel;
   readonly rareSatLabel = rareSatLabel;
 
   bucketTooltip(bucket: UtxoScanBucket): string {
