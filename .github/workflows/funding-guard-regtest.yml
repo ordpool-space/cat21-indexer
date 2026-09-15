@@ -1,0 +1,313 @@
+name: E2E (regtest funding-safety guard)
+
+# Proves the funding-safety guard REFUSES an asset-bearing coin as a mint fee,
+# against REAL ords (no /output mock). Separate from e2e-regtest-mint.yml because
+# it needs a different config: the scanner's ordApiUrl points at the STOCK ord
+# (:8081, real inscriptions field) and cat21OrdApiUrl at cat21-ord (:8080, cats),
+# whereas the mint spec points both at the :8999 stub and mocks /output. Keeping
+# them apart leaves the green mint suite untouched.
+#
+#   bitcoind + electrs + mariadb + cat21-ord (:8080) + ord-stock (:8081)
+#   + fees/electrs shim on :8999
+#   + cat21-indexer/frontend served with ordApiUrl -> :8081, cat21OrdApiUrl -> :8080
+#   + Xverse extension headed in xvfb
+#   + Playwright drives /dashboard/mint: a real inscribed coin is refused, and
+#     the warning panel names the inscription (the load-bearing assertion).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '57 3 * * *'   # nightly (offset from the other regtest runs)
+  push:
+    paths:
+      - 'frontend/e2e/regtest/funding-guard-inscription-regtest.spec.ts'
+      - '.github/workflows/funding-guard-regtest.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cat21-indexer-funding-guard-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  funding-guard:
+    name: Regtest funding-safety guard (real ord, no mock)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # ordpool-sdk 6f4d6a7 pins each compose stack to its own project, so the
+      # SDK default `ordpool-e2e-bitcoind` no longer exists — the consumer
+      # bitcoind is the only one. rpc() + the SDK onboarding globalSetup +
+      # seedInscribedCoin all target it by name.
+      REGTEST_BITCOIND_CONTAINER: ordpool-e2e-consumer-bitcoind
+    steps:
+      - name: Checkout cat21-indexer
+        uses: actions/checkout@v4
+
+      - name: Setup Node (frontend)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend deps (brings ordpool-sdk into node_modules)
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Make SDK consumer-environment scripts executable
+        run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
+
+      # OUR electrs, built from the ordpool-electrs fork.
+      - name: Checkout ordpool-electrs (for the electrs container)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/ordpool-electrs
+          ref: ordpool
+          path: ordpool-electrs
+
+      # cat21-ord source for BOTH ord containers the scan queries for real:
+      # cat21-ord (--index-cat21, :8080, cats) and ord-stock (same binary
+      # WITHOUT --index-cat21, :8081, inscriptions field). The consumer
+      # environment builds both from this one checkout (ORD_SRC falls back to
+      # CAT21_ORD_SRC in the compose).
+      - name: Checkout cat21-ord (for the cat21-ord + ord-stock containers)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/cat21-ord
+          ref: index-cat21
+          path: cat21-ord
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Export GitHub Actions runtime for the gha cache backend
+        uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Stabilise the Rust build contexts for layer caching
+        run: |
+          printf '.git\ntarget\n' > ordpool-electrs/.dockerignore
+          printf '.git\ntarget\n' > cat21-ord/.dockerignore
+
+      - name: Bring up consumer-environment (+ cat21-ord + ord-stock)
+        env:
+          ELECTRS_SRC: ${{ github.workspace }}/ordpool-electrs
+          # Both ords build from the one cat21-ord checkout; ORD_SRC falls back
+          # to CAT21_ORD_SRC in the compose, so this one var feeds both.
+          CAT21_ORD_SRC: ${{ github.workspace }}/cat21-ord
+        run: |
+          frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh \
+            --buildx-cache \
+            --with-cat21-ord \
+            --with-ord-stock \
+            > stack.json
+          cat stack.json
+
+      - name: Start fees + electrs HTTP shim on :8999
+        run: |
+          ELECTRS_URL=http://localhost:3010 PORT=8999 \
+            nohup node frontend/node_modules/ordpool-sdk/e2e/regtest/fees-electrs-stub.mjs > fees-stub.log 2>&1 &
+          echo $! > fees-stub.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8999/healthz >/dev/null 2>&1; then
+              echo "fees-stub up"; break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "fees-stub never came up"; cat fees-stub.log || true; exit 1
+            fi
+            sleep 1
+          done
+
+      # ── SDK side — Xverse extension + seeded vault ─────────────────
+      - name: Checkout ordpool-sdk (for Xverse extension + seeded vault)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/ordpool-sdk
+          path: sdk
+          ref: main
+
+      - name: Setup Node (sdk)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'sdk/package-lock.json'
+
+      - name: Install SDK deps + build
+        working-directory: sdk
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Playwright system deps + Chromium (sdk)
+        working-directory: sdk
+        run: npx playwright install --with-deps chromium
+
+      - name: Cache unpacked Xverse extension
+        id: xverse-cache
+        uses: actions/cache@v4
+        with:
+          path: sdk/e2e/extensions/xverse
+          key: xverse-extension-v2.3.2
+
+      - name: Download + unpack Xverse from SDK release mirror
+        if: steps.xverse-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: sdk
+        run: bash e2e/playwright/playwright-bootstrap.sh xverse
+
+      # regtest-bootstrap.sh is DROPPED (see e2e-regtest-mint.yml): the consumer
+      # bootstrap above is the superset and funds the chain for the onboarding
+      # seed. Under pin 6f4d6a7's per-project stacks, running both would collide
+      # a second bitcoind on :18443.
+
+      - name: Run SDK's Xverse onboarding (produces seeded user-data-dir)
+        working-directory: sdk
+        run: |
+          xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
+            npx playwright test e2e/playwright/specs/xverse-loads.spec.ts \
+            --config=e2e/playwright/playwright.config.ts
+
+      - name: Verify seed user-data-dir landed
+        run: |
+          test -d sdk/test-results/xverse-seed-user-data-dir/Default \
+            || { echo "no seed user-data-dir"; ls sdk/test-results/; exit 1; }
+
+      # ── Patch cat21Config for the guard: the scanner reads REAL ords ──
+      #
+      # ordApiUrl -> the STOCK ord (:8081, real inscriptions field) and
+      # cat21OrdApiUrl -> cat21-ord (:8080, cats). This is the split the
+      # UtxoContentScanner's classifier expects. Pointing ordApiUrl at cat21-ord
+      # instead is the MUTATION the guard spec documents: cat21-ord has no
+      # inscriptions field, so every inscribed coin reads clean and the guard's
+      # inscription-id assertion goes RED.
+      - name: Patch cat21Config + bitcoinNetwork for the guard
+        working-directory: frontend
+        run: |
+          sed -i \
+            -e "s|https://api\.ordpool\.space|http://localhost:8999|g" \
+            -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
+            -e "s|https://ord\.ordpool\.space|http://localhost:8081|g" \
+            -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
+            -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
+            src/app/app.config.ts
+          echo "--- patched cat21Config (ordApiUrl -> :8081, cat21OrdApiUrl -> :8080) ---"
+          grep -nE "ordApiUrl|cat21OrdApiUrl|Network\." src/app/app.config.ts | head -6
+
+      - name: Build static frontend bundle
+        working-directory: frontend
+        run: |
+          set -o pipefail
+          npx ng build --output-path ../dist-regtest 2>&1 | tee ../build.log
+
+      - name: Locate the built browser output
+        run: |
+          for candidate in \
+              dist-regtest \
+              dist-regtest/browser \
+              $(find dist-regtest -maxdepth 3 -type d -name browser); do
+            if [ -f "$candidate/index.html" ]; then
+              BROWSER_DIR="$candidate"
+              break
+            fi
+          done
+          if [ -z "${BROWSER_DIR:-}" ]; then
+            echo "could not find any index.html under dist-regtest"
+            ls -la dist-regtest || true
+            tail -200 build.log || true
+            exit 1
+          fi
+          echo "BROWSER_DIR=$BROWSER_DIR" >> "$GITHUB_ENV"
+
+      - name: Serve the static bundle on :4221
+        run: |
+          cat > spa-server.cjs <<'EOF'
+          const http = require('http'), fs = require('fs'), path = require('path');
+          const root = path.resolve(process.argv[2]);
+          const port = Number(process.argv[3] ?? 4221);
+          const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', png: 'image/png', svg: 'image/svg+xml', ico: 'image/x-icon', woff2: 'font/woff2', woff: 'font/woff', txt: 'text/plain', map: 'application/json' };
+          http.createServer((req, res) => {
+            let p = path.normalize(decodeURIComponent((req.url ?? '/').split('?')[0]));
+            let f = path.join(root, p);
+            if (!f.startsWith(root) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(root, 'index.html');
+            const ext = f.split('.').pop() ?? '';
+            res.writeHead(200, { 'content-type': types[ext] ?? 'application/octet-stream' });
+            fs.createReadStream(f).pipe(res);
+          }).listen(port, () => console.log(`spa-server on :${port} root=${root}`));
+          EOF
+          nohup node spa-server.cjs "$BROWSER_DIR" 4221 > serve.log 2>&1 &
+          echo $! > serve.pid
+
+      - name: Wait for static server ready on :4221
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4221/ 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "static server up"; break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "static server never came up (last HTTP $code)"; tail -200 serve.log || true; exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Install Playwright in the frontend tree
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the funding-safety guard spec (real ord, no mock)
+        working-directory: frontend
+        env:
+          XVERSE_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/xverse
+          XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/sdk/test-results/xverse-seed-user-data-dir
+          FRONTEND_URL: http://localhost:4221
+          # seedInscribedCoin docker-execs into these by name.
+          REGTEST_ORD_CONTAINER: ordpool-e2e-consumer-cat21-ord
+          REGTEST_ORD_STOCK_CONTAINER: ordpool-e2e-consumer-ord-stock
+        run: |
+          xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
+            npx playwright test e2e/regtest/funding-guard-inscription-regtest.spec.ts \
+            --config=playwright.regtest.config.ts
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: funding-guard-playwright-${{ github.run_id }}
+          path: |
+            frontend/test-results
+            frontend/playwright-report-regtest
+            build.log
+            serve.log
+            fees-stub.log
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          for c in ordpool-e2e-consumer-bitcoind ordpool-e2e-consumer-electrs ordpool-e2e-consumer-cat21-ord ordpool-e2e-consumer-ord-stock ordpool-e2e-consumer-mariadb; do
+            echo "=== $c ==="
+            docker logs "$c" 2>&1 | tail -200 || true
+          done
+          echo "=== fees-stub.log ==="
+          cat fees-stub.log 2>/dev/null || true
+          echo "=== build.log (tail) ==="
+          tail -200 build.log 2>/dev/null || true
+          echo "=== serve.log (tail) ==="
+          tail -200 serve.log 2>/dev/null || true
+
+      - name: Tear down stack
+        if: always()
+        run: |
+          docker compose \
+            -f frontend/node_modules/ordpool-sdk/e2e/docker-compose.consumer-environment.yml \
+            down -v || true
+          if [ -f fees-stub.pid ]; then
+            kill "$(cat fees-stub.pid)" 2>/dev/null || true
+          fi
+          if [ -f serve.pid ]; then
+            kill "$(cat serve.pid)" 2>/dev/null || true
+          fi
