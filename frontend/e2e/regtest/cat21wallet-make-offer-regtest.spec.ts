@@ -287,6 +287,10 @@ test('make-offer page builds the PSBT; seller is paid at the typed address P, ne
 
   // ─── 7. Read the PAGE-BUILT, buyer-signed PSBT ──────────────────
   await expect(page.getByTestId('make-offer-success')).toBeVisible({ timeout: 90_000 });
+  // The raw base64 lives in a collapsed <details> ("Prefer the raw offer
+  // text?") — the primary output is the always-visible accept-link. Expand it
+  // (the real user action) before reading the textarea.
+  await page.getByText('Prefer the raw offer text?', { exact: false }).click();
   const artifact = page.getByTestId('make-offer-artifact-textarea');
   await expect(artifact).toBeVisible({ timeout: 30_000 });
   const pageBuiltPsbt = (await artifact.inputValue()).trim();
