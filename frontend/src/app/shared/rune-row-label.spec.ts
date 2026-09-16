@@ -6,19 +6,19 @@ describe('runeRowLabel', () => {
   // stays as reviewable as the byte it guards.
   it('renders ord-style balance + name for the JSON-number amount /output/ sends', () => {
     expect(runeRowLabel('ANARCHY', { amount: 12600000, divisibility: 0, symbol: '⬛' })).toBe(
-      '12600000 ⬛ ANARCHY',
+      '12600000\u00a0⬛ ANARCHY',
     );
   });
 
   it('strips a trailing-zero fraction the way ord does (1100 at divisibility 3 → 1.1)', () => {
     expect(runeRowLabel('BITBLOCK', { amount: 1100, divisibility: 3, symbol: '🟧' })).toBe(
-      '1.1 🟧 BITBLOCK',
+      '1.1\u00a0🟧 BITBLOCK',
     );
   });
 
   it('accepts a string amount unchanged (the /address/ shape)', () => {
     expect(runeRowLabel('ANARCHY', { amount: '12600000', divisibility: 0, symbol: '⬛' })).toBe(
-      '12600000 ⬛ ANARCHY',
+      '12600000\u00a0⬛ ANARCHY',
     );
   });
 
