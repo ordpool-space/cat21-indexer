@@ -7,6 +7,8 @@ import {
   onboardCat21Wallet,
   waitForApprovalPopup,
   seedListedCat,
+  seedDirtyCoin,
+  DirtyCoinAsset,
   fundCommonSats,
   waitForElectrsSync,
   mineBlocks,
@@ -362,4 +364,132 @@ test('make-offer @ 546 (fresh-postage cat): page pays typed P, never owner O', {
 // thing the SDK's builder-level byte-parity proof cannot reach.
 test('make-offer @ 9000 (non-postage cat): page preserves the size + pays typed P', { timeout: 300_000 }, async () => {
   await runMakeOfferCell(9_000, 12_000);
+});
+
+/**
+ * Dirty-coin protection on the make-offer BUYER-funding side, END TO END in
+ * cat21.space's own wiring. Seeds a coin carrying a real <asset> at the buyer's
+ * payment address, sized so an UNGUARDED best-fit selection would pick it:
+ * dirty 20k < clean 40k, both cover the ~10k requirement, both under the 50k
+ * auto-scan floor (so both get scanned rather than left 'unscanned'). The
+ * guard (the SDK's class-AGNOSTIC recommendFunding, which avoids whatever the
+ * scan flags as has-assets) must steer funding to the clean coin, leaving the
+ * dirty coin's outpoint UNSPENT after settle.
+ *
+ * The green direction alone is NOT evidence. The mutation is ONE class-agnostic
+ * lever (throwaway branch): neutralise recommendFunding's clean filter in the
+ * installed SDK so every covering coin is selectable; the picker then takes the
+ * smaller dirty coin and it gets spent, turning ALL of these cells RED, each
+ * naming its own asset. Immune to the incidental rare sat every seedInscribedCoin
+ * coin carries, because classification is not consulted under that mutation.
+ */
+async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
+  const tag = `make-offer:dirty:${asset}`;
+  const PRICE_SATS = 10_000;
+  const CAT_VALUE = 546;
+  const DIRTY_SATS = 20_000; // covers price+fee, < clean, < 50k auto-scan floor
+  const CLEAN_SATS = 40_000; // covers comfortably, > dirty, < 50k
+
+  // ─── 1. Connect the buyer (cat21-wallet), read its addresses ────
+  const page = await context.newPage();
+  const { paymentAddress: buyerPayment } = await connectAndReadAddresses(page);
+
+  // ─── 2. Buyer funding: a CLEAN coin the guard should steer TO, and a
+  //        DIRTY coin an unguarded best-fit would pick FIRST (it is smaller). ─
+  await fundCommonSats(buyerPayment, CLEAN_SATS / 1e8);
+  const dirty = await seedDirtyCoin({ asset, address: buyerPayment, valueSats: DIRTY_SATS });
+  console.log(`[${tag}] dirty ${asset} coin ${dirty.outpoint} value=${dirty.value} assetId=${dirty.assetId}`);
+
+  // ─── 3. A target cat to offer on (owner O, distinct payment P) ──
+  const O = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  const P = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  const listed = await seedListedCat({ ordinalsAddress: O, valueSats: CAT_VALUE });
+  await waitForBackendCat(listed.catNumber);
+
+  // ─── 4. Drive make-offer to a built, buyer-signed offer ─────────
+  await page.goto(`${FRONTEND_URL}${MAKE_OFFER_PATH}`, { waitUntil: 'domcontentloaded' });
+  const reapprove = await waitForApprovalPopup({
+    context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button').click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+
+  const catInput = page.getByTestId('make-offer-cat-number-input');
+  await expect(catInput).toBeVisible({ timeout: 60_000 });
+  await catInput.fill(String(listed.catNumber));
+  await page.getByTestId('make-offer-lookup-cta').click();
+  await expect(page.getByTestId('make-offer-resolved')).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId('make-offer-seller-payment-input').fill(P);
+  await page.getByTestId('make-offer-price-input').fill(String(PRICE_SATS));
+
+  // The guard steered funding to the clean coin, so the simulation resolves and
+  // the CTA enables. (Under the mutation the dirty coin is picked instead, but
+  // the build still succeeds — the proof is on-chain, below.)
+  await expect(page.getByTestId('make-offer-summary-section')).toBeVisible({ timeout: 60_000 });
+  const buildBtn = page.getByTestId('make-offer-cta');
+  await expect(buildBtn).toBeEnabled({ timeout: 60_000 });
+
+  const knownBeforeSign = new Set(context.pages());
+  await buildBtn.click();
+  const signPopup = await waitForApprovalPopup({
+    context, knownPages: knownBeforeSign, timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await clickApprovalButton(signPopup);
+  await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+  // ─── 5. Read the page-built PSBT, seller settles on-chain ───────
+  await expect(page.getByTestId('make-offer-success')).toBeVisible({ timeout: 90_000 });
+  await page.getByText('Prefer the raw offer text?', { exact: false }).click();
+  const pageBuiltPsbt = (await page.getByTestId('make-offer-artifact-textarea').inputValue()).trim();
+  const processed = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', '-named', 'walletprocesspsbt',
+      `psbt=${pageBuiltPsbt}`, 'sign=true', 'finalize=true'),
+  ) as { psbt: string; hex?: string; complete: boolean };
+  const settleHex = processed.hex
+    ?? (JSON.parse(rpc('finalizepsbt', processed.psbt)) as { hex: string }).hex;
+  const settleTxid = rpc('sendrawtransaction', settleHex).trim();
+  mineBlocks(1);
+  await waitForTxConfirmed(settleTxid, 30_000);
+
+  // ─── 6. THE PROOF: the dirty coin was NOT spent ─────────────────
+  // gettxout returns the txout for an unspent outpoint, empty for a spent one.
+  // Under a working guard the offer funded from the clean coin, so the dirty
+  // coin survives; under the recommendFunding mutation it is spent and this
+  // goes RED naming this asset.
+  const txout = rpc('gettxout', dirty.txid, String(dirty.vout)).trim();
+  expect(txout.length, `dirty ${asset} coin ${dirty.outpoint} was SPENT — the funding guard did not steer away from it`).toBeGreaterThan(0);
+  const settleRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', settleTxid, '2'),
+  ) as { vin: Array<{ txid: string; vout: number }> };
+  const spentDirty = settleRaw.vin.some((v) => v.txid === dirty.txid && v.vout === dirty.vout);
+  expect(spentDirty, `settle tx spent the dirty ${asset} coin ${dirty.outpoint}`).toBe(false);
+  console.log(`[${tag}] SURVIVED — guard steered funding to the clean coin`);
+
+  browserErrorGuard.assertClean();
+  await page.close();
+}
+
+test('make-offer dirty-coin guard: an INSCRIPTION funding coin is not spent', { timeout: 300_000 }, async () => {
+  await runMakeOfferDirtyCell('inscription');
+});
+
+test('make-offer dirty-coin guard: a CAT funding coin is not spent', { timeout: 300_000 }, async () => {
+  await runMakeOfferDirtyCell('cat');
+});
+
+test('make-offer dirty-coin guard: a RUNE funding coin is not spent', { timeout: 300_000 }, async () => {
+  await runMakeOfferDirtyCell('rune');
+});
+
+test('make-offer dirty-coin guard: a RARE-SAT funding coin is not spent', { timeout: 300_000 }, async () => {
+  await runMakeOfferDirtyCell('rareSat');
 });
