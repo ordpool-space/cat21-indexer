@@ -212,13 +212,17 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
   // 'unscanned' with a manual Scan (large coins are not auto-scanned). Clicking
   // Scan runs the REAL scan against stock ord; that is the realistic path for a
   // chunky funding coin, and it is what flips the row to 'assets'.
-  await expect(seededRow).toHaveClass(/mint-utxo-row-unscanned/, { timeout: 60_000 });
+  // The bucket state lives in data-testid ('mint-utxo-row-<bucket>'), NOT the
+  // class list — only 'assets'/'clean'/'selected' get a class binding, so
+  // 'unscanned' is observable on data-testid alone.
+  await expect(seededRow).toHaveAttribute('data-testid', 'mint-utxo-row-unscanned', { timeout: 60_000 });
   await seededRow.getByRole('button', { name: 'Scan', exact: true }).click();
 
   // ─── 6. Supporting checks (fire on the rare sat too — NOT the proof) ─
   // After the scan the row is bucketed 'assets' and offers "Use anyway", not
-  // auto-selected. Generous timeout: the scan is a live HTTP round-trip to ord.
-  await expect(seededRow).toHaveClass(/mint-utxo-row-assets/, { timeout: 60_000 });
+  // auto-selected. Generous timeout: the scan is a live HTTP round-trip to ord,
+  // passing through a transient 'scanning' bucket first.
+  await expect(seededRow).toHaveAttribute('data-testid', 'mint-utxo-row-assets', { timeout: 60_000 });
   const overrideBtn = seededRow.locator('.mint-utxo-pick-override');
   await expect(overrideBtn).toBeVisible({ timeout: 30_000 });
 
