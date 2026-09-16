@@ -68,7 +68,11 @@ let context: BrowserContext;
 let extensionId: string;
 let browserErrorGuard: ReturnType<typeof installContextErrorGuard>;
 
-test.describe.configure({ mode: 'serial' });
+// NOT serial: the regtest config is workers:1 + fullyParallel:false, so tests
+// already run sequentially in one worker sharing the beforeAll'd context. Serial
+// mode would additionally SKIP remaining tests on the first failure, which under
+// the dirty-coin mutation (a broken guard) would hide three of the four reds —
+// each cell must be able to show its own assertion fail.
 
 async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
