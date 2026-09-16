@@ -1,0 +1,331 @@
+/* eslint-disable no-console */
+import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+
+import {
+  onboardCat21Wallet,
+  waitForApprovalPopup,
+  seedListedCat,
+  fundCommonSats,
+  waitForElectrsSync,
+  mineBlocks,
+  waitForTxConfirmed,
+  rpc,
+} from 'ordpool-sdk/e2e';
+import { installContextErrorGuard } from './lib/browser-error-guard';
+
+/**
+ * E2E (regtest) — cat21.space make-offer, driven THROUGH THE PAGE, zero mock.
+ *
+ * The buy-offer PSBT is the one money-path artifact cat21.space produces that
+ * no spec proved the PAGE builds. The existing offer round-trip (in
+ * `cat21wallet-mint-regtest.spec.ts`) drives the ACCEPT page but builds the
+ * PSBT itself via `buildCat21BuyOfferPsbt` — so it proves the accept page
+ * counter-signs a valid PSBT, never that the make-offer page constructs one.
+ * This spec closes that: the BUYER (cat21-wallet) fills the make-offer form
+ * and the PAGE builds + buyer-signs the PSBT; a neutral bitcoin-cli SELLER
+ * signs input 0 and broadcasts.
+ *
+ * THE LOAD-BEARING ASSERTION is that the seller is paid at P — the payment
+ * address the TEST TYPED into `make-offer-seller-payment-input` — and NEVER at
+ * O, the cat's on-chain owner (ordinals) address. That distinction is the
+ * 2026-07-18 regression: make-offer once took `resolvedSellerAddress` from an
+ * ord lookup (which returns the ordinals address O) and piped it in as the
+ * payment address, so every URL-driven accept broke silently on Xverse /
+ * Leather / OKX. `seedListedCat` mints the cat to an owner O that is DISTINCT
+ * from the P the buyer types, so a page that regressed to paying O fails here.
+ * P is the independent oracle (a literal the test controls), per
+ * E2E_BEST_PRACTICES 0.0 — never a value the app computed.
+ *
+ * ZERO MOCK: the make-offer cat lookup chains the cat21-indexer backend
+ * (/api/cat/:N -> txHash), cat21-ord (:8080, satpoint + owner), and electrs
+ * (scriptPubKey cross-check). All three run for real in the workflow — a
+ * hand-typed /api/cat/:N stub is the exact shape of the getCatsAtOutput
+ * production bug (number[] vs inscription-id strings), so it is banned here.
+ *
+ * MUTATION CHECK (throwaway branch, not CI): point the make-offer builder's
+ * seller-payment at O instead of P (or have the page ignore the typed field).
+ * The vout[1] address assertion goes RED while the cat-moved and price
+ * assertions stay green. Proof the seller-payment line is load-bearing.
+ *
+ * CI-only (real cat21-wallet binary + full regtest stack + synced NestJS
+ * backend); the regtest playwright config refuses to run locally.
+ */
+
+const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
+const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:9998';
+const MINT_PATH = '/dashboard/mint';
+const MAKE_OFFER_PATH = '/dashboard/trade/make';
+
+const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
+const EXT_PATH = process.env.CAT21WALLET_EXT_PATH ?? path.join(SDK_E2E_DIR, 'extensions/cat21wallet');
+const RESULTS_DIR = path.resolve(__dirname, '../../test-results');
+
+let context: BrowserContext;
+let extensionId: string;
+let browserErrorGuard: ReturnType<typeof installContextErrorGuard>;
+
+test.describe.configure({ mode: 'serial' });
+
+async function shot(p: Page, name: string): Promise<void> {
+  await p.screenshot({
+    path: path.resolve(RESULTS_DIR, `make-offer-${name}.png`),
+    fullPage: true,
+  }).catch(() => undefined);
+}
+
+/**
+ * Approval-popup Sign/Confirm/Approve click. cat21-wallet self-closes the
+ * popup the moment the dispatch reaches the service worker, so the close IS
+ * the success signal — swallow only the teardown-race error. Mirrors the
+ * helper of the same shape in `cat21wallet-mint-regtest.spec.ts`.
+ */
+async function clickApprovalButton(popup: Page): Promise<void> {
+  const btn = popup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first();
+  await expect(btn).toBeVisible({ timeout: 10_000 });
+  try {
+    await btn.click({ noWaitAfter: true, timeout: 30_000 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/Target page, context or browser has been closed/.test(msg)) throw err;
+  }
+}
+
+/**
+ * Connect cat21-wallet via the mint page and read BOTH addresses from the
+ * header popover: the payment address (buyer funding, bcrt1q) and the
+ * ordinals address (where the bought cat lands, bcrt1p). Both are the real
+ * wallet-returned values, read independently of anything the make-offer page
+ * computes.
+ */
+async function connectAndReadAddresses(
+  page: Page,
+): Promise<{ paymentAddress: string; ordinalsAddress: string }> {
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  const cta = page.getByTestId('mint-cta');
+  await expect(cta).toBeVisible({ timeout: 30_000 });
+
+  const knownPagesBeforeConnect = new Set(context.pages());
+  await page.getByTestId('wallet-connect-btn').first().click();
+  const picker = page.getByTestId('wallet-pick-cat21wallet').first();
+  await expect(picker).toBeVisible({ timeout: 20_000 });
+  await picker.click({ timeout: 20_000 });
+
+  const approvalConnect = await waitForApprovalPopup({
+    context,
+    knownPages: knownPagesBeforeConnect,
+    timeoutMs: 60_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByTestId('get-addresses-approve-button')
+        .waitFor({ state: 'visible', timeout: 60_000 });
+      return true;
+    },
+  });
+  await approvalConnect.getByTestId('get-addresses-approve-button').click();
+  await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  await expect(cta).toBeHidden({ timeout: 30_000 });
+
+  await page.getByTestId('wallet-connected-btn').click();
+  const payEl = page.getByTestId('wallet-payment-address-full');
+  await expect(payEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
+  const paymentAddress = (await payEl.textContent())!.trim();
+  const ordEl = page.getByTestId('wallet-ordinals-address-full');
+  await expect(ordEl).toHaveText(/^bcrt1p/, { timeout: 15_000 });
+  const ordinalsAddress = (await ordEl.textContent())!.trim();
+  // Close the popover so it doesn't overlay later interactions.
+  await page.getByTestId('wallet-connected-btn').click().catch(() => undefined);
+  return { paymentAddress, ordinalsAddress };
+}
+
+/**
+ * Poll the NestJS backend until it has synced the freshly-seeded cat. The
+ * backend polls cat21-ord every 60s, so a fresh seed can take up to a sync
+ * interval to appear. Fail with the cat number and elapsed time, never a bare
+ * timeout, so a slow-runner miss reads in the log instead of the trace.
+ */
+async function waitForBackendCat(catNumber: number, timeoutMs = 120_000): Promise<void> {
+  const start = Date.now();
+  for (;;) {
+    const res = await fetch(`${BACKEND_URL}/api/cat/${catNumber}`).catch(() => null);
+    if (res && res.ok) return;
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(
+        `backend never synced cat ${catNumber}: /api/cat/${catNumber} not 200 after ${elapsed}s ` +
+        `(last status ${res ? res.status : 'no-response'}). Backend sync interval is 60s; a slow ` +
+        `runner should still catch it — raise the timeout if this is a false miss.`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 3_000));
+  }
+}
+
+test.beforeAll(async () => {
+  if (!fs.existsSync(path.join(EXT_PATH, 'manifest.json'))) {
+    throw new Error(`CAT-21 wallet extension not unpacked at ${EXT_PATH}.`);
+  }
+  const tip = Number(rpc('getblockcount').trim());
+  if (tip < 101) {
+    throw new Error(`regtest tip is ${tip} (<101). The consumer bootstrap should have matured coinbase.`);
+  }
+
+  // NO `/output` mock — the whole point is that the make-offer cat lookup +
+  // the buyer-funding asset scan hit the REAL ords the workflow wires in.
+  context = await chromium.launchPersistentContext('', {
+    headless: false,
+    args: [
+      `--disable-extensions-except=${EXT_PATH}`,
+      `--load-extension=${EXT_PATH}`,
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+    ],
+    viewport: { width: 1280, height: 900 },
+  });
+  browserErrorGuard = installContextErrorGuard(context);
+
+  let [worker] = context.serviceWorkers();
+  if (!worker) {
+    worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
+  }
+  extensionId = worker.url().split('/')[2];
+
+  const primer = await context.newPage();
+  await onboardCat21Wallet(primer, extensionId);
+  await primer.close();
+});
+
+test.afterAll(async () => {
+  await context?.close();
+});
+
+test('make-offer page builds the PSBT; seller is paid at the typed address P, never the owner O', { timeout: 300_000 }, async () => {
+  const VALUE_SATS = 546; // fresh cat postage; the 9000 size cell follows
+  const PRICE_SATS = 10_000;
+
+  // ─── 1. Connect the BUYER (cat21-wallet), read its real addresses ─
+  const page = await context.newPage();
+  const { paymentAddress: buyerPayment, ordinalsAddress: buyerOrdinals } =
+    await connectAndReadAddresses(page);
+  console.log(`[make-offer] buyer payment=${buyerPayment} ordinals=${buyerOrdinals}`);
+
+  // ─── 2. Fund the buyer with a clean coin under the auto-scan floor ─
+  // 0.00045 BTC = 45 000 sat: covers price + fee, below AUTO_SCAN_MAX_VALUE_SAT
+  // (50k) so the funding picker auto-scans + auto-picks it clean.
+  await fundCommonSats(buyerPayment, 0.00045);
+
+  // ─── 3. Seed a REAL listed cat owned by O, distinct from P ──────
+  // O = the cat's ordinals owner (a fresh bitcoin-cli address the SELLER
+  // controls, so bitcoin-cli can sign input 0). P = the seller's PAYMENT
+  // address, a DIFFERENT bitcoin-cli address — the literal the buyer types.
+  const O = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  const P = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  expect(P).not.toBe(O);
+  const listed = await seedListedCat({ ordinalsAddress: O, valueSats: VALUE_SATS });
+  expect(listed.sellerOrdinalsAddress).toBe(O);
+  expect(listed.value).toBe(VALUE_SATS);
+  console.log(`[make-offer] listed cat #${listed.catNumber} at ${listed.txid}:${listed.vout} value=${listed.value} owner O=${O} payTo P=${P}`);
+
+  // ─── 4. Wait for the NestJS backend to sync the new cat ─────────
+  await waitForBackendCat(listed.catNumber);
+
+  // ─── 5. Drive the make-offer PAGE: lookup N, type P, type price ─
+  await page.goto(`${FRONTEND_URL}${MAKE_OFFER_PATH}`, { waitUntil: 'domcontentloaded' });
+  // Re-approve get-addresses if the wallet re-prompts on this page load.
+  const reapprove = await waitForApprovalPopup({
+    context,
+    knownPages: new Set(context.pages()),
+    timeoutMs: 6_000,
+    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
+  }).catch(() => null);
+  if (reapprove) {
+    await reapprove.getByTestId('get-addresses-approve-button')
+      .click({ timeout: 10_000 }).catch(() => undefined);
+    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  }
+
+  const catInput = page.getByTestId('make-offer-cat-number-input');
+  await expect(catInput).toBeVisible({ timeout: 60_000 });
+  await catInput.fill(String(listed.catNumber));
+  await page.getByTestId('make-offer-lookup-cta').click();
+  // Lookup resolves the target via backend -> ord -> electrs (all real).
+  await expect(page.getByTestId('make-offer-resolved')).toBeVisible({ timeout: 60_000 });
+
+  await page.getByTestId('make-offer-seller-payment-input').fill(P);
+  await page.getByTestId('make-offer-price-input').fill(String(PRICE_SATS));
+  await shot(page, '01-form-filled');
+
+  // The page distinguishes P (typed payment) from O (owner) in the UI too:
+  // because P !== O, the override warning MUST surface. This is not the
+  // proof (the on-chain assertion is), but it pins that the page treats the
+  // owner as owner and the typed field as the payment target.
+  await expect(page.getByTestId('make-offer-address-override-warning')).toBeVisible({ timeout: 30_000 });
+
+  // Summary + CTA enable once the buyer-funding simulation resolves.
+  await expect(page.getByTestId('make-offer-summary-section')).toBeVisible({ timeout: 60_000 });
+  const buildBtn = page.getByTestId('make-offer-cta');
+  await expect(buildBtn).toBeEnabled({ timeout: 60_000 });
+
+  // ─── 6. Build the offer → cat21-wallet buyer-signs in a popup ───
+  const knownBeforeSign = new Set(context.pages());
+  await buildBtn.click();
+  const signPopup = await waitForApprovalPopup({
+    context,
+    knownPages: knownBeforeSign,
+    timeoutMs: 120_000,
+    isApproval: async (p) => {
+      if (!p.url().startsWith('chrome-extension://')) return false;
+      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
+        .waitFor({ state: 'visible', timeout: 120_000 });
+      return true;
+    },
+  });
+  await shot(signPopup, '02-sign-popup');
+  await clickApprovalButton(signPopup);
+  await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+
+  // ─── 7. Read the PAGE-BUILT, buyer-signed PSBT ──────────────────
+  await expect(page.getByTestId('make-offer-success')).toBeVisible({ timeout: 90_000 });
+  const artifact = page.getByTestId('make-offer-artifact-textarea');
+  await expect(artifact).toBeVisible({ timeout: 30_000 });
+  const pageBuiltPsbt = (await artifact.inputValue()).trim();
+  expect(pageBuiltPsbt.length).toBeGreaterThan(0);
+  await shot(page, '03-offer-built');
+  console.log(`[make-offer] page-built PSBT length=${pageBuiltPsbt.length}`);
+
+  // ─── 8. Seller (bitcoin-cli, owns O) signs input 0 + broadcasts ─
+  // finalize=true completes the PSBT: the buyer's funding inputs are already
+  // signed by the page/wallet, and bitcoin-cli holds O's key for input 0.
+  const processed = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', '-named', 'walletprocesspsbt',
+      `psbt=${pageBuiltPsbt}`, 'sign=true', 'finalize=true'),
+  ) as { psbt: string; hex?: string; complete: boolean };
+  expect(processed.complete).toBe(true);
+  const settleHex = processed.hex
+    ?? (JSON.parse(rpc('finalizepsbt', processed.psbt)) as { hex: string }).hex;
+  const settleTxid = rpc('sendrawtransaction', settleHex).trim();
+  console.log(`[make-offer] settlement txid=${settleTxid}`);
+
+  // ─── 9. Confirm + on-chain verification ─────────────────────────
+  mineBlocks(1);
+  await waitForTxConfirmed(settleTxid, 30_000);
+  const settleRaw = JSON.parse(
+    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', settleTxid, '2'),
+  ) as { vout: Array<{ value: number; scriptPubKey: { address?: string } }> };
+
+  // Output 0 = the cat, size PRESERVED, at the BUYER's ordinals address.
+  expect(Math.round(settleRaw.vout[0].value * 1e8)).toBe(VALUE_SATS);
+  expect(settleRaw.vout[0].scriptPubKey.address).toBe(buyerOrdinals);
+
+  // ─── 10. THE PROOF: seller paid at P (typed), the amount price+value ─
+  expect(Math.round(settleRaw.vout[1].value * 1e8)).toBe(PRICE_SATS + VALUE_SATS);
+  expect(settleRaw.vout[1].scriptPubKey.address).toBe(P);
+  // And O (the owner address) is paid by NOTHING — the regression guard.
+  const paidToO = settleRaw.vout.filter((v) => v.scriptPubKey.address === O);
+  expect(paidToO).toHaveLength(0);
+  console.log(`[make-offer] cat -> buyer ${buyerOrdinals}; seller paid ${PRICE_SATS + VALUE_SATS} @ P=${P}; O=${O} paid nothing`);
+
+  browserErrorGuard.assertClean();
+  await page.close();
+});
