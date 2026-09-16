@@ -250,29 +250,35 @@ still needs a connected wallet + live electrs to REVIEW (not to build):
   reason sentences come from the SDK's `walletActionNotice` (source-owned there),
   so register fixes to those in `ordpool-sdk`, not here.
 
-- **The `ordpool-sdk` pin is `60d6fbc`, and it installs cleanly.** No peer
-  fight: `@ng-bootstrap/ng-bootstrap@20` peers `@angular/core ^21.0.0`, which
-  the installed `21.2.4` satisfies, so a plain `npm install` resolves with no
-  `ERESOLVE` and no `--legacy-peer-deps` (verified by dry-run then real install,
-  full suite + production build green). The SDK's own peer deps are
-  `@noble/curves`, `@playwright/test`, `@scure/btc-signer 1.2.x`, `rxjs`,
-  `sats-connect` — no Angular, no ng-bootstrap. `60d6fbc` is the family-standard
-  pin (carries `formatRunePile`, `resolveRuneEtchingTxid`, `lookupRuneEtching`,
-  the widened rune-amount type, and the swallowed-TypeError to `error`-state
-  fix). The `setContent` reshape caveat does NOT apply here: cat21 mints via
-  `Cat21MintOrchestrator` and never calls the inscribe `setContent`. When bumping
-  a github: dep by SHA, force a clean reinstall
-  (`rm -rf node_modules/ordpool-sdk && npm install --force`): npm caches the git
-  build, and a stale dist silently omits new exports (the rune helpers were
-  absent until the forced reinstall, and a suite run against the stale build is a
-  false green). Verify the bump took by grepping the installed `dist/` for a
-  symbol the new SHA INTRODUCES *and* one it does NOT carry yet (for the fc11150
-  bump: `formatSatsWithFiat` should be present); checking only that the new
-  symbol exists still passes on a newer-than-intended cached build, so the
-  second half is what confirms you are on exactly the SHA you pinned. The family-standard pin moves to **`fc11150`** once its lanes are
-  green (adds `formatSatsWithFiat`; `formatSatsWithUsd` stays byte-identical, so
-  cat21 needs no call-site change and keeps USD-only, no currency picker).
-  ordpool.space does NOT take `formatSatsWithFiat` (its fork already has
+- **The `ordpool-sdk` pin is `25eac26` (the family-standard), with the
+  frontend declaring `@scure/btc-signer` `1.6.0` directly.** `25eac26` crosses
+  two boundaries from the earlier `6f4d6a7`-era pins: `8b642a8` collapsed
+  `dist-core/` into a single `dist/`, and `4e98205` made that single `dist/`
+  ESM again — so the CommonJS interlude's +543 kB / +38 % Angular-bundle
+  penalty is **withdrawn**; the production bundle is back to 1.38 MB and the
+  `Module 'ordpool-sdk' is not ESM` warning is gone. The SDK's peer range moved
+  to `@scure/btc-signer 1.6.x` (cat21-wallet and `@leather.io/bitcoin` need the
+  `/psbt` subpath 1.2.1 doesn't expose), so the frontend's OWN direct
+  `@scure/btc-signer` dep moves to `1.6.0` in the SAME change as the SHA — a
+  sha-swap alone leaves `1.2.2` declared against a `1.6.x` SDK and dies on the
+  subpath imports. Frontend own-code impact of that peer move is nil: the only
+  `@scure` import site (`transfer.ts`) uses `btc.Address`, barrel-stable in both
+  1.2 and 1.6.
+- **When bumping the `github:` SDK dep by SHA**, force a clean re-resolution,
+  never a sed sha-swap: `npm pkg set` the SHA (and the `@scure` version if it
+  moved), `npm install --package-lock-only ordpool-sdk@github:…#<sha>` to move
+  the lockfile's git resolution (a `package.json` edit alone does NOT move it),
+  then `rm -rf node_modules/ordpool-sdk && npm install --force`, then
+  `rm -rf .angular/cache` (Angular caches the COMPILED module; a stale-dist
+  compile survives dist correction, and the tell is a build error naming a
+  symbol that exists in no file on disk). Verify the bump landed by looking for
+  what should and should NOT be there: `node_modules/ordpool-sdk/dist/package.json`
+  is `{"type":"module"}`, `node_modules/ordpool-sdk/dist-core/` is GONE, the new
+  symbol (`seedListedCat` for `25eac26`) is present, and `@scure/btc-signer`
+  resolves the intended version on disk with no nested dupes. Checking only that
+  a new symbol EXISTS still passes on a newer-than-intended cached build, so the
+  "should NOT be there" half is what confirms you are on exactly the SHA you
+  pinned. ordpool.space does NOT take `formatSatsWithFiat` (its fork already has
   upstream's whole fiat system).
 
 - **Still owed: the RENDERED review.** The funding-safety panel rows (rune,
