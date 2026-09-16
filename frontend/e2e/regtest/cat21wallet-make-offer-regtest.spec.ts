@@ -103,31 +103,42 @@ async function connectAndReadAddresses(
   page: Page,
 ): Promise<{ paymentAddress: string; ordinalsAddress: string }> {
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  const connectedBtn = page.getByTestId('wallet-connected-btn');
   const cta = page.getByTestId('mint-cta');
-  await expect(cta).toBeVisible({ timeout: 30_000 });
+  // Idempotent: a later cell (new page, same context) may already be connected
+  // — wait for EITHER the connected header or the connect CTA, then only run
+  // the connect flow when not yet connected.
+  await expect(connectedBtn.or(cta)).toBeVisible({ timeout: 30_000 });
 
-  const knownPagesBeforeConnect = new Set(context.pages());
-  await page.getByTestId('wallet-connect-btn').first().click();
-  const picker = page.getByTestId('wallet-pick-cat21wallet').first();
-  await expect(picker).toBeVisible({ timeout: 20_000 });
-  await picker.click({ timeout: 20_000 });
+  if (!(await connectedBtn.isVisible().catch(() => false))) {
+    const knownPagesBeforeConnect = new Set(context.pages());
+    await page.getByTestId('wallet-connect-btn').first().click();
+    const picker = page.getByTestId('wallet-pick-cat21wallet').first();
+    await expect(picker).toBeVisible({ timeout: 20_000 });
+    await picker.click({ timeout: 20_000 });
 
-  const approvalConnect = await waitForApprovalPopup({
-    context,
-    knownPages: knownPagesBeforeConnect,
-    timeoutMs: 60_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByTestId('get-addresses-approve-button')
-        .waitFor({ state: 'visible', timeout: 60_000 });
-      return true;
-    },
-  });
-  await approvalConnect.getByTestId('get-addresses-approve-button').click();
-  await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  await expect(cta).toBeHidden({ timeout: 30_000 });
+    // The approval popup is OPTIONAL: on the first connect it fires, but once
+    // the origin is approved (a prior cell in this context) getAddresses
+    // returns without prompting. Don't hard-require it.
+    const approvalConnect = await waitForApprovalPopup({
+      context,
+      knownPages: knownPagesBeforeConnect,
+      timeoutMs: 20_000,
+      isApproval: async (p) => {
+        if (!p.url().startsWith('chrome-extension://')) return false;
+        await p.getByTestId('get-addresses-approve-button')
+          .waitFor({ state: 'visible', timeout: 20_000 });
+        return true;
+      },
+    }).catch(() => null);
+    if (approvalConnect) {
+      await approvalConnect.getByTestId('get-addresses-approve-button').click();
+      await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+    }
+    await expect(connectedBtn).toBeVisible({ timeout: 30_000 });
+  }
 
-  await page.getByTestId('wallet-connected-btn').click();
+  await connectedBtn.click();
   const payEl = page.getByTestId('wallet-payment-address-full');
   await expect(payEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
   const paymentAddress = (await payEl.textContent())!.trim();
@@ -200,15 +211,21 @@ test.afterAll(async () => {
   await context?.close();
 });
 
-test('make-offer page builds the PSBT; seller is paid at the typed address P, never the owner O', { timeout: 300_000 }, async () => {
-  const VALUE_SATS = 546; // fresh cat postage; the 9000 size cell follows
-  const PRICE_SATS = 10_000;
+/**
+ * One make-offer cell at a given cat size: the full page flow end to end +
+ * an on-chain settle by a neutral bitcoin-cli seller. The load-bearing
+ * assertion is vout[1].scriptPubKey.address === P (the typed payment address),
+ * with the amount checked separately so a right-amount/wrong-destination
+ * regression is caught (see the O!=P mutation).
+ */
+async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<void> {
+  const tag = `make-offer:${valueSats}`;
 
   // ─── 1. Connect the BUYER (cat21-wallet), read its real addresses ─
   const page = await context.newPage();
   const { paymentAddress: buyerPayment, ordinalsAddress: buyerOrdinals } =
     await connectAndReadAddresses(page);
-  console.log(`[make-offer] buyer payment=${buyerPayment} ordinals=${buyerOrdinals}`);
+  console.log(`[${tag}] buyer payment=${buyerPayment} ordinals=${buyerOrdinals}`);
 
   // ─── 2. Fund the buyer with a clean coin under the auto-scan floor ─
   // 0.00045 BTC = 45 000 sat: covers price + fee, below AUTO_SCAN_MAX_VALUE_SAT
@@ -222,10 +239,10 @@ test('make-offer page builds the PSBT; seller is paid at the typed address P, ne
   const O = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
   const P = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
   expect(P).not.toBe(O);
-  const listed = await seedListedCat({ ordinalsAddress: O, valueSats: VALUE_SATS });
+  const listed = await seedListedCat({ ordinalsAddress: O, valueSats });
   expect(listed.sellerOrdinalsAddress).toBe(O);
-  expect(listed.value).toBe(VALUE_SATS);
-  console.log(`[make-offer] listed cat #${listed.catNumber} at ${listed.txid}:${listed.vout} value=${listed.value} owner O=${O} payTo P=${P}`);
+  expect(listed.value).toBe(valueSats);
+  console.log(`[${tag}] listed cat #${listed.catNumber} at ${listed.txid}:${listed.vout} value=${listed.value} owner O=${O} payTo P=${P}`);
 
   // ─── 4. Wait for the NestJS backend to sync the new cat ─────────
   await waitForBackendCat(listed.catNumber);
@@ -253,8 +270,8 @@ test('make-offer page builds the PSBT; seller is paid at the typed address P, ne
   await expect(page.getByTestId('make-offer-resolved')).toBeVisible({ timeout: 60_000 });
 
   await page.getByTestId('make-offer-seller-payment-input').fill(P);
-  await page.getByTestId('make-offer-price-input').fill(String(PRICE_SATS));
-  await shot(page, '01-form-filled');
+  await page.getByTestId('make-offer-price-input').fill(String(priceSats));
+  await shot(page, `${valueSats}-01-form-filled`);
 
   // The page distinguishes P (typed payment) from O (owner) in the UI too:
   // because P !== O, the override warning MUST surface. This is not the
@@ -281,7 +298,7 @@ test('make-offer page builds the PSBT; seller is paid at the typed address P, ne
       return true;
     },
   });
-  await shot(signPopup, '02-sign-popup');
+  await shot(signPopup, `${valueSats}-02-sign-popup`);
   await clickApprovalButton(signPopup);
   await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
@@ -295,8 +312,8 @@ test('make-offer page builds the PSBT; seller is paid at the typed address P, ne
   await expect(artifact).toBeVisible({ timeout: 30_000 });
   const pageBuiltPsbt = (await artifact.inputValue()).trim();
   expect(pageBuiltPsbt.length).toBeGreaterThan(0);
-  await shot(page, '03-offer-built');
-  console.log(`[make-offer] page-built PSBT length=${pageBuiltPsbt.length}`);
+  await shot(page, `${valueSats}-03-offer-built`);
+  console.log(`[${tag}] page-built PSBT length=${pageBuiltPsbt.length}`);
 
   // ─── 8. Seller (bitcoin-cli, owns O) signs input 0 + broadcasts ─
   // finalize=true completes the PSBT: the buyer's funding inputs are already
@@ -309,7 +326,7 @@ test('make-offer page builds the PSBT; seller is paid at the typed address P, ne
   const settleHex = processed.hex
     ?? (JSON.parse(rpc('finalizepsbt', processed.psbt)) as { hex: string }).hex;
   const settleTxid = rpc('sendrawtransaction', settleHex).trim();
-  console.log(`[make-offer] settlement txid=${settleTxid}`);
+  console.log(`[${tag}] settlement txid=${settleTxid}`);
 
   // ─── 9. Confirm + on-chain verification ─────────────────────────
   mineBlocks(1);
@@ -319,17 +336,30 @@ test('make-offer page builds the PSBT; seller is paid at the typed address P, ne
   ) as { vout: Array<{ value: number; scriptPubKey: { address?: string } }> };
 
   // Output 0 = the cat, size PRESERVED, at the BUYER's ordinals address.
-  expect(Math.round(settleRaw.vout[0].value * 1e8)).toBe(VALUE_SATS);
+  expect(Math.round(settleRaw.vout[0].value * 1e8)).toBe(valueSats);
   expect(settleRaw.vout[0].scriptPubKey.address).toBe(buyerOrdinals);
 
   // ─── 10. THE PROOF: seller paid at P (typed), the amount price+value ─
-  expect(Math.round(settleRaw.vout[1].value * 1e8)).toBe(PRICE_SATS + VALUE_SATS);
+  expect(Math.round(settleRaw.vout[1].value * 1e8)).toBe(priceSats + valueSats);
   expect(settleRaw.vout[1].scriptPubKey.address).toBe(P);
   // And O (the owner address) is paid by NOTHING — the regression guard.
   const paidToO = settleRaw.vout.filter((v) => v.scriptPubKey.address === O);
   expect(paidToO).toHaveLength(0);
-  console.log(`[make-offer] cat -> buyer ${buyerOrdinals}; seller paid ${PRICE_SATS + VALUE_SATS} @ P=${P}; O=${O} paid nothing`);
+  console.log(`[${tag}] cat -> buyer ${buyerOrdinals}; seller paid ${priceSats + valueSats} @ P=${P}; O=${O} paid nothing`);
 
   browserErrorGuard.assertClean();
   await page.close();
+}
+
+test('make-offer @ 546 (fresh-postage cat): page pays typed P, never owner O', { timeout: 300_000 }, async () => {
+  await runMakeOfferCell(546, 10_000);
+});
+
+// 546 and a hardcoded 546 coincide, so a 546-only test proves nothing about
+// size handling. The 9000 cell proves the PAGE preserves the real cat UTXO size
+// end to end (offer output 0 = the incoming cat value, byte for byte) — the
+// property the 2026-08-29 546-hardcode in the offer builder broke, and the one
+// thing the SDK's builder-level byte-parity proof cannot reach.
+test('make-offer @ 9000 (non-postage cat): page preserves the size + pays typed P', { timeout: 300_000 }, async () => {
+  await runMakeOfferCell(9_000, 12_000);
 });
