@@ -94,14 +94,21 @@ jobs:
           printf '.git\ntarget\n' > ordpool-electrs/.dockerignore
           printf '.git\ntarget\n' > cat21-ord/.dockerignore
 
-      - name: Bring up consumer-environment (bitcoind + electrs + mariadb + cat21-ord)
+      # Both ords: cat21-ord (:8080, cats — the target-cat lookup + backend sync)
+      # AND ord-stock (:8081, real inscriptions). ord-stock is REQUIRED even
+      # though the buyer coin is plain: fundCommonSats -> waitForOrdStockSync
+      # gates on stock ord's height, so the fixture cannot run without it.
+      - name: Bring up consumer-environment (bitcoind + electrs + mariadb + cat21-ord + ord-stock)
         env:
           ELECTRS_SRC: ${{ github.workspace }}/ordpool-electrs
+          # Both ords build from the one cat21-ord checkout; ORD_SRC falls back
+          # to CAT21_ORD_SRC in the compose, so this one var feeds both.
           CAT21_ORD_SRC: ${{ github.workspace }}/cat21-ord
         run: |
           frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh \
             --buildx-cache \
             --with-cat21-ord \
+            --with-ord-stock \
             > stack.json
           cat stack.json
 
@@ -115,6 +122,21 @@ jobs:
             if [ "$i" = "120" ]; then
               echo "cat21-ord never came up (last HTTP $code)"
               docker logs ordpool-e2e-consumer-cat21-ord --tail 100 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Wait for ord-stock ready on :8081
+        run: |
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost:8081/status 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "ord-stock up"; break
+            fi
+            if [ "$i" = "120" ]; then
+              echo "ord-stock never came up (last HTTP $code)"
+              docker logs ordpool-e2e-consumer-ord-stock --tail 100 || true
               exit 1
             fi
             sleep 2
@@ -204,25 +226,27 @@ jobs:
         working-directory: sdk
         run: bash e2e/playwright/playwright-bootstrap.sh cat21wallet
 
-      # Patch config for regtest. Same seds the mint workflow uses (proven), so
-      # the built frontend's cat lookup hits REAL cat21-ord (:8080 via
-      # environment.prod.ts ordExplorer), the buyer-funding scan hits the :8999
-      # stub (clean body — the buyer coin is a plain fundCommonSats coin), and
-      # the frontend's backend API points at :9998.
+      # Patch config for regtest, ZERO mock on the ord surfaces:
+      #   - ord.cat21.space -> :8080  (real cat21-ord: target-cat lookup)
+      #   - ord.ordpool.space -> :8081 (real stock ord: buyer-funding inscription
+      #     scan; the buyer coin is clean, so real stock ord reports it clean)
+      #   - api.ordpool.space -> :8999 (fees + electrs proxy; the stub forwards
+      #     /tx to real electrs :3010, so the getTargetByNumber cross-check is real)
+      #   - backend2.cat21.space -> :9998 (real synced NestJS backend)
       - name: Patch cat21Config + bitcoinNetwork for regtest
         working-directory: frontend
         run: |
           sed -i \
             -e "s|https://api\.ordpool\.space|http://localhost:8999|g" \
             -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
-            -e "s|https://ord\.ordpool\.space|http://localhost:8999|g" \
-            -e "s|https://ord\.cat21\.space|http://localhost:8999|g" \
+            -e "s|https://ord\.ordpool\.space|http://localhost:8081|g" \
+            -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
             -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
             src/app/app.config.ts
           sed -i \
             -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
             -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
-            -e "s|https://ord\.ordpool\.space|http://localhost:8999|g" \
+            -e "s|https://ord\.ordpool\.space|http://localhost:8081|g" \
             src/environments/environment.prod.ts
 
       - name: Build static frontend bundle
