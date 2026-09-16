@@ -49,6 +49,11 @@ jobs:
       # default `ordpool-e2e-bitcoind` no longer exists — the consumer
       # bitcoind is the only one. rpc() + seedListedCat target it by name.
       REGTEST_BITCOIND_CONTAINER: ordpool-e2e-consumer-bitcoind
+      # seedDirtyCoin's inscription/rune/rareSat classes seed via `docker exec`
+      # into the ord-stock wallet (and cat via cat21-ord), so the helpers need
+      # the real container names — our consumer stack prefixes them.
+      REGTEST_ORD_CONTAINER: ordpool-e2e-consumer-cat21-ord
+      REGTEST_ORD_STOCK_CONTAINER: ordpool-e2e-consumer-ord-stock
     steps:
       - name: Checkout cat21-indexer
         uses: actions/checkout@v4
