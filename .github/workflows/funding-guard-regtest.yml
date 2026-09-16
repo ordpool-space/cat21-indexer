@@ -163,8 +163,15 @@ jobs:
       # seed. Under pin 6f4d6a7's per-project stacks, running both would collide
       # a second bitcoind on :18443.
 
+      # Pin the seed user-data-dir to ONE explicit absolute path, outside the
+      # SDK's Playwright outputDir (which Playwright clears each run) and
+      # independent of the SDK's default, which has moved between versions
+      # (c5797d0 moved it off test-results). globalSetup honours this env, so
+      # onboarding writes exactly where the spec reads — no version coupling.
       - name: Run SDK's Xverse onboarding (produces seeded user-data-dir)
         working-directory: sdk
+        env:
+          XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/xverse-seed/user-data-dir
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
             npx playwright test e2e/playwright/specs/xverse-loads.spec.ts \
@@ -172,8 +179,8 @@ jobs:
 
       - name: Verify seed user-data-dir landed
         run: |
-          test -d sdk/test-results/xverse-seed-user-data-dir/Default \
-            || { echo "no seed user-data-dir"; ls sdk/test-results/; exit 1; }
+          test -d "${{ github.workspace }}/xverse-seed/user-data-dir/Default" \
+            || { echo "no seed user-data-dir at ${{ github.workspace }}/xverse-seed/user-data-dir"; ls -la "${{ github.workspace }}/xverse-seed" 2>/dev/null || true; exit 1; }
 
       # ── Patch cat21Config for the guard: the scanner reads REAL ords ──
       #
@@ -261,7 +268,7 @@ jobs:
         working-directory: frontend
         env:
           XVERSE_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/xverse
-          XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/sdk/test-results/xverse-seed-user-data-dir
+          XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/xverse-seed/user-data-dir
           FRONTEND_URL: http://localhost:4221
           # seedInscribedCoin docker-execs into these by name.
           REGTEST_ORD_CONTAINER: ordpool-e2e-consumer-cat21-ord

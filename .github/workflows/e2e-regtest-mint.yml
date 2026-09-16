@@ -174,8 +174,14 @@ jobs:
       # running both would stand up a second bitcoind that collides on host
       # :18443. The consumer stack alone funds the chain for the onboarding seed.
 
+      # Pin the seed user-data-dir to ONE explicit absolute path, outside the
+      # SDK's Playwright outputDir (cleared each run) and independent of the
+      # SDK's default, which moved between versions (c5797d0). globalSetup
+      # honours this env, so onboarding writes exactly where the spec reads.
       - name: Run SDK's Xverse onboarding (produces seeded user-data-dir)
         working-directory: sdk
+        env:
+          XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/xverse-seed/user-data-dir
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
             npx playwright test e2e/playwright/specs/xverse-loads.spec.ts \
@@ -183,8 +189,8 @@ jobs:
 
       - name: Verify seed user-data-dir landed
         run: |
-          test -d sdk/test-results/xverse-seed-user-data-dir/Default \
-            || { echo "no seed user-data-dir"; ls sdk/test-results/; exit 1; }
+          test -d "${{ github.workspace }}/xverse-seed/user-data-dir/Default" \
+            || { echo "no seed user-data-dir at ${{ github.workspace }}/xverse-seed/user-data-dir"; ls -la "${{ github.workspace }}/xverse-seed" 2>/dev/null || true; exit 1; }
 
       # ── Patch the frontend's cat21Config to point at the local stack ──
       #
@@ -301,7 +307,7 @@ jobs:
         working-directory: frontend
         env:
           XVERSE_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/xverse
-          XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/sdk/test-results/xverse-seed-user-data-dir
+          XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/xverse-seed/user-data-dir
           FRONTEND_URL: http://localhost:4221
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
