@@ -206,13 +206,23 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
   await expect(seededRow).toBeVisible({ timeout: 60_000 });
   await shot(page, '01-picker');
 
-  // ─── 5. Supporting checks (fire on the rare sat too — NOT the proof) ─
-  // The row is bucketed 'assets' and offers "Use anyway", not auto-selected.
-  await expect(seededRow).toHaveClass(/mint-utxo-row-assets/);
+  // ─── 5. Scan the coin (it is above AUTO_SCAN_MAX_VALUE_SAT = 50k) ──
+  // seedInscribedCoin sizes the coin at 2M sat to be a genuine funding
+  // candidate, which is above the auto-scan threshold — so the mint shows it
+  // 'unscanned' with a manual Scan (large coins are not auto-scanned). Clicking
+  // Scan runs the REAL scan against stock ord; that is the realistic path for a
+  // chunky funding coin, and it is what flips the row to 'assets'.
+  await expect(seededRow).toHaveClass(/mint-utxo-row-unscanned/, { timeout: 60_000 });
+  await seededRow.getByRole('button', { name: 'Scan', exact: true }).click();
+
+  // ─── 6. Supporting checks (fire on the rare sat too — NOT the proof) ─
+  // After the scan the row is bucketed 'assets' and offers "Use anyway", not
+  // auto-selected. Generous timeout: the scan is a live HTTP round-trip to ord.
+  await expect(seededRow).toHaveClass(/mint-utxo-row-assets/, { timeout: 60_000 });
   const overrideBtn = seededRow.locator('.mint-utxo-pick-override');
   await expect(overrideBtn).toBeVisible({ timeout: 30_000 });
 
-  // ─── 6. Override, then read the warning panel ────────────────────
+  // ─── 7. Override, then read the warning panel ────────────────────
   await overrideBtn.click();
   const warning = page.getByTestId('asset-found-warning');
   await expect(warning).toBeVisible({ timeout: 30_000 });
