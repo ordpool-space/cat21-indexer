@@ -23,6 +23,8 @@ on:
       - 'frontend/e2e/regtest/funding-guard-inscription-regtest.spec.ts'
       - 'frontend/e2e/regtest/lib/**'
       - 'frontend/playwright.regtest.config.ts'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
       - '.github/workflows/funding-guard-regtest.yml'
 
 permissions:
