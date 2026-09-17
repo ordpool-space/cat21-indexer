@@ -1,25 +1,23 @@
 name: E2E (regtest mint dirty-coin — cat21-wallet)
 
-# Drives the cat21.space make-offer PAGE end to end on a real regtest stack,
-# ZERO mock. The buyer (cat21-wallet) fills the form and the PAGE builds +
-# buyer-signs the buy-offer PSBT; a neutral bitcoin-cli seller signs input 0
-# and broadcasts. The load-bearing assertion is that the seller is paid at the
-# address the buyer TYPED (P), never the cat's on-chain owner (O) — the
-# 2026-07-18 regression guard.
+# Drives the cat21.space MINT funding guard end to end on a real regtest stack,
+# ZERO mock, for all four dirty-coin classes. cat21-wallet mints while holding a
+# coin that carries a real inscription / cat / rune / rare sat; the SDK's
+# class-agnostic recommendFunding guard must fund the mint from the clean coin
+# and leave the dirty coin unspent (asserted on-chain). Same locked shape as the
+# make-offer dirty-coin lane; the recommendFunding mutation (throwaway branch)
+# turns all four cells red.
 #
-# Unlike the mint / transfer specs, the make-offer cat lookup needs a REAL,
-# SYNCED backend: getTargetByNumber chains /api/cat/:N (NestJS backend) ->
-# cat21-ord (:8080, satpoint + owner) -> electrs (scriptPubKey cross-check).
-# So the backend here runs with ORD_API_URL=:8080 (real cat21-ord), NOT the
-# :8999 stub the mint workflow uses — the seeded cat must actually appear in
-# /api/cat/:N. A hand-typed /api/cat/:N stub is banned (it is the same shape as
-# the getCatsAtOutput production bug: a mock that encodes the code's own wrong
-# assumption).
+# The funding scan hits the real ords the config sed wires in: stock ord (:8081)
+# for inscriptions/runes/rare sats, cat21-ord (:8080) for cats. seedDirtyCoin
+# seeds each class through those ords' wallets. No backend lookup is needed for
+# mint (the cat is created, not looked up), but the backend is left running for
+# parity with the shared stack and is harmless.
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '44 3 * * *'   # nightly at 03:41 UTC (offset from the other regtest runs)
+    - cron: '44 3 * * *'   # nightly at 03:44 UTC (offset from the other regtest runs)
   push:
     paths:
       - 'frontend/e2e/regtest/cat21wallet-mint-dirtycoin-regtest.spec.ts'
@@ -31,7 +29,7 @@ on:
       - 'frontend/src/app/shared/utxo-picker/**'
       - 'frontend/src/app/shared/fees-picker/**'
       - 'backend/src/**'
-      - '.github/workflows/make-offer-regtest.yml'
+      - '.github/workflows/mint-dirtycoin-regtest.yml'
 
 permissions:
   contents: read
@@ -41,7 +39,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  make-offer-regtest:
+  mint-dirtycoin-regtest:
     name: Regtest mint dirty-coin (real ord, no mock)
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -80,8 +78,8 @@ jobs:
           ref: ordpool
           path: ordpool-electrs
 
-      # cat21-ord — the REAL cat index the make-offer lookup AND the backend's
-      # sync both read. The seeded cat is indexed here at :8080.
+      # cat21-ord — the REAL cat index the funding scan (cat check) and seedDirtyCoin's cat class read.
+      # seedDirtyCoin('cat') mints an nLockTime=21 cat here at :8080.
       - name: Checkout cat21-ord (for the cat21-ord container)
         uses: actions/checkout@v4
         with:
