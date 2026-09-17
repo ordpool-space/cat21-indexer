@@ -173,17 +173,31 @@ test.afterAll(async () => {
  * One transfer dirty-coin cell at a given asset class. Load-bearing assertion:
  * the dirty coin's outpoint is UNSPENT after the transfer confirms — the guard
  * funded the fee from the clean coin.
+ *
+ * `dirtySats` MUST strictly decrease across the four cells (see the call sites).
+ * All four cells share ONE wallet + ONE payment address and run sequentially, so
+ * every earlier cell leaves coins behind at that address: a ~40k clean change in
+ * the green run, or a dirty-coin change (`prev_dirty - fee`) in the mutation run.
+ * ord's best-fit selection picks the GLOBALLY smallest covering coin, so this
+ * cell's dirty coin only counts as "the coin an unguarded selection would take"
+ * if it is smaller than everything already sitting there. Clean coins are always
+ * ~40k, so they never compete; the risk is a PRIOR dirty-coin change. Stepping
+ * the dirty size down by 3_000 (> any transfer fee at 5 sat/vB) keeps this cell's
+ * dirty coin below every prior dirty-coin change, so it is the unique global
+ * smallest covering coin — and the mutation spends THIS coin, not a leftover.
+ * A constant size made three of four cells pass under the mutation (a false
+ * green): the mutation spent some earlier leftover and left this cell's coin
+ * untouched.
  */
-async function runTransferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
+async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): Promise<void> {
   const tag = `transfer:dirty:${asset}`;
   const CAT_VALUE = 546;
-  const DIRTY_SATS = 10_000; // covers the small transfer fee, < clean, < 50k auto-scan floor
-  const CLEAN_SATS = 40_000; // covers comfortably, > dirty, < 50k
+  const CLEAN_SATS = 40_000; // covers comfortably, > every dirty size, < 50k auto-scan floor
 
   // ─── 1. Connect the sender (cat21-wallet) ───────────────────────
   const page = await context.newPage();
   const { paymentAddress: payment, ordinalsAddress: ordinals } = await connectAndReadAddresses(page);
-  console.log(`[${tag}] payment=${payment} ordinals=${ordinals}`);
+  console.log(`[${tag}] payment=${payment} ordinals=${ordinals} dirtySats=${dirtySats}`);
 
   // ─── 2. The wallet must OWN a cat to transfer: seed one to its
   //        ordinals address (the wallet then holds + can sign it). ──
@@ -191,9 +205,10 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   console.log(`[${tag}] cat to transfer: ${listed.txid}:${listed.vout} value=${listed.value} at ${ordinals}`);
 
   // ─── 3. Fee funding: a CLEAN coin the guard should fund FROM, and a DIRTY
-  //        coin an unguarded best-fit would pick FIRST (it is smaller). ─
+  //        coin an unguarded best-fit would pick FIRST (it is the smallest
+  //        covering coin in the whole shared wallet — see the JSDoc). ─
   await fundCommonSats(payment, CLEAN_SATS / 1e8);
-  const dirty = await seedDirtyCoin({ asset, address: payment, valueSats: DIRTY_SATS });
+  const dirty = await seedDirtyCoin({ asset, address: payment, valueSats: dirtySats });
   console.log(`[${tag}] dirty ${asset} coin ${dirty.outpoint} value=${dirty.value} assetId=${dirty.assetId}`);
 
   // ─── 4. Drive transfer via the ?catTxid override (deterministic cat
@@ -268,18 +283,21 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   await page.close();
 }
 
+// dirtySats STRICTLY DECREASES 12k -> 9k -> 6k -> 3k (step 3_000 > any transfer
+// fee at 5 sat/vB), so each cell's dirty coin is the global smallest covering
+// coin in the shared wallet despite prior cells' leftovers — see runTransferDirtyCell's JSDoc.
 test('transfer dirty-coin guard: an INSCRIPTION funding coin is not spent', { timeout: 300_000 }, async () => {
-  await runTransferDirtyCell('inscription');
+  await runTransferDirtyCell('inscription', 12_000);
 });
 
 test('transfer dirty-coin guard: a CAT funding coin is not spent', { timeout: 300_000 }, async () => {
-  await runTransferDirtyCell('cat');
+  await runTransferDirtyCell('cat', 9_000);
 });
 
 test('transfer dirty-coin guard: a RUNE funding coin is not spent', { timeout: 300_000 }, async () => {
-  await runTransferDirtyCell('rune');
+  await runTransferDirtyCell('rune', 6_000);
 });
 
 test('transfer dirty-coin guard: a RARE-SAT funding coin is not spent', { timeout: 300_000 }, async () => {
-  await runTransferDirtyCell('rareSat');
+  await runTransferDirtyCell('rareSat', 3_000);
 });
