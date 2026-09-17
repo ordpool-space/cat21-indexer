@@ -29,15 +29,30 @@ import { installContextErrorGuard } from './lib/browser-error-guard';
  * address, sized so an UNGUARDED best-fit would pick it: dirty < clean, both
  * cover the mint requirement (postage + fee, small — recomputed for THIS flow,
  * not carried from the offer flow), both under the 50k auto-scan floor so both
- * get scanned. The guard (the SDK's class-agnostic recommendFunding) must fund
- * the mint from the CLEAN coin, leaving the dirty coin's outpoint UNSPENT.
+ * get scanned. The guard (the SDK's class-agnostic recommendFunding) must
+ * auto-select the CLEAN coin.
+ *
+ * THE LOAD-BEARING assertion is that the mint page auto-selects a clean coin —
+ * `mint-found-funds` is visible and `mint-btn` is mintable. This is where the
+ * mint flow DIFFERS from make-offer: the mint UI gates the safe-mint path on the
+ * selected coin's bucket (mint-found-funds shows only for a clean/unscanned
+ * coin; an `assets` coin shows the asset-warning and offers only "use anyway").
+ * So the guard's protection for the mint flow manifests at SELECTION.
  *
  * GREEN is not evidence on its own. The mutation is ONE class-agnostic lever
  * (throwaway branch, in the workflow): neutralise recommendFunding's clean
  * filter in the installed SDK dist so every covering coin is selectable; best-fit
- * then takes the smaller dirty coin and the mint spends it, turning ALL four
- * cells RED naming their asset. Immune to the incidental rare sat every
- * seedInscribedCoin coin carries, because classification is not consulted.
+ * then auto-picks the smaller DIRTY coin. Because its bucket is still `assets`,
+ * the page shows the asset-warning instead of `mint-found-funds`, so the
+ * `mint-found-funds`-visible assertion goes RED in all four cells, each naming
+ * its asset. Immune to the incidental rare sat every seedInscribedCoin coin
+ * carries, because classification is not consulted under this mutation.
+ *
+ * The on-chain survival check (dirty outpoint unspent after the mint) is a
+ * GREEN-PATH confirmation, NOT the mutation target: the mint UI's bucket-gating
+ * is a second protection layer that stops the dirty coin from ever being minted,
+ * so this mutation cannot make it get spent. It corroborates that the mint spent
+ * the clean coin; the selection assertion above is the mutation-proven one.
  *
  * CI-only (real cat21-wallet binary + full regtest stack); the regtest
  * playwright config refuses to run locally.
@@ -198,10 +213,16 @@ async function runMintDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   await manualInput.fill(String(RATE));
   await manualInput.press('Tab');
 
-  // The guard funds from the clean coin, so mint-found-funds shows and mint-btn
-  // enables. (Under the mutation the dirty coin is picked instead, but the mint
-  // still proceeds — the proof is on-chain, below.)
-  await expect(page.getByTestId('mint-found-funds')).toBeVisible({ timeout: 90_000 });
+  // THE LOAD-BEARING assertion: the guard auto-selected a CLEAN coin, so the
+  // mint page shows mint-found-funds and a mintable mint-btn. Under the
+  // recommendFunding mutation the dirty coin is auto-selected instead; its bucket
+  // is 'assets', so the page shows the asset-warning and this assertion goes RED
+  // (mint-found-funds absent, mint-btn not rendered). That red is the proof the
+  // guard's clean-coin auto-selection is load-bearing.
+  await expect(
+    page.getByTestId('mint-found-funds'),
+    `mint funding guard failed: no clean coin auto-selected for the ${asset} case — the dirty coin was picked and the page is in the asset-warning state`,
+  ).toBeVisible({ timeout: 90_000 });
   const mintBtn = page.getByTestId('mint-btn');
   await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
   await shot(page, `${asset}-01-ready`);
@@ -227,12 +248,16 @@ async function runMintDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   const mintTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
   console.log(`[${tag}] mint txid=${mintTxid}`);
 
-  // ─── 5. Confirm + THE PROOF: the dirty coin was NOT spent ───────
+  // ─── 5. Confirm + GREEN-PATH on-chain confirmation ──────────────
+  // The mint spent the clean coin, so the dirty coin's outpoint survives. This
+  // is a corroborating check, NOT the mutation target: the mint UI's
+  // bucket-gating (asserted above) stops a dirty coin from being minted at all,
+  // so the recommendFunding mutation reds at mint-found-funds, not here.
   mineBlocks(1);
   await waitForTxConfirmed(mintTxid, 30_000);
   // gettxout returns the txout for an unspent outpoint, empty for a spent one.
   const txout = rpc('gettxout', dirty.txid, String(dirty.vout)).trim();
-  expect(txout.length, `dirty ${asset} coin ${dirty.outpoint} was SPENT — the mint funding guard did not steer away from it`).toBeGreaterThan(0);
+  expect(txout.length, `dirty ${asset} coin ${dirty.outpoint} was SPENT by the mint`).toBeGreaterThan(0);
   const mintRaw = JSON.parse(
     rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', mintTxid, '2'),
   ) as { vin: Array<{ txid: string; vout: number }> };
