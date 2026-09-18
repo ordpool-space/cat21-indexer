@@ -20,6 +20,10 @@ import {
  *   case1-safe    — a clean coin covers: found-funds, CTA enabled, quiet.
  *   case2-notice  — dirty-only pool, separate-address wallet: the NOTICE naming
  *                   the asset, CTA still ENABLED, both in one viewport.
+ *   case5-overpay — a clean coin in the dust-cliff band: covers the mint but its
+ *                   sub-dust change folds into the fee, so its row shows the
+ *                   over-pay state. Asserted (not just captured) via
+ *                   [data-fee-state="overpay"].
  *   case4-expert  — the funding picker open, the recommended coin labelled and
  *                   the assets NAMED.
  *
@@ -163,6 +167,30 @@ test('capture cat21.space mint funding-state screenshots', { timeout: 300_000 },
   await page.getByTestId('mint-btn').scrollIntoViewIfNeeded().catch(() => undefined);
   await shot(page, 'case1-safe');
   console.log('[screenshots] case1-safe captured');
+
+  // ── CASE 5: OVER-PAY — a clean coin in the DUST-CLIFF band ──────────
+  // The middle fee state (the one a healthy wallet never shows by accident):
+  // a coin that CAN fund but whose leftover change would land below the dust
+  // floor, so those sats fold into the miner fee instead of returning. Sized
+  // from the observed case4 numbers (5 sat/vB -> mint tx 765 sat; postage 546;
+  // dust floor 546): 1 500 sat covers (546 + fee) yet its change (1 500 - 546 -
+  // 765 = 189) is sub-dust, so it renders as the over-pay state. This is the
+  // smallest covering clean coin, so it is also the recommendation.
+  await fundCommonSats(payment, 1_500 / 1e8);
+  await reloadMint(page);
+  await setFee(page, 5);
+  const picker5 = page.locator('[data-testid^="utxo-row-"]').first();
+  if (!(await picker5.isVisible().catch(() => false))) {
+    await page.getByText('Choose a different funding source', { exact: false }).click().catch(() => undefined);
+  }
+  // ASSERT the over-pay state actually rendered (not just capture a frame): the
+  // [data-fee-state="overpay"] row exists only when absorbedSubDustSats > 0. If
+  // the coin sizing missed the band, this reds instead of shipping a wrong shot.
+  const overpayRow = page.locator('[data-fee-state="overpay"]').first();
+  await expect(overpayRow).toBeVisible({ timeout: 120_000 });
+  await overpayRow.scrollIntoViewIfNeeded().catch(() => undefined);
+  await shot(page, 'case5-overpay');
+  console.log('[screenshots] case5-overpay captured');
 
   await page.close();
 });
