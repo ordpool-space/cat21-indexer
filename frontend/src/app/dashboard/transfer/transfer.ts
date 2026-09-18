@@ -5,12 +5,15 @@ import { EMPTY, firstValueFrom } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import * as btc from '@scure/btc-signer';
 import {
+  CandidateFeeRow,
   Cat21Service,
   Cat21TransferOrchestrator,
   TransferSnapshot,
   TxnOutput,
+  UtxoAssetDetail,
   WalletCapability,
   WalletService,
+  outpointKey,
   parseTransferQueryParams,
   toScureNetwork,
 } from 'ordpool-sdk';
@@ -19,7 +22,10 @@ import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
+import { inscriptionReviewLink, runeEtchingReviewLink } from '../../shared/funding-asset-links';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
+import { rareSatLabel } from '../../shared/rare-sat-label';
+import { RuneEtchingService } from '../../shared/rune-etching.service';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 import { CatUtxoLookupService, MyCatHolding } from '../../shared/cat-utxo-lookup.service';
@@ -43,11 +49,17 @@ export class Transfer {
   private network = inject(bitcoinNetwork);
   private destroyRef = inject(DestroyRef);
 
+  private runeEtching = inject(RuneEtchingService);
+
   /** Constructed transfer orchestrator (shared ports; signing internal). */
   private orch = new Cat21TransferOrchestrator(
-    // No `fundingTopology` yet: transfer keeps the safe over-block on a
-    // dirty-only funding pool until its own topology slice wires the notice.
-    cat21OrchestratorPorts(this.cat21, this.config, this.network),
+    // `'derive'` opts transfer into the asset-to-miner safeguard, same as mint:
+    // a separate-address wallet with a dirty-only funding pool NOTICEs and
+    // proceeds (asset-notice); a one-address wallet WARNs and blocks
+    // (expert-required). The orchestrator resolves the topology from the wallet
+    // context it holds. MUST ship together with the notice UI below — enabling
+    // asset-notice without rendering it is a disabled CTA with no reason.
+    cat21OrchestratorPorts(this.cat21, this.config, this.network, 'derive'),
   );
   private snap = signal<TransferSnapshot>(this.orch.getSnapshot());
 
@@ -121,6 +133,56 @@ export class Transfer {
   readonly fundingExpertRequired = computed(
     () => this.fundingRecommendation().status === 'expert-required',
   );
+
+  /**
+   * `asset-notice`: no clean coin covers the fee, but a dirty one does AND the
+   * wallet keeps a SEPARATE payment address, so the SDK auto-selects the dirty
+   * coin and we INFORM rather than block (the asset-to-miner ruling). CTA stays
+   * enabled; the obligation is to NAME what sits on the coin before the click.
+   * On this branch the recommended coin can ITSELF over-pay (dirty-branch best-fit
+   * is against the requirement, not the preferred target) — that ★+over-pay pair
+   * is intended, rendered by the picker, not a bug.
+   */
+  readonly assetNotice = computed(() => this.fundingRecommendation().status === 'asset-notice');
+
+  /**
+   * The asset detail the notice must name, from the RECOMMENDATION itself (the
+   * coin the selection would have taken had it been clean), never a second scan.
+   * Null unless the status is `asset-notice`.
+   */
+  readonly noticeAssets = computed<UtxoAssetDetail | null>(() => {
+    const rec = this.fundingRecommendation();
+    return rec.status === 'asset-notice' ? (rec.recommended?.assets ?? null) : null;
+  });
+
+  /**
+   * Per-coin fee for the picker's fee column, keyed by `outpointKey`, from the
+   * snapshot's `candidateFees` (SDK owns the three fee states via
+   * `absorbedSubDustSats`). Present on every status where a picker renders.
+   */
+  readonly feeByOutpoint = computed<ReadonlyMap<string, CandidateFeeRow>>(
+    () => new Map(this.snap().candidateFees.map((f) => [outpointKey(f), f])),
+  );
+
+  /** `outpointKey` of the SDK-recommended coin, for the picker's mark-in-place
+   *  recommendation (never a re-sort). Null when the SDK returns no pick. */
+  readonly recommendedOutpoint = computed<string | null>(() => {
+    const r = this.fundingRecommendation().recommended;
+    return r ? outpointKey(r) : null;
+  });
+
+  /** In-family review link for an inscription/cat found on a funding UTXO. */
+  readonly inscriptionReviewLink = inscriptionReviewLink;
+
+  /** Shared rare-sat identity line; same on the picker. */
+  readonly rareSatLabel = rareSatLabel;
+
+  /** In-family etching-tx link for a rune once resolved, else null (plain text).
+   *  Resolution is kicked off per notice by the effect in the constructor. */
+  runeEtchingHref(name: string): string | null {
+    const txid = this.runeEtching.etchings().get(name);
+    return txid ? runeEtchingReviewLink(txid, name) : null;
+  }
 
   // ---------- My cats — async load ----------
 
@@ -202,6 +264,15 @@ export class Transfer {
   constructor() {
     // Bind the orchestrator snapshot to a signal; unsubscribe on destroy.
     this.destroyRef.onDestroy(this.orch.subscribe((s) => this.snap.set(s)));
+
+    // Resolve rune etchings named in the asset-notice so the notice links them,
+    // when the notice appears (not per render). The service is idempotent + caches.
+    effect(() => {
+      const assets = this.noticeAssets();
+      if (assets && assets.runeNames.length > 0) {
+        this.runeEtching.resolve(assets.runeNames);
+      }
+    });
 
     // Push the connected wallet into the orchestrator (it fetches funding UTXOs
     // + recomputes). Async + dedupes internally.
