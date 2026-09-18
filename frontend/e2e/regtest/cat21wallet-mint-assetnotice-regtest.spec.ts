@@ -301,15 +301,15 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
     // override control are rendered; expand it defensively.
     const pickerToggle = page.getByText('Choose a different funding source', { exact: false });
     if (await pickerToggle.isVisible().catch(() => false)) {
-      const anyRow = page.locator('[data-testid^="mint-utxo-row-"]').first();
+      const anyRow = page.locator('[data-testid^="utxo-row-"]').first();
       if (!(await anyRow.isVisible().catch(() => false))) await pickerToggle.click().catch(() => undefined);
     }
-    const overrideRatio = await measuredTextContrast(page, '.mint-utxo-pick-override');
+    const overrideRatio = await measuredTextContrast(page, '.utxo-pick-override');
     expect(
       overrideRatio,
       `"Use anyway"/"Selected" override control contrast is ${overrideRatio.toFixed(2)}:1 on the rendered page (WCAG AA needs 4.5) — this is the one control that spends an asset coin`,
     ).toBeGreaterThanOrEqual(4.5);
-    const badgeRatio = await measuredTextContrast(page, '[class~="mint-utxo-bucket-assets"]');
+    const badgeRatio = await measuredTextContrast(page, '[class~="utxo-bucket-assets"]');
     expect(
       badgeRatio,
       `the "asset found" status badge contrast is ${badgeRatio.toFixed(2)}:1 on the rendered page (WCAG AA needs 4.5)`,

@@ -40,27 +40,38 @@
   }
 }
 
+// The picker renders on cat21's orange body (mint / transfer / offer), so its
+// controls carry white text on a transparent ground rather than a light-palette
+// colour: a coloured outline (blue/red) on #FF9900 is a warm-on-warm muddle that
+// fails WCAG. White reads.
 .utxo-pick {
   padding: 0.25rem 0.6rem;
-  border: 1px solid var(--bs-primary, #0d6efd);
+  border: 2px solid currentColor;
   border-radius: 4px;
   background: transparent;
-  color: var(--bs-primary, #0d6efd);
+  color: white;
   cursor: pointer;
   font-size: var(--fs-sm);
 
-  &:hover { background: var(--bs-primary, #0d6efd); color: white; }
-  &.utxo-pick-override {
-    border-color: var(--bs-danger, #dc3545);
-    color: var(--bs-danger, #dc3545);
-    &:hover { background: var(--bs-danger, #dc3545); color: white; }
-  }
+  &:hover { background: rgba(0, 0, 0, 0.15); }
+}
+
+// The one control that spends an asset coin. A filled danger badge (dark text on
+// a light-red ground) carries its own contrast on ANY background — measured at
+// 7.08:1 on the orange body — so the deliberate-override action always reads.
+// Same palette as the "asset found" bucket badge, so the two cannot drift.
+.utxo-pick-override {
+  background: #f8d7da;
+  color: #842029;
+  border-color: #842029;
+
+  &:hover { background: #f1aeb5; }
 }
 
 .utxo-id {
   flex: 1 1 220px;
   font-size: var(--fs-sm);
-  color: var(--bs-secondary, #6c757d);
+  font-family: monospace;
   word-break: break-all;
 }
 
@@ -73,7 +84,7 @@
 .utxo-pick:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  &:hover { background: transparent; color: var(--bs-primary, #0d6efd); }
+  &:hover { background: transparent; }
 }
 
 // The fee this coin would cost. Plain text so it inherits the panel's own text

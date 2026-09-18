@@ -458,10 +458,10 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
  *   1. The orchestrator queries `/output/<outpoint>` on both ord
  *      URLs for funding-source UTXOs ≤ 50_000 sat.
  *   2. When the response carries assets, the row's bucket flips to
- *      `assets` and the row gets the `.mint-utxo-row-assets` class
- *      + `⚠ asset found` bucket badge.
+ *      `assets` (observable on its `[data-bucket]` attribute) with the
+ *      `⚠ asset found` bucket badge.
  *   3. The action button on that row reads "Use anyway" with the
- *      `.mint-utxo-pick-override` styling — a deliberate friction
+ *      `.utxo-pick-override` styling — a deliberate friction
  *      step so the user can't single-click into a cat-burning mint.
  */
 test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning', { timeout: 180_000 }, async () => {
@@ -561,18 +561,22 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   }
   await shot(page, 'as-02-picker-open');
 
-  // Assert the cat-mocked row carries the assets styling.
-  const assetRow = page.getByTestId('mint-utxo-row-assets').filter({ hasText: catOutpoint }).first();
+  // Find the cat-mocked row by IDENTITY (its outpoint text), then assert its
+  // bucket flipped to `assets` — the two acts the old bucket-keyed test-id did
+  // at once, kept separate so the async scan transition has its own retry and the
+  // bucket proof is explicit rather than a side effect of the selector resolving.
+  const assetRow = page.locator('[data-testid^="utxo-row-"]').filter({ hasText: catOutpoint }).first();
   await expect(assetRow).toBeVisible({ timeout: 45_000 });
+  await expect(assetRow).toHaveAttribute('data-bucket', 'assets', { timeout: 45_000 });
   await shot(page, 'as-03-asset-row-visible');
 
   // Bucket badge text + class.
-  const bucketBadge = assetRow.locator('.mint-utxo-bucket-assets');
+  const bucketBadge = assetRow.locator('.utxo-bucket-assets');
   await expect(bucketBadge).toBeVisible();
   await expect(bucketBadge).toHaveText(/asset found/i);
 
   // Action button is the override variant.
-  const overrideBtn = assetRow.locator('.mint-utxo-pick-override');
+  const overrideBtn = assetRow.locator('.utxo-pick-override');
   await expect(overrideBtn).toBeVisible();
   await expect(overrideBtn).toHaveText(/use anyway/i);
 

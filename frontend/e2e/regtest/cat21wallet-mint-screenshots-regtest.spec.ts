@@ -146,7 +146,7 @@ test('capture cat21.space mint funding-state screenshots', { timeout: 300_000 },
   // ── CASE 4: EXPERT — the funding picker, recommended coin labelled + assets named ──
   // The picker opens by default when the selected coin carries assets; expand it
   // only if its rows are not already visible, so the toggle never closes it.
-  const anyRow = page.locator('[data-testid^="mint-utxo-row-"]').first();
+  const anyRow = page.locator('[data-testid^="utxo-row-"]').first();
   if (!(await anyRow.isVisible().catch(() => false))) {
     await page.getByText('Choose a different funding source', { exact: false }).click().catch(() => undefined);
   }

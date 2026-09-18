@@ -615,10 +615,14 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
     await pickerSummary.click();
   }
 
-  // Asset row + override.
-  const assetRow = page.getByTestId('mint-utxo-row-assets').filter({ hasText: catOutpoint }).first();
+  // Asset row + override. Find by IDENTITY (outpoint text), then explicitly
+  // assert the bucket flipped to `assets` — the old bucket-keyed test-id proved
+  // that implicitly (it only resolved on an assets row); the identity id does
+  // not, so the bucket proof must be its own assertion or it is silently lost.
+  const assetRow = page.locator('[data-testid^="utxo-row-"]').filter({ hasText: catOutpoint }).first();
   await expect(assetRow).toBeVisible({ timeout: 45_000 });
-  const overrideBtn = assetRow.locator('.mint-utxo-pick-override');
+  await expect(assetRow).toHaveAttribute('data-bucket', 'assets', { timeout: 45_000 });
+  const overrideBtn = assetRow.locator('.utxo-pick-override');
   await expect(overrideBtn).toBeVisible();
   await overrideBtn.click();
 

@@ -205,8 +205,9 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
   if ((await page.locator('details[data-testid="mint-expert"][open]').count()) === 0) {
     await pickerSummary.click();
   }
-  // The row carries data-outpoint on the <li> itself; match on that directly.
-  const seededRow = page.locator(`li.mint-utxo-row[data-outpoint="${inscribedOutpoint}"]`).first();
+  // The shared picker keys each row by IDENTITY (data-testid utxo-row-<txid>-<vout>)
+  // and renders the outpoint as text; match on the outpoint text to find the row.
+  const seededRow = page.locator('[data-testid^="utxo-row-"]').filter({ hasText: inscribedOutpoint }).first();
   await expect(seededRow).toBeVisible({ timeout: 60_000 });
   await shot(page, '01-picker');
 
@@ -216,18 +217,17 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
   // 'unscanned' with a manual Scan (large coins are not auto-scanned). Clicking
   // Scan runs the REAL scan against stock ord; that is the realistic path for a
   // chunky funding coin, and it is what flips the row to 'assets'.
-  // The bucket state lives in data-testid ('mint-utxo-row-<bucket>'), NOT the
-  // class list — only 'assets'/'clean'/'selected' get a class binding, so
-  // 'unscanned' is observable on data-testid alone.
-  await expect(seededRow).toHaveAttribute('data-testid', 'mint-utxo-row-unscanned', { timeout: 60_000 });
+  // The bucket state lives in the [data-bucket] attribute (identity stays in the
+  // test-id), so it is directly assertable and stable across the transition.
+  await expect(seededRow).toHaveAttribute('data-bucket', 'unscanned', { timeout: 60_000 });
   await seededRow.getByRole('button', { name: 'Scan', exact: true }).click();
 
   // ─── 6. Supporting checks (fire on the rare sat too — NOT the proof) ─
   // After the scan the row is bucketed 'assets' and offers "Use anyway", not
   // auto-selected. Generous timeout: the scan is a live HTTP round-trip to ord,
   // passing through a transient 'scanning' bucket first.
-  await expect(seededRow).toHaveAttribute('data-testid', 'mint-utxo-row-assets', { timeout: 60_000 });
-  const overrideBtn = seededRow.locator('.mint-utxo-pick-override');
+  await expect(seededRow).toHaveAttribute('data-bucket', 'assets', { timeout: 60_000 });
+  const overrideBtn = seededRow.locator('.utxo-pick-override');
   await expect(overrideBtn).toBeVisible({ timeout: 30_000 });
 
   // ─── 7. Override, then read the warning panel ────────────────────
