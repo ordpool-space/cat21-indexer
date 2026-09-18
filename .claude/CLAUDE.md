@@ -384,6 +384,28 @@ order + live state:
   Notice lane per E2E_BEST_PRACTICES §7.7 (widened: re-render is the mechanism; the
   scan resolving re-renders the rows, so route picker clicks through `clickUntilEffect`)
   + §7.8 (assert the dirty-only premise at setup).
+  TWO THINGS FROM `recommendFunding` (SDK coordinator read the source) THAT SHAPE
+  THESE LANES — plan for them, don't discover them:
+  1. THE RECOMMENDED COIN IN A NOTICE CAN ITSELF BE THE OVER-PAYER. The headroom
+     bias (recommend a coin clearing `fundingPreferredSats` so it emits clean change)
+     applies ONLY inside the CLEAN set. On `asset-notice` / `expert-required`, where
+     no clean coin covers, the pick is best-fit against the REQUIREMENT, not the
+     preferred target — so the recommended coin arrives with `absorbedSubDustSats > 0`
+     and the ★ AT THE SAME TIME. On screen that pair (★ recommended + "over-pays N
+     sat" on one row) looks like a bug and is not: in a dirty-only pool "smallest
+     that covers" spends the least and avoids biasing toward burning a more valuable
+     asset. RENDER that combination deliberately in the notice lane + capture a
+     screenshot of it (the one state no lane has shown yet). Do NOT "fix" the row to
+     hide the over-pay flag on a recommended coin.
+  2. THE PICKER GETS EVERYTHING, unfiltered. `fundingRecommendation().candidates` is
+     the full input list on EVERY status (incl. `insufficient`), NOT just covering
+     coins. Sub-feasibility coins arrive with `finalFeeSats: null` +
+     `absorbedSubDustSats: null` -> the UNAVAILABLE state, which in a small-change
+     wallet is MOST of the list. Already handled (displayRows renders null fee as
+     "can't fund at this rate", pick disabled, row dimmed) — but the transfer/offer
+     notice lanes should seed a wallet where several rows are unavailable and assert
+     they render unavailable (rate named, never free, not pickable), not assume every
+     row is pickable.
 
 CONTRAST: the mint picker's status labels + the "Use anyway"/"Selected" override
 control were bare colours on the orange body (asset-found #ff6b6b = 1.30:1). Fixed
