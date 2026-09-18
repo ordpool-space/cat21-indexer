@@ -186,6 +186,25 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   await manualInput.fill(String(RATE));
   await manualInput.press('Tab');
 
+  // Diagnostic: give the recommendation a moment to settle, then dump the
+  // funding state so a failure is attributable (status + topology inputs) rather
+  // than a bare "notice not visible".
+  const debug = page.getByTestId('mint-debug-funding');
+  await debug.waitFor({ state: 'attached', timeout: 30_000 });
+  for (let i = 0; i < 30; i++) {
+    const st = await debug.getAttribute('data-status').catch(() => null);
+    if (st && st !== 'none' && st !== 'scanning') break;
+    await debug.evaluate(() => new Promise((r) => setTimeout(r, 1000)));
+  }
+  const dbg = await debug.evaluate((el) => ({
+    status: el.getAttribute('data-status'),
+    hasSelected: el.getAttribute('data-has-selected'),
+    hasRecommended: el.getAttribute('data-has-recommended'),
+    candidates: el.getAttribute('data-candidates'),
+    payEqOrd: el.getAttribute('data-pay-eq-ord'),
+  })).catch(() => null);
+  console.log(`[${tag}] debug-funding: ${JSON.stringify(dbg)}`);
+
   // ─── THE LOAD-BEARING ASSERTIONS ─────────────────────────────────
   // The notice renders (separate-address wallet, dirty-only pool -> asset-notice).
   const notice = page.getByTestId('mint-asset-notice');

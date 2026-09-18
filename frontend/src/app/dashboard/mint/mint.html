@@ -1,5 +1,16 @@
 <h1 data-testid="mint-heading">Mint a cat</h1>
 
+<!-- Test-only diagnostic marker (zero display cost; all data-*), so an e2e can
+     attribute a stuck funding state precisely. Mirrors transfer-debug-state. -->
+<span
+  data-testid="mint-debug-funding"
+  [attr.data-status]="debugFunding().status"
+  [attr.data-has-selected]="debugFunding().hasSelected"
+  [attr.data-has-recommended]="debugFunding().hasRecommended"
+  [attr.data-candidates]="debugFunding().candidates"
+  [attr.data-pay-eq-ord]="debugFunding().payEqOrd"
+  style="display: none;"></span>
+
 @if (!connectedWallet()) {
   <div class="connect-card" data-testid="mint-cta">
     <h2>Connect your wallet to mint a cat</h2>

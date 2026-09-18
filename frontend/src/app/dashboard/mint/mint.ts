@@ -166,6 +166,24 @@ export class Mint {
   readonly assetNotice = computed(() => this.fundingRecommendation()?.status === 'asset-notice');
 
   /**
+   * Diagnostic-only (rendered into a display:none marker like transfer's), so an
+   * e2e can attribute a stuck funding state precisely instead of guessing from a
+   * screenshot: the recommendation status, whether a coin was auto-selected, and
+   * the two address-topology inputs `resolveFundingTopology('derive', …)` reads.
+   */
+  readonly debugFunding = computed(() => {
+    const rec = this.fundingRecommendation();
+    const w = this.connectedWallet();
+    return {
+      status: rec?.status ?? 'none',
+      hasSelected: !!this.selectedUtxo(),
+      hasRecommended: !!rec?.recommended,
+      candidates: rec?.candidates?.length ?? 0,
+      payEqOrd: !!w && w.paymentAddress === w.ordinalsAddress,
+    };
+  });
+
+  /**
    * The asset detail the notice must name, taken from the RECOMMENDATION itself
    * (single source: the coin selection would have taken had it been clean), never
    * from a second scan of the coin. Null unless the status is `asset-notice`.
