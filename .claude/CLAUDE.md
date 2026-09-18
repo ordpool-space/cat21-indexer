@@ -347,12 +347,40 @@ PICKER CONVERGENCE — the drift finding, sequenced across sessions:
   outpoint twice around confirmation — two rows disagreeing on `confirmed` is the
   known HQ dedup bug, not a mystery).
 - ORDER (do NOT reorder): the SDK coordinator FIRST lifts the per-candidate fee
-  into the core (`recommendFunding` candidates today carry `bucket` + `assets`,
-  NO fee — the real gap), THEN this repo grows the shared `UtxoPicker`'s typed
-  input against that shape, THEN mint drops its inline picker. Do NOT build against
-  mint's orchestrator-local `UtxoSimulationRow`. Do this during the transfer/
-  make-offer replication, AFTER the maintainer signs off the mint pattern — never
-  touch a surface mid-review.
+  into the core, THEN this repo grows the shared `UtxoPicker`'s typed input against
+  that shape, THEN mint drops its inline picker. Do NOT build against mint's
+  orchestrator-local `UtxoSimulationRow`. Do this during the transfer/make-offer
+  replication, AFTER the maintainer signs off the mint pattern — never touch a
+  surface mid-review.
+- CORE SHAPE IS LIVE (ordpool-sdk `89db425`, bump the pin when you start this):
+  `CandidateFeeRow { txid; vout; finalFeeSats: number|null; vsize: number|null }`
+  and `outpointKey(u)` -> `${txid}:${vout}`, both exported from root + `/core`.
+  `simulateMint/Transfer/CreateOffer/Inscribe` each return `candidateFees:
+  CandidateFeeRow[]`, keyed on the same outpoint the recommendation uses, present
+  on EVERY status incl. `expert-required` + `asset-notice` (exactly when a picker
+  renders). `finalFeeSats: null` = the coin CANNOT fund at that rate -> render
+  UNAVAILABLE, never as free/zero. Inscribe prices the commit+reveal PACKAGE (its
+  cost is two txs). The shared `UtxoPicker`'s typed input is a `feeByOutpoint`
+  built from that array. `simulateTransfer` + `simulateCreateOffer` also gained
+  `fundingRequirementSats` / `fundingPreferredSats` (mint + inscribe already had
+  them) — you need both, the requirement alone is half the selection rule.
+- CONFIRMED/UNCONFIRMED: add to the shared component for all three (TxnOutput
+  carries `status.confirmed`). electrs can list one outpoint twice around
+  confirmation (HQ dedup rule) — two rows for one outpoint disagreeing on
+  `confirmed` is the KNOWN bug, deduped before it reaches the picker.
+- CONTRAST HELPER LESSON (now a FAMILY_UX rule): a measurement is code and can be
+  wrong in the same shape as the thing it measures — a contrast check that parses
+  `rgba()` but drops the alpha silently passes a translucent overlay (reads
+  rgba(0,0,0,0.15) as solid black). ALWAYS mutation-check the ASSERTION, not only
+  the styling it guards. `measuredTextContrast` (assetnotice spec) composites
+  alpha; reuse its shape when pinning the shared picker's contrast.
+- NOTICE-LANE E2E for transfer/make-offer (E2E_BEST_PRACTICES §7.7/§7.8): route
+  every gated-CTA click through `clickUntilEffect` from `ordpool-sdk/e2e`
+  (`0342982`) — it re-clicks only while the control is visible+enabled with the
+  effect absent, returns `{ clicks }` so `expect(clicks).toBe(1)` turns a swallowed
+  click into a visible failure. And assert the dirty-only PREMISE at SETUP time
+  with the remedy in the failure message (a fixed-seed wallet accumulates across
+  local runs: green in CI's fresh stack, wrong-coin locally on run 2).
 
 ### Commands
 ```bash
