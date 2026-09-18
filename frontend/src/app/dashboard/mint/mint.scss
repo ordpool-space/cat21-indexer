@@ -182,9 +182,15 @@
 .mint-utxo-row-assets { border-color: #ff6b6b; }
 .mint-utxo-row-clean { border-color: rgba(198, 246, 198, 0.7); }
 
+// The "Use anyway" / "✓ Selected" button on an asset row was the same salmon
+// (#ff6b6b) on the orange body — ~1.3:1, as unreadable as the badge was. Fill it
+// with the danger badge palette so the deliberate-override action reads.
 .mint-utxo-pick-override {
-  color: #ff6b6b;
-  border-color: #ff6b6b;
+  background: #f8d7da;
+  color: #842029;
+  border-color: #842029;
+
+  &:hover { background: #f1aeb5; }
 }
 
 .mint-utxo-bucket {
