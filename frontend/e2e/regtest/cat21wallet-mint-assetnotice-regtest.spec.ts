@@ -172,6 +172,13 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   const dirty = await seedDirtyCoin({ asset, address: payment, valueSats: dirtySats });
   console.log(`[${tag}] dirty ${asset} coin ${dirty.outpoint} value=${dirty.value} assetId=${dirty.assetId}`);
 
+  // Reload mint so the orchestrator RE-FETCHES the wallet's UTXOs. It fetches on
+  // wallet-connect (before this cell seeded its coin), not on fee change, so
+  // without a reload the freshly-seeded coin is never a candidate and the
+  // recommendation stays on a prior cell's coin. This is what makes the naming
+  // assertion deterministic.
+  await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+
   const reapprove = await waitForApprovalPopup({
     context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
     isApproval: async (p) => p.url().startsWith('chrome-extension://'),
