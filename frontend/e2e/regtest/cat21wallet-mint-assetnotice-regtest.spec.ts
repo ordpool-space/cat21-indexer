@@ -8,8 +8,6 @@ import {
   waitForApprovalPopup,
   seedDirtyCoin,
   DirtyCoinAsset,
-  waitForTxConfirmed,
-  mineBlocks,
   rpc,
 } from 'ordpool-sdk/e2e';
 import { installContextErrorGuard } from './lib/browser-error-guard';
@@ -36,8 +34,11 @@ import { installContextErrorGuard } from './lib/browser-error-guard';
  *
  * SCENARIO-B ASSERTION DISCIPLINE: this NEVER asserts the dirty coin survives.
  * On the separate-address path the coin is spent ON PURPOSE — asserting survival
- * would assert the feature does not work. The corroboration after the mint is
- * the opposite: the dirty coin WAS spent (proceed happened).
+ * would assert the feature does not work. It also does not EXECUTE the mint per
+ * cell: a real mint's clean change coin would leave the next cell no longer
+ * dirty-only (it would take the 'auto' branch). The target here is the render
+ * (notice visible + asset NAMED + CTA ENABLED); the spend-on-proceed is
+ * corroborated once, in isolation, by the mint-dirtycoin lane.
  *
  * MUTATION CHECK (throwaway branch, not CI): force the wallet's topology to
  * one-address (neutralise isOneAddressWallet / resolveFundingTopology so it reads
@@ -68,16 +69,6 @@ async function shot(p: Page, name: string): Promise<void> {
   }).catch(() => undefined);
 }
 
-async function clickApprovalButton(popup: Page): Promise<void> {
-  const btn = popup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first();
-  await expect(btn).toBeVisible({ timeout: 10_000 });
-  try {
-    await btn.click({ noWaitAfter: true, timeout: 30_000 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!/Target page, context or browser has been closed/.test(msg)) throw err;
-  }
-}
 
 /** Connect cat21-wallet via the mint page; return the payment address. */
 async function connectAndReadPayment(page: Page): Promise<string> {
@@ -252,57 +243,34 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   // Screenshot with the notice and the enabled CTA both in frame — the maintainer
   // review point: enabled is not permission to bury the notice below the fold.
   await shot(page, `${asset}-notice`);
+  console.log(`[${tag}] notice shown naming ${dirty.assetId}, CTA enabled`);
 
-  // ─── CORROBORATION: proceed actually spends the dirty coin ───────
-  // NOT survival. On this path the coin is spent on purpose; the mint going
-  // through and consuming it is the proof the notice was a notice, not a block.
-  let knownBeforeSign = new Set(context.pages());
-  await mintBtn.click();
-  const sign = await waitForApprovalPopup({
-    context, knownPages: knownBeforeSign, timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 60_000 });
-      return true;
-    },
-  }).catch(() => null);
-  if (sign) {
-    await clickApprovalButton(sign);
-    await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
-  }
-
-  const successCard = page.getByTestId('mint-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
-  const successHref = await successCard.locator('a').first().getAttribute('href');
-  const mintTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
-  mineBlocks(1);
-  await waitForTxConfirmed(mintTxid, 30_000);
-  const txout = rpc('gettxout', dirty.txid, String(dirty.vout)).trim();
-  expect(
-    txout.length,
-    `asset-notice for ${asset}: the mint should have PROCEEDED and spent the dirty coin ${dirty.outpoint}`,
-  ).toBe(0);
-  console.log(`[${tag}] PROCEEDED — notice shown, CTA enabled, dirty coin spent by the mint`);
-
+  // We do NOT execute the mint here. This is a MULTI-CELL suite sharing one
+  // wallet, and a real mint's CLEAN change coin (the asset moves to the cat
+  // output, not the change) would leave the NEXT cell no longer dirty-only, so it
+  // would take the 'auto' branch and never reach asset-notice. The coordinator's
+  // target for this path is exactly the three assertions above (notice visible +
+  // asset NAMED + CTA ENABLED); the CTA being enabled proves proceed is allowed.
+  // The actual spend-on-proceed is corroborated once, in isolation, by the
+  // mint-dirtycoin lane's mint round-trip — not re-run per cell here.
   browserErrorGuard.assertClean();
   await page.close();
 }
 
 // dirtySats decreases 12k -> 9k -> 6k -> 3k so each cell's coin is the sole cover
 // and no prior ~clean change undercuts it (the shared-wallet sizing trap).
-test('mint asset-notice: an INSCRIPTION-only funding pool notices + proceeds', { timeout: 300_000 }, async () => {
+test('mint asset-notice: an INSCRIPTION-only funding pool notices', { timeout: 300_000 }, async () => {
   await runAssetNoticeCell('inscription', 12_000);
 });
 
-test('mint asset-notice: a CAT-only funding pool notices + proceeds', { timeout: 300_000 }, async () => {
+test('mint asset-notice: a CAT-only funding pool notices', { timeout: 300_000 }, async () => {
   await runAssetNoticeCell('cat', 9_000);
 });
 
-test('mint asset-notice: a RUNE-only funding pool notices + proceeds', { timeout: 300_000 }, async () => {
+test('mint asset-notice: a RUNE-only funding pool notices', { timeout: 300_000 }, async () => {
   await runAssetNoticeCell('rune', 6_000);
 });
 
-test('mint asset-notice: a RARE-SAT-only funding pool notices + proceeds', { timeout: 300_000 }, async () => {
+test('mint asset-notice: a RARE-SAT-only funding pool notices', { timeout: 300_000 }, async () => {
   await runAssetNoticeCell('rareSat', 3_000);
 });
