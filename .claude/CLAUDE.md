@@ -250,8 +250,11 @@ still needs a connected wallet + live electrs to REVIEW (not to build):
   reason sentences come from the SDK's `walletActionNotice` (source-owned there),
   so register fixes to those in `ordpool-sdk`, not here.
 
-- **The `ordpool-sdk` pin is `25eac26` (the family-standard), with the
-  frontend declaring `@scure/btc-signer` `1.6.0` directly.** `25eac26` crosses
+- **The `ordpool-sdk` pin is `5eeca5c`, with the frontend declaring
+  `@scure/btc-signer` `1.6.0` directly.** `5eeca5c` descends from `25eac26` (via
+  `240c940`), adding the `seedDirtyCoin` / `seedListedCat` regtest helpers the
+  dirty-coin matrix uses; the ESM/dist reasoning below still holds because
+  `25eac26` is its ancestor. `25eac26` crossed
   two boundaries from the earlier `6f4d6a7`-era pins: `8b642a8` collapsed
   `dist-core/` into a single `dist/`, and `4e98205` made that single `dist/`
   ESM again — so the CommonJS interlude's +543 kB / +38 % Angular-bundle
@@ -280,6 +283,24 @@ still needs a connected wallet + live electrs to REVIEW (not to build):
   "should NOT be there" half is what confirms you are on exactly the SHA you
   pinned. ordpool.space does NOT take `formatSatsWithFiat` (its fork already has
   upstream's whole fiat system).
+
+- **Owed on the NEXT SDK bump (target `f746f50`+): swap the two happy-path mint
+  specs' `/output` stub body to `cleanOutputFixture().ord`.** The family contract
+  is that no hand-written `/output` BODY exists anywhere, in any layer, any
+  transport (a Playwright `context.route` fulfil IS a mock body, so it is in
+  scope) — the failure mode it prevents is a stub encoding a shape the real ord
+  contract stopped sending, which is how `getCatsAtOutput` shipped broken + green.
+  `cat21-mint-regtest.spec.ts` and `cat21wallet-mint-regtest.spec.ts` still
+  fulfil `**/output/*` with a hand-written `{ inscriptions, runes, cats }` /
+  `sat_ranges` body; replace it with `cleanOutputFixture().ord` (exported from
+  `ordpool-sdk` / `ordpool-sdk/core` at `9f370fa`+). This MUST land in the SAME
+  commit as the bump: `f746f50` carries the fail-closed classifier (non-empty
+  `sat_ranges` required as proof-of-indexing), so the current `sat_ranges`-less
+  clean stub would class UNKNOWN and disable the mint button. Low urgency, no
+  lane/workflow edits; bundle it with the next functional bump, not as its own
+  errand (agreed with the ordpool-sdk coordinator). The dirty-coin matrix already
+  proves the guard on real ord both directions, so this is drift-prevention on the
+  happy-path stubs, not a coverage gap. Re-run both mint lanes after the bump.
 
 - **Still owed: the RENDERED review.** The funding-safety panel rows (rune,
   inscription, rare-sat, cat) and the reworded connected trade/transfer copy have
