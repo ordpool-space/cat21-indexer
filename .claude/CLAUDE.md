@@ -352,6 +352,18 @@ PICKER CONVERGENCE — the drift finding, sequenced across sessions:
   orchestrator-local `UtxoSimulationRow`. Do this during the transfer/make-offer
   replication, AFTER the maintainer signs off the mint pattern — never touch a
   surface mid-review.
+- THE FEE COLUMN IS MANDATORY, not optional (family ruling, FAMILY_UX `127a8d6`).
+  A coin row names its assets AND its per-coin cost, because both are consequences
+  of picking that coin, and the fee genuinely DIFFERS between rows: sub-dust change
+  folds into the miner fee, a 7-13% over-pay in the dust-cliff band, so a picker
+  WITHOUT the fee misleads — the smaller coin reads as the modest choice while it
+  is often the over-payer. Same failure as an unnamed asset, in the money column.
+  So `feeByOutpoint` is THE column on all three surfaces, and `finalFeeSats: null`
+  renders as UNAVAILABLE, never 0/free (a null-as-0 advertises a coin at no cost
+  that cannot pay at all). COORDINATE the presentation shape with the ordpool
+  session before/while building — ordpool is landing the same ruling; this repo
+  builds it into the SHARED component, so our shape wins by default and should win
+  on purpose (one family shape, not two reasonable-in-isolation ones).
 - CORE SHAPE IS LIVE (ordpool-sdk `89db425`, bump the pin when you start this):
   `CandidateFeeRow { txid; vout; finalFeeSats: number|null; vsize: number|null }`
   and `outpointKey(u)` -> `${txid}:${vout}`, both exported from root + `/core`.
