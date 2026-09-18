@@ -45,7 +45,9 @@ export class Transfer {
 
   /** Constructed transfer orchestrator (shared ports; signing internal). */
   private orch = new Cat21TransferOrchestrator(
-    cat21OrchestratorPorts(this.cat21, this.config.ordApiUrl, this.config.cat21OrdApiUrl, this.network),
+    // No `fundingTopology` yet: transfer keeps the safe over-block on a
+    // dirty-only funding pool until its own topology slice wires the notice.
+    cat21OrchestratorPorts(this.cat21, this.config, this.network),
   );
   private snap = signal<TransferSnapshot>(this.orch.getSnapshot());
 

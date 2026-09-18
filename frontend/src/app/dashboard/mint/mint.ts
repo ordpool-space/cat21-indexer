@@ -71,7 +71,12 @@ export class Mint {
    */
   private orch = inject(Cat21MintOrchestrator, { optional: true })
     ?? new Cat21MintOrchestrator(
-      cat21OrchestratorPorts(inject(Cat21Service), this.config.ordApiUrl, this.config.cat21OrdApiUrl, inject(bitcoinNetwork)),
+      // `'derive'` opts mint into the asset-to-miner safeguard: on a
+      // separate-address wallet a dirty-only funding pool NOTICEs and proceeds;
+      // on a one-address wallet it WARNs and blocks. The orchestrator resolves
+      // the topology from the wallet context it holds (setWallet), so this page
+      // never computes it.
+      cat21OrchestratorPorts(inject(Cat21Service), this.config, inject(bitcoinNetwork), 'derive'),
     );
 
   /** Reactive mirror of the orchestrator's snapshot; bound once in the constructor. */

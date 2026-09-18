@@ -64,7 +64,9 @@ export class MakeOffer {
     ?? ((): Cat21CreateOfferOrchestrator => {
       const cfg = inject(cat21Config);
       return new Cat21CreateOfferOrchestrator(
-        cat21OrchestratorPorts(inject(Cat21Service), cfg.ordApiUrl, cfg.cat21OrdApiUrl, inject(bitcoinNetwork)),
+        // No `fundingTopology` yet: create-offer keeps the safe over-block on a
+        // dirty-only funding pool until its own topology slice wires the notice.
+        cat21OrchestratorPorts(inject(Cat21Service), cfg, inject(bitcoinNetwork)),
       );
     })();
   private snap = signal<CreateOfferSnapshot>(this.orch.getSnapshot());
