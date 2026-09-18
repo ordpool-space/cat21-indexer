@@ -4,6 +4,9 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import {
   AUTO_SCAN_MAX_VALUE_SAT,
   bucketOf,
+  CandidateFeeRow,
+  formatSatsWithUsd,
+  outpointKey,
   runeNamesFromContent,
   TxnOutput,
   UtxoContent,
@@ -12,6 +15,7 @@ import {
   UtxoScanState,
 } from 'ordpool-sdk';
 
+import { PriceService } from '../price.service';
 import { rareSatLabel } from '../rare-sat-label';
 import { inscriptionReviewLink, runeEtchingReviewLink } from '../funding-asset-links';
 import { runeRowLabel } from '../rune-row-label';
@@ -24,6 +28,31 @@ export interface UtxoPickerRow {
   utxo: TxnOutput;
   scan: UtxoScanState;
   bucket: UtxoScanBucket;
+}
+
+/**
+ * The three fee states a funding coin can be in, from the SDK's
+ * `CandidateFeeRow`. Picked here, not derived per-surface, because the
+ * distinction is a policy the SDK owns (`absorbedSubDustSats`): re-deriving it
+ * in each consumer is a chance to show a usable coin as unavailable or an
+ * over-payer as clean.
+ *
+ *  - `normal`      — pays the requested rate and emits change.
+ *  - `overpay`     — usable, but sub-dust change folds into the miner fee
+ *                    (a deliberate, informational over-pay, never a block).
+ *  - `unavailable` — cannot fund the action at this rate; the row is greyed
+ *                    and its pick control disabled.
+ */
+export type FundingFeeState = 'normal' | 'overpay' | 'unavailable';
+
+/** A picker row enriched with its fee, recommendation, and confirmation for
+ *  display. `fee: null` = no fee data for this row (the column is absent,
+ *  e.g. a surface that has not wired `feeByOutpoint` yet). */
+export interface UtxoDisplayRow {
+  row: UtxoPickerRow;
+  isRecommended: boolean;
+  confirmed: boolean;
+  fee: { state: FundingFeeState; money: string; overpaySats: number } | null;
 }
 
 /**
@@ -57,6 +86,7 @@ export interface UtxoPickerRow {
 export class UtxoPicker {
   private scanner = inject(UtxoContentScanner);
   private runeEtching = inject(RuneEtchingService);
+  private price = inject(PriceService);
 
   /** Candidate funding UTXOs to enumerate + scan. */
   readonly utxos = input.required<readonly TxnOutput[]>();
@@ -64,11 +94,34 @@ export class UtxoPicker {
   /** Consumer's currently-selected UTXO. Null = auto-pick. */
   readonly selected = input<TxnOutput | null>(null);
 
+  /**
+   * Per-coin fee, keyed by `outpointKey`, from the orchestrator's
+   * `candidateFees`. Optional: a surface that has not wired it renders no fee
+   * column (the mint wires it; transfer/offer render as before until they do).
+   * The fee is part of the pick because it differs between coins — sub-dust
+   * change folds into the miner fee, so two coins at one rate cost different
+   * money out.
+   */
+  readonly feeByOutpoint = input<ReadonlyMap<string, CandidateFeeRow> | null>(null);
+
+  /**
+   * `outpointKey` of the coin the SDK recommends, MARKED IN PLACE (never sorted
+   * to the top): the cost column exists so the reader sees a cheaper-looking row
+   * is cheaper for a reason, and re-sorting the recommendation first destroys
+   * that comparison. The over-pay flag on the cheaper rows is the answer to
+   * "why not that one?".
+   */
+  readonly recommendedOutpoint = input<string | null>(null);
+
   /** Above this threshold, autoScan does nothing — picker shows "Scan" affordance. */
   readonly autoScanThreshold = AUTO_SCAN_MAX_VALUE_SAT;
 
   /** Fires when the user clicks a row. Consumer stores this on the orchestrator. */
   readonly selectionChange = output<TxnOutput>();
+
+  /** BTC/USD for the fee's Money shape. One source for every consumer; `null`
+   *  (regtest, cold backend, network error) omits the fiat half entirely. */
+  private readonly btcUsd = toSignal(this.price.getBtcUsd(), { initialValue: null });
 
   private readonly scanStates = toSignal(this.scanner.states$, {
     initialValue: new Map<string, UtxoScanState>() as ReadonlyMap<string, UtxoScanState>,
@@ -94,6 +147,37 @@ export class UtxoPicker {
     const s = this.selected();
     if (!s) return null;
     return this.rows().find((r) => r.utxo.txid === s.txid && r.utxo.vout === s.vout) ?? null;
+  });
+
+  /**
+   * `rows()` enriched with fee state, recommendation, and confirmation. Keeps
+   * each `row` reference identical to `rows()` so `row === selectedRow()` still
+   * holds. The three fee states are read from the SDK's `absorbedSubDustSats`
+   * (see `FundingFeeState`), never re-derived: `finalFeeSats === null` is
+   * unavailable, then `> 0` folded sats is over-pay, else normal.
+   */
+  readonly displayRows = computed<UtxoDisplayRow[]>(() => {
+    const feeMap = this.feeByOutpoint();
+    const rec = this.recommendedOutpoint();
+    const usd = this.btcUsd();
+    return this.rows().map((row) => {
+      const key = outpointKey(row.utxo);
+      const feeRow = feeMap?.get(key) ?? null;
+      let fee: UtxoDisplayRow['fee'] = null;
+      if (feeRow) {
+        if (feeRow.finalFeeSats === null) {
+          fee = { state: 'unavailable', money: '', overpaySats: 0 };
+        } else {
+          const overpay = feeRow.absorbedSubDustSats ?? 0;
+          fee = {
+            state: overpay > 0 ? 'overpay' : 'normal',
+            money: formatSatsWithUsd(feeRow.finalFeeSats, usd),
+            overpaySats: overpay,
+          };
+        }
+      }
+      return { row, isRecommended: key === rec, confirmed: row.utxo.status.confirmed, fee };
+    });
   });
 
   constructor() {

@@ -5,9 +5,9 @@
 }
 
 .utxo-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto auto;
-  gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
   align-items: center;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--bs-border-color, #ddd);
@@ -24,6 +24,19 @@
   }
   &.utxo-row-clean {
     border-color: var(--bs-success, #198754);
+  }
+  // The best-fit clean coin. A brighter border + faint wash mark it in place,
+  // without moving it: the reader is comparing costs down the column and the
+  // recommendation reads as an annotation on that comparison.
+  &.utxo-row-recommended {
+    border-color: #ffd479;
+    box-shadow: inset 0 0 0 1px #ffd479;
+  }
+  // A coin that cannot fund at this rate: dim the whole row and let the pick
+  // control's disabled state do the rest. Never removed from the list, so the
+  // reader can still see it and why it is out.
+  &.utxo-row-unavailable {
+    opacity: 0.55;
   }
 }
 
@@ -45,6 +58,7 @@
 }
 
 .utxo-id {
+  flex: 1 1 220px;
   font-size: var(--fs-sm);
   color: var(--bs-secondary, #6c757d);
   word-break: break-all;
@@ -54,6 +68,64 @@
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.utxo-pick:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  &:hover { background: transparent; color: var(--bs-primary, #0d6efd); }
+}
+
+// The fee this coin would cost. Plain text so it inherits the panel's own text
+// colour (white on the orange body, dark on a light card) and reads on either
+// ground; the money string is the family Money shape from formatSatsWithUsd.
+.utxo-fee {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// A usable coin that over-pays because sub-dust change folds into the fee.
+// Informational, not a fault: a filled amber badge carrying its own contrast
+// on any ground, same palette as the "scan failed" bucket.
+.utxo-overpay {
+  margin-left: 0.3rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: #fff3cd;
+  color: #664d03;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+// A coin that cannot fund the action at this rate. Filled grey badge so the
+// stated reason reads even inside the dimmed row.
+.utxo-fee-unavailable {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: #e2e3e5;
+  color: #41464b;
+}
+
+// Marks the recommended coin in place. Filled badge, self-contained contrast.
+.utxo-recommended {
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #fff3cd;
+  color: #664d03;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.utxo-status {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.7;
+  white-space: nowrap;
+
+  &.confirmed { color: #c6f6c6; opacity: 1; }
 }
 
 .utxo-bucket {

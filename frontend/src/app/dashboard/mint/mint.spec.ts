@@ -1113,13 +1113,8 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(empty).toEqual([]);
     });
 
-    it('MATRIX-I21(B): bucketTooltip returns a non-empty string for every bucket kind (no undefined flicker)', () => {
-      const buckets = ['clean', 'unscanned', 'assets', 'scanning', 'failed'] as const;
-      for (const b of buckets) {
-        const tip = component.bucketTooltip(b);
-        expect(typeof tip).toBe('string');
-        expect(tip.length).toBeGreaterThan(0);
-      }
-    });
+    // MATRIX-I21(B) (bucketTooltip) moved to utxo-picker.spec.ts: the tooltip
+    // helper now lives on the shared UtxoPicker, which the mint renders instead
+    // of an inline list. Same assertion, re-pointed at its new subject.
   });
 });

@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import {
   AUTO_SCAN_MAX_VALUE_SAT,
+  CandidateFeeRow,
   Cat21MintOrchestrator,
   Cat21Service,
   MintSnapshot,
@@ -20,6 +21,7 @@ import {
   WalletService,
   bucketOf,
   calculateRecommendedFundingSats,
+  outpointKey,
   runeNamesFromContent,
   usesSingleAddress,
 } from 'ordpool-sdk';
@@ -28,6 +30,7 @@ import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
+import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { rareSatLabel } from '../../shared/rare-sat-label';
 import { inscriptionReviewLink, runeEtchingReviewLink } from '../../shared/funding-asset-links';
@@ -47,7 +50,7 @@ interface ViableUtxoRow {
   selector: 'app-mint',
   templateUrl: './mint.html',
   styleUrl: './mint.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect, SingleAddressNote],
+  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect, SingleAddressNote, UtxoPicker],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Mint {
@@ -221,6 +224,32 @@ export class Mint {
    *  (highest-value first) to keep the expert picker readable. */
   readonly viableRows = computed<ViableUtxoRow[]>(() => this.allViableRows().slice(0, 10));
 
+  /**
+   * The candidate coins the shared `UtxoPicker` enumerates: the SDK's full
+   * annotated candidate list (same source transfer + make-offer feed it), so
+   * unfundable coins show in place marked "can't fund" rather than vanishing.
+   */
+  readonly pickerUtxos = computed<readonly TxnOutput[]>(
+    () => this.fundingRecommendation()?.candidates ?? [],
+  );
+
+  /**
+   * Per-coin fee for the picker's fee column, keyed by `outpointKey`, straight
+   * from the orchestrator snapshot's `candidateFees` (the SDK owns the three
+   * fee states via `absorbedSubDustSats`; a new SDK test pins this number to the
+   * orchestrator's own per-UTXO grid, so it agrees with the summary panel).
+   */
+  readonly feeByOutpoint = computed<ReadonlyMap<string, CandidateFeeRow>>(
+    () => new Map(this.snap().candidateFees.map((f) => [outpointKey(f), f])),
+  );
+
+  /** `outpointKey` of the SDK-recommended coin, for the picker's mark-in-place
+   *  recommendation (never a re-sort). Null when the SDK returns no pick. */
+  readonly recommendedOutpoint = computed<string | null>(() => {
+    const r = this.fundingRecommendation()?.recommended;
+    return r ? outpointKey(r) : null;
+  });
+
   /** Whether the form has at least one viable UTXO + a fee rate set. */
   readonly canMint = computed(() => this.allViableRows().length > 0 && this.feeRate() !== null && this.selectedUtxo() !== null && this.state() === 'ready');
 
@@ -393,10 +422,18 @@ export class Mint {
   // ---------- Commands ----------
 
   selectUtxo(row: ViableUtxoRow): void {
-    // Mark this as a DELIBERATE user override so the auto-pick effect preserves
-    // it across fee-rate / recommendation changes.
-    this.userPickedKey.set(`${row.utxo.txid}:${row.utxo.vout}`);
-    this.orch.setSelectedUtxo(row.utxo);
+    this.selectUtxoOutput(row.utxo);
+  }
+
+  /**
+   * The shared `UtxoPicker`'s `selectionChange` handler. Marks the coin as a
+   * DELIBERATE user override so the auto-pick effect preserves it across fee-rate
+   * / recommendation changes (the picker disables the pick control on unfundable
+   * rows, so this only ever receives a coin that can fund).
+   */
+  selectUtxoOutput(utxo: TxnOutput): void {
+    this.userPickedKey.set(outpointKey(utxo));
+    this.orch.setSelectedUtxo(utxo);
   }
 
   scanRow(row: ViableUtxoRow): void {
@@ -433,22 +470,6 @@ export class Mint {
 
   /** Pass-through to the SDK helper so the template can read rune names off a UtxoContent. */
   runeNames(content: UtxoContent): string[] { return runeNamesFromContent(content); }
-
-  /** Hover-tooltip text for each bucket badge. Stays in the component (not the SDK) so the wording can match each site's voice. */
-  bucketTooltip(bucket: UtxoScanBucket): string {
-    switch (bucket) {
-      case 'clean':
-        return 'We checked this UTXO against ord and cat21-ord. No inscriptions, runes, or cats — safe to use as a mint input.';
-      case 'assets':
-        return 'This UTXO holds at least one inscription, rune, or CAT-21 cat. Spending it as a mint input would send the asset away to the miner as fee. Use "Use anyway" only if you really mean to.';
-      case 'unscanned':
-        return `Above the auto-scan threshold (${AUTO_SCAN_MAX_VALUE_SAT.toLocaleString()} sat) and very likely a plain payment. Click "Scan" to verify against ord and cat21-ord.`;
-      case 'scanning':
-        return 'Checking ord and cat21-ord for inscriptions, runes, and cats at this UTXO.';
-      case 'failed':
-        return 'One of the asset-detection endpoints (ord.ordpool.space or ord.cat21.space) didn\'t respond. Click "Retry scan" to try again.';
-    }
-  }
 
   /** FeesPicker's feeRateChange forwarded into this page's orchestrator. */
   onFeeRateChange(rate: number): void {

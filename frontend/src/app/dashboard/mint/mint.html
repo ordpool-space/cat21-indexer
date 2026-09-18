@@ -236,50 +236,12 @@
           <em>asset found</em> hold an inscription, rune, rare sat, or
           cat; minting with one sends that asset to the miner as fee.
         </p>
-        <ul class="mint-utxo-list">
-          @for (row of viableRows(); track row.utxo.txid + ':' + row.utxo.vout) {
-            <li class="mint-utxo-row"
-                [class.mint-utxo-row-selected]="row === selectedRow()"
-                [class.mint-utxo-row-assets]="row.bucket === 'assets'"
-                [class.mint-utxo-row-clean]="row.bucket === 'clean'"
-                [attr.data-testid]="'mint-utxo-row-' + row.bucket"
-                [attr.data-outpoint]="row.utxo.txid + ':' + row.utxo.vout">
-              @if (row.bucket === 'assets') {
-                <button type="button" class="mint-utxo-pick mint-utxo-pick-override" (click)="selectUtxo(row)">
-                  @if (row === selectedRow()) { ✓ Selected } @else { Use anyway }
-                </button>
-              } @else {
-                <button type="button" class="mint-utxo-pick" (click)="selectUtxo(row)">
-                  @if (row === selectedRow()) { ✓ } @else { Pick }
-                </button>
-              }
-              <code class="mint-utxo-id">{{ row.utxo.txid }}:{{ row.utxo.vout }}</code>
-              <span class="mint-utxo-val">{{ row.utxo.value | number }} sat</span>
-              <span class="mint-utxo-fee">miner fee {{ toNumber(row.simulation.finalTransactionFee) | number }} sat</span>
-              <span class="mint-utxo-bucket"
-                    [title]="bucketTooltip(row.bucket)"
-                    [class.mint-utxo-bucket-clean]="row.bucket === 'clean'"
-                    [class.mint-utxo-bucket-assets]="row.bucket === 'assets'"
-                    [class.mint-utxo-bucket-unscanned]="row.bucket === 'unscanned'"
-                    [class.mint-utxo-bucket-scanning]="row.bucket === 'scanning'"
-                    [class.mint-utxo-bucket-failed]="row.bucket === 'failed'">
-                @switch (row.bucket) {
-                  @case ('clean')     { ✓ safe }
-                  @case ('assets')    { ⚠ asset found }
-                  @case ('unscanned') { not scanned }
-                  @case ('scanning')  { scanning… }
-                  @case ('failed')    { scan failed }
-                }
-              </span>
-              @if (row.bucket === 'unscanned') {
-                <button type="button" class="link-button" (click)="scanRow(row); $event.stopPropagation()">Scan</button>
-              }
-              <span class="mint-utxo-status" [class.confirmed]="row.utxo.status.confirmed">
-                {{ row.utxo.status.confirmed ? 'confirmed' : 'unconfirmed' }}
-              </span>
-            </li>
-          }
-        </ul>
+        <app-utxo-picker
+          [utxos]="pickerUtxos()"
+          [selected]="selectedUtxo()"
+          [feeByOutpoint]="feeByOutpoint()"
+          [recommendedOutpoint]="recommendedOutpoint()"
+          (selectionChange)="selectUtxoOutput($event)" />
       </details>
     }
 
