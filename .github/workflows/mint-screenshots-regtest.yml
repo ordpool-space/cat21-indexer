@@ -1,0 +1,397 @@
+name: E2E (regtest mint screenshots — cat21-wallet)
+
+# Captures the cat21.space MINT funding-state screenshots the maintainer reviews
+# as the family layout pattern (cat21-wallet + cubes mirror it), on a real regtest
+# stack, ZERO mock: case1-safe (clean coin, found-funds, quiet), case2-notice
+# (dirty-only, separate-address wallet -> NOTICE + enabled CTA), case4-expert (the
+# funding picker, recommended coin labelled + assets named). The uploaded
+# artifact carries test-results/mint-screenshots/*.png. The behaviour is proven by
+# the assertion lanes (mint-dirtycoin, mint-assetnotice); this lane only shoots.
+#
+# The funding scan hits the real ords the config sed wires in: stock ord (:8081)
+# for inscriptions/runes/rare sats, cat21-ord (:8080) for cats. seedDirtyCoin
+# seeds each class through those ords' wallets. No backend lookup is needed for
+# mint (the cat is created, not looked up), but the backend is left running for
+# parity with the shared stack and is harmless.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '56 3 * * *'   # nightly at 03:44 UTC (offset from the other regtest runs)
+  push:
+    paths:
+      - 'frontend/e2e/regtest/cat21wallet-mint-screenshots-regtest.spec.ts'
+      - 'frontend/e2e/regtest/lib/**'
+      - 'frontend/playwright.regtest.config.ts'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/src/app/dashboard/mint/**'
+      - 'frontend/src/app/shared/utxo-picker/**'
+      - 'frontend/src/app/shared/fees-picker/**'
+      - 'backend/src/**'
+      - '.github/workflows/mint-screenshots-regtest.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cat21-indexer-mint-screenshots-regtest-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mint-screenshots-regtest:
+    name: Regtest mint screenshots (real ord, no mock)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # pin 6f4d6a7+ pins each compose stack to its own project, so the SDK
+      # default `ordpool-e2e-bitcoind` no longer exists — the consumer
+      # bitcoind is the only one. rpc() + seedListedCat target it by name.
+      REGTEST_BITCOIND_CONTAINER: ordpool-e2e-consumer-bitcoind
+      # seedDirtyCoin's inscription/rune/rareSat classes seed via `docker exec`
+      # into the ord-stock wallet (and cat via cat21-ord), so the helpers need
+      # the real container names — our consumer stack prefixes them.
+      REGTEST_ORD_CONTAINER: ordpool-e2e-consumer-cat21-ord
+      REGTEST_ORD_STOCK_CONTAINER: ordpool-e2e-consumer-ord-stock
+    steps:
+      - name: Checkout cat21-indexer
+        uses: actions/checkout@v4
+
+      - name: Setup Node (frontend)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend deps (brings ordpool-sdk into node_modules)
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Make SDK consumer-environment scripts executable
+        run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
+
+      - name: Checkout ordpool-electrs (for the electrs container)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/ordpool-electrs
+          ref: ordpool
+          path: ordpool-electrs
+
+      # cat21-ord — the REAL cat index the funding scan (cat check) and seedDirtyCoin's cat class read.
+      # seedDirtyCoin('cat') mints an nLockTime=21 cat here at :8080.
+      - name: Checkout cat21-ord (for the cat21-ord container)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/cat21-ord
+          ref: index-cat21
+          path: cat21-ord
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Export GitHub Actions runtime for the gha cache backend
+        uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Stabilise the electrs + cat21-ord build contexts for layer caching
+        run: |
+          printf '.git\ntarget\n' > ordpool-electrs/.dockerignore
+          printf '.git\ntarget\n' > cat21-ord/.dockerignore
+
+      # Both ords: cat21-ord (:8080, cats — the target-cat lookup + backend sync)
+      # AND ord-stock (:8081, real inscriptions). ord-stock is REQUIRED even
+      # though the buyer coin is plain: fundCommonSats -> waitForOrdStockSync
+      # gates on stock ord's height, so the fixture cannot run without it.
+      - name: Bring up consumer-environment (bitcoind + electrs + mariadb + cat21-ord + ord-stock)
+        env:
+          ELECTRS_SRC: ${{ github.workspace }}/ordpool-electrs
+          # Both ords build from the one cat21-ord checkout; ORD_SRC falls back
+          # to CAT21_ORD_SRC in the compose, so this one var feeds both.
+          CAT21_ORD_SRC: ${{ github.workspace }}/cat21-ord
+        run: |
+          frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh \
+            --buildx-cache \
+            --with-cat21-ord \
+            --with-ord-stock \
+            > stack.json
+          cat stack.json
+
+      - name: Wait for cat21-ord ready on :8080
+        run: |
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost:8080/status 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "cat21-ord up"; break
+            fi
+            if [ "$i" = "120" ]; then
+              echo "cat21-ord never came up (last HTTP $code)"
+              docker logs ordpool-e2e-consumer-cat21-ord --tail 100 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Wait for ord-stock ready on :8081
+        run: |
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost:8081/status 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "ord-stock up"; break
+            fi
+            if [ "$i" = "120" ]; then
+              echo "ord-stock never came up (last HTTP $code)"
+              docker logs ordpool-e2e-consumer-ord-stock --tail 100 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Start fees + electrs HTTP shim on :8999
+        run: |
+          ELECTRS_URL=http://localhost:3010 PORT=8999 \
+            nohup node frontend/node_modules/ordpool-sdk/e2e/regtest/fees-electrs-stub.mjs > fees-stub.log 2>&1 &
+          echo $! > fees-stub.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8999/healthz >/dev/null 2>&1; then
+              echo "fees-stub up"; break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "fees-stub never came up"; cat fees-stub.log || true; exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Checkout ordpool-sdk (for the cat21-wallet extension + bootstrap)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/ordpool-sdk
+          path: sdk
+          ref: main
+
+      - name: Setup Node (sdk)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'sdk/package-lock.json'
+
+      - name: Install SDK deps + build
+        working-directory: sdk
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Playwright system deps + Chromium
+        working-directory: sdk
+        run: npx playwright install --with-deps chromium
+
+      - name: Checkout cat21-wallet (extension source)
+        uses: actions/checkout@v4
+        with:
+          repository: ordpool-space/cat21-wallet
+          path: cat21-wallet-src
+          ref: main
+
+      - name: Setup pnpm for cat21-wallet build
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Cache cat21-wallet pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: cat21wallet-pnpm-${{ hashFiles('cat21-wallet-src/pnpm-lock.yaml') }}
+          restore-keys: |
+            cat21wallet-pnpm-
+
+      - name: Cache cat21-wallet extension dist
+        id: cat21wallet-dist-cache
+        uses: actions/cache@v4
+        with:
+          path: cat21-wallet-src/apps/extension/dist
+          key: cat21wallet-dist-${{ hashFiles('cat21-wallet-src/pnpm-lock.yaml', 'cat21-wallet-src/apps/extension/**/*.ts', 'cat21-wallet-src/apps/extension/**/*.tsx', 'cat21-wallet-src/packages/**/*.ts') }}
+
+      - name: Install cat21-wallet dependencies
+        if: steps.cat21wallet-dist-cache.outputs.cache-hit != 'true'
+        working-directory: cat21-wallet-src
+        run: pnpm install --frozen-lockfile
+
+      - name: Build cat21-wallet extension
+        if: steps.cat21wallet-dist-cache.outputs.cache-hit != 'true'
+        working-directory: cat21-wallet-src
+        run: pnpm build:extension
+
+      - name: Stage cat21-wallet extension via SDK bootstrap (LOCAL_DIST mode)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CAT21_WALLET_LOCAL_DIST: ${{ github.workspace }}/cat21-wallet-src/apps/extension/dist
+        working-directory: sdk
+        run: bash e2e/playwright/playwright-bootstrap.sh cat21wallet
+
+      # Patch config for regtest, ZERO mock on the ord surfaces:
+      #   - ord.cat21.space -> :8080  (real cat21-ord: target-cat lookup)
+      #   - ord.ordpool.space -> :8081 (real stock ord: buyer-funding inscription
+      #     scan; the buyer coin is clean, so real stock ord reports it clean)
+      #   - api.ordpool.space -> :8999 (fees + electrs proxy; the stub forwards
+      #     /tx to real electrs :3010, so the getTargetByNumber cross-check is real)
+      #   - backend2.cat21.space -> :9998 (real synced NestJS backend)
+      - name: Patch cat21Config + bitcoinNetwork for regtest
+        working-directory: frontend
+        run: |
+          sed -i \
+            -e "s|https://api\.ordpool\.space|http://localhost:8999|g" \
+            -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
+            -e "s|https://ord\.ordpool\.space|http://localhost:8081|g" \
+            -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
+            -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
+            src/app/app.config.ts
+          sed -i \
+            -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
+            -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
+            -e "s|https://ord\.ordpool\.space|http://localhost:8081|g" \
+            src/environments/environment.prod.ts
+
+      - name: Build static frontend bundle
+        working-directory: frontend
+        run: |
+          set -o pipefail
+          npx ng build --output-path ../dist-regtest 2>&1 | tee ../build.log
+
+      - name: Locate the built browser output
+        run: |
+          for candidate in \
+              dist-regtest \
+              dist-regtest/browser \
+              $(find dist-regtest -maxdepth 3 -type d -name browser); do
+            if [ -f "$candidate/index.html" ]; then
+              BROWSER_DIR="$candidate"
+              break
+            fi
+          done
+          if [ -z "${BROWSER_DIR:-}" ]; then
+            echo "could not find any index.html under dist-regtest"
+            ls -la dist-regtest || true
+            tail -200 build.log || true
+            exit 1
+          fi
+          echo "BROWSER_DIR=$BROWSER_DIR" >> "$GITHUB_ENV"
+
+      - name: Serve the static bundle on :4221
+        run: |
+          cat > spa-server.cjs <<'EOF'
+          const http = require('http'), fs = require('fs'), path = require('path');
+          const root = path.resolve(process.argv[2]);
+          const port = Number(process.argv[3] ?? 4221);
+          const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', png: 'image/png', svg: 'image/svg+xml', ico: 'image/x-icon', woff2: 'font/woff2', woff: 'font/woff', txt: 'text/plain', map: 'application/json' };
+          http.createServer((req, res) => {
+            let p = path.normalize(decodeURIComponent((req.url ?? '/').split('?')[0]));
+            let f = path.join(root, p);
+            if (!f.startsWith(root) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(root, 'index.html');
+            const ext = f.split('.').pop() ?? '';
+            res.writeHead(200, { 'content-type': types[ext] ?? 'application/octet-stream' });
+            fs.createReadStream(f).pipe(res);
+          }).listen(port, () => console.log(`spa-server on :${port} root=${root}`));
+          EOF
+          nohup node spa-server.cjs "$BROWSER_DIR" 4221 > serve.log 2>&1 &
+          echo $! > serve.pid
+
+      - name: Wait for static server ready on :4221
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4221/ 2>/dev/null || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "static server up"; break
+            fi
+            if [ "$i" = "60" ]; then
+              echo "static server never came up (last HTTP $code)"; tail -200 serve.log || true; exit 1
+            fi
+            sleep 1
+          done
+
+      # Backend on :9998 synced from REAL cat21-ord (:8080) — this is the one
+      # difference from the mint workflow. The make-offer cat lookup reads
+      # /api/cat/:N, so the seeded cat must actually be synced into the DB; a
+      # :8999-stub-fed backend would never serve it.
+      - name: Install indexer backend deps + build
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Bring up cat21-indexer backend on :9998 (regtest, synced from real cat21-ord)
+        working-directory: backend
+        env:
+          PORT: '9998'
+          HOST: 127.0.0.1
+          NODE_ENV: development
+          DATABASE_URL: mysql://cat21:cat21@127.0.0.1:3306/cat21
+          ORD_API_URL: http://localhost:8080
+          ELECTRS_API_URL: http://localhost:8999
+          BACKEND_NETWORK: regtest
+        run: |
+          nohup node dist/main.js > indexer-backend.log 2>&1 &
+          echo $! > indexer-backend.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:9998/api/health >/dev/null 2>&1; then
+              echo "indexer backend up"; break
+            fi
+            if [ "$i" = "60" ]; then
+              echo "indexer backend never came up"; tail -100 indexer-backend.log || true; exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Install Playwright in the frontend tree
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the make-offer regtest spec
+        working-directory: frontend
+        env:
+          CAT21WALLET_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/cat21wallet
+          FRONTEND_URL: http://localhost:4221
+          BACKEND_URL: http://localhost:9998
+          ORD_API_URL: http://localhost:8080
+        run: |
+          xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
+            npx playwright test e2e/regtest/cat21wallet-mint-screenshots-regtest.spec.ts \
+            --config=playwright.regtest.config.ts
+
+      - name: Dump backend log on failure
+        if: failure()
+        run: |
+          echo "===== indexer backend ====="; tail -200 backend/indexer-backend.log || true
+          echo "===== cat21-ord ====="; docker logs ordpool-e2e-consumer-cat21-ord --tail 80 || true
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mint-screenshots-regtest-playwright-${{ github.run_id }}
+          path: |
+            frontend/test-results
+            frontend/playwright-report-regtest
+            build.log
+            serve.log
+            fees-stub.log
+            backend/indexer-backend.log
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Tear down stack
+        if: always()
+        run: |
+          docker compose \
+            -f frontend/node_modules/ordpool-sdk/e2e/docker-compose.consumer-environment.yml \
+            down -v || true
+          if [ -f backend/indexer-backend.pid ]; then
+            kill "$(cat backend/indexer-backend.pid)" 2>/dev/null || true
+          fi
+          if [ -f fees-stub.pid ]; then
+            kill "$(cat fees-stub.pid)" 2>/dev/null || true
+          fi
+          if [ -f serve.pid ]; then
+            kill "$(cat serve.pid)" 2>/dev/null || true
+          fi
