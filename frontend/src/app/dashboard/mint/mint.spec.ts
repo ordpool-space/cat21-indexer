@@ -411,12 +411,38 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(component.fundingExpertRequired()).toBe(false);
     });
 
-    it('E2: only asset-bearing coins cover (status expert-required) → NO auto-pick', () => {
+    it('E2: only asset-bearing coins cover (status expert-required, one-address wallet) → NO auto-pick, CTA blocked', () => {
       pushRows([
         { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } },
       ]);
+      // This is the asset-to-miner ruling's one-address branch: the SDK returns
+      // expert-required (no auto-pick), so the component leaves the mint BLOCKED —
+      // selectedUtxo null, the expert warning up, and canMint false so the CTA
+      // stays disabled until a deliberate pick. (The one-address TOPOLOGY that
+      // yields expert-required is derived in the SDK, mutation-checked there, and
+      // exercised on a real wallet in the assetnotice regtest lane; here we pin
+      // that cat21.space's own template turns that status into a blocked CTA.)
       expect(orch.selectedUtxo()).toBeNull();
       expect(component.fundingExpertRequired()).toBe(true);
+      expect(component.canMint()).toBe(false);
+    });
+
+    it('E2b: a dirty coin covers on a separate-address wallet (status asset-notice) → AUTO-ADOPTS, CTA enabled', () => {
+      const coin = big(80_000);
+      // The ruling's separate-address branch: no clean coin covers, but a dirty
+      // one does and the wallet keeps a separate payment address, so the SDK
+      // NOTICEs and returns the coin (status asset-notice). The component MUST
+      // adopt it — otherwise selectedUtxo stays null, selectedRow is null, and the
+      // notice (nested in that block) never renders. Regression guard for the real
+      // bug where the auto-select adopted status 'auto' ONLY, so the whole
+      // asset-notice path silently produced no notice and a disabled CTA.
+      pushRows([
+        { u: coin, scan: { kind: 'scanned-with-assets', content: { outpoint: `${coin.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } },
+      ]);
+      recommend('asset-notice', coin);
+      expect(orch.selectedUtxo()).not.toBeNull();
+      expect(orch.selectedUtxo()!.txid).toBe(coin.txid);
+      expect(component.fundingExpertRequired()).toBe(false);
     });
 
     it('E3: unscanned coin (status scanning) → NO auto-pick (the footgun fix)', () => {
