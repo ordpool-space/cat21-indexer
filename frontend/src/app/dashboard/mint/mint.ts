@@ -11,6 +11,7 @@ import {
   SMALL_UTXO_WARNING_THRESHOLD_SAT,
   SimulateTransactionResult,
   TxnOutput,
+  UtxoAssetDetail,
   UtxoContent,
   UtxoContentScanner,
   UtxoScanBucket,
@@ -152,6 +153,27 @@ export class Mint {
   /** True when no content-clean coin covers the mint (only asset / scan-failed
    *  coins do), so the picker must surface for a deliberate override. */
   readonly fundingExpertRequired = computed(() => this.fundingRecommendation()?.status === 'expert-required');
+
+  /**
+   * `asset-notice`: no clean coin covers, but a dirty one does AND the wallet
+   * keeps a SEPARATE payment address, so the SDK auto-selects the dirty coin and
+   * we INFORM rather than block (the maintainer's asset-to-miner ruling). The CTA
+   * stays enabled — the proceed-vs-block decision is the SDK's (`resolveFundingPick`
+   * returns the coin here, null for a one-address wallet's `expert-required`), not
+   * this template's. The notice obligation is ours: name what sits on the coin,
+   * visibly, before the click.
+   */
+  readonly assetNotice = computed(() => this.fundingRecommendation()?.status === 'asset-notice');
+
+  /**
+   * The asset detail the notice must name, taken from the RECOMMENDATION itself
+   * (single source: the coin selection would have taken had it been clean), never
+   * from a second scan of the coin. Null unless the status is `asset-notice`.
+   */
+  readonly noticeAssets = computed<UtxoAssetDetail | null>(() => {
+    const rec = this.fundingRecommendation();
+    return rec?.status === 'asset-notice' ? (rec.recommended?.assets ?? null) : null;
+  });
 
   /**
    * Every viable (sufficient) UTXO annotated with scan state + bucket, sorted

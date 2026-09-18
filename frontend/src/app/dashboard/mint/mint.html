@@ -89,7 +89,59 @@
         </div>
       </section>
 
-      @if (sel.bucket === 'assets' && sel.scan.kind === 'scanned-with-assets') {
+      @if (noticeAssets(); as assets) {
+        <!-- asset-notice: the SDK auto-selected a dirty coin because it is the
+             ONLY cover and the wallet keeps a separate payment address. Proceed
+             is allowed (CTA stays enabled); the obligation is to name what sits
+             on the coin, from the recommendation itself. -->
+        <div class="mint-alert mint-alert-warning" data-testid="mint-asset-notice">
+          <p>
+            <strong>Heads up.</strong> The only coin that can cover this mint
+            carries an on-chain asset. Minting spends it as the miner fee, so
+            that asset goes to the miner. You can go ahead, or send a plain
+            payment UTXO to your wallet first to keep it.
+          </p>
+          @if (assets.inscriptionIds.length > 0) {
+            <p>
+              <strong>Inscription{{ assets.inscriptionIds.length === 1 ? '' : 's' }}:</strong>
+              @for (id of assets.inscriptionIds; track id) {
+                <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
+                   data-testid="mint-asset-notice-inscription">{{ id }}</a>
+                @if (!$last) { , }
+              }
+            </p>
+          }
+          @if (assets.runeNames.length > 0) {
+            <p>
+              <strong>Rune{{ assets.runeNames.length === 1 ? '' : 's' }}:</strong>
+              @for (name of assets.runeNames; track name) {
+                @if (runeEtchingHref(name); as href) {
+                  <a [href]="href" target="_blank" rel="noopener"
+                     data-testid="mint-asset-notice-rune">{{ name }}</a>
+                } @else {
+                  <span data-testid="mint-asset-notice-rune">{{ name }}</span>
+                }
+                @if (!$last) { , }
+              }
+            </p>
+          }
+          @if (assets.catIds.length > 0) {
+            <p>
+              <strong>CAT-21 cat{{ assets.catIds.length === 1 ? '' : 's' }}:</strong>
+              @for (id of assets.catIds; track id) {
+                <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
+                   data-testid="mint-asset-notice-cat">{{ id }}</a>
+                @if (!$last) { , }
+              }
+            </p>
+          }
+          @if (assets.rareSat; as rare) {
+            <p><strong>Rare sat:</strong>
+              <span data-testid="mint-asset-notice-raresat">{{ rareSatLabel(rare) }}</span>
+            </p>
+          }
+        </div>
+      } @else if (sel.bucket === 'assets' && sel.scan.kind === 'scanned-with-assets') {
         <div class="mint-alert mint-alert-danger" data-testid="asset-found-warning">
           <p>
             <strong>⚠ Asset detected on this funding source.</strong>
