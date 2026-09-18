@@ -179,9 +179,11 @@ test('capture cat21.space mint funding-state screenshots', { timeout: 300_000 },
   await fundCommonSats(payment, 1_500 / 1e8);
   await reloadMint(page);
   await setFee(page, 5);
-  const picker5 = page.locator('[data-testid^="utxo-row-"]').first();
-  if (!(await picker5.isVisible().catch(() => false))) {
-    await page.getByText('Choose a different funding source', { exact: false }).click().catch(() => undefined);
+  // A clean coin auto-covers here, so the expert picker is collapsed by default;
+  // open it explicitly via the summary (the isVisible-first-row heuristic works
+  // only when the picker is already open, as in the asset-bucket case4).
+  if ((await page.locator('details[data-testid="mint-expert"][open]').count()) === 0) {
+    await page.getByTestId('mint-expert-summary').click();
   }
   // ASSERT the over-pay state actually rendered (not just capture a frame): the
   // [data-fee-state="overpay"] row exists only when absorbedSubDustSats > 0. If
