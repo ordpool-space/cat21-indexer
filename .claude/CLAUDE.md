@@ -398,13 +398,40 @@ PICKER CONVERGENCE — the drift finding, sequenced across sessions:
   rgba(0,0,0,0.15) as solid black). ALWAYS mutation-check the ASSERTION, not only
   the styling it guards. `measuredTextContrast` (assetnotice spec) composites
   alpha; reuse its shape when pinning the shared picker's contrast.
-- NOTICE-LANE E2E for transfer/make-offer (E2E_BEST_PRACTICES §7.7/§7.8): route
-  every gated-CTA click through `clickUntilEffect` from `ordpool-sdk/e2e`
-  (`0342982`) — it re-clicks only while the control is visible+enabled with the
-  effect absent, returns `{ clicks }` so `expect(clicks).toBe(1)` turns a swallowed
-  click into a visible failure. And assert the dirty-only PREMISE at SETUP time
-  with the remedy in the failure message (a fixed-seed wallet accumulates across
-  local runs: green in CI's fresh stack, wrong-coin locally on run 2).
+- NOTICE-LANE E2E for transfer/make-offer (E2E_BEST_PRACTICES §7.7/§7.8, WIDENED
+  on ordpool-sdk `db3ec2d`): the mechanism is RE-RENDER, not gating. A gated CTA
+  is just the common instance — a control fails a single click whenever ANYTHING
+  can re-render it between the locator resolving and the click landing: a
+  `disabled` bound to a signal/resource, a sibling whose selected state changes, a
+  list that reorders, a parent that swaps children on load. So the grep before a
+  notice lane is NOT "is this control gated" but "what re-renders this control
+  between the click line and the assertion line". For the picker specifically the
+  SCAN RESOLVING re-renders the rows, so ANYTHING clicked in the picker while the
+  scan is still resolving is in scope, not just the CTA. Route those through
+  `clickUntilEffect` from `ordpool-sdk/e2e` (`0342982`) — re-clicks only while the
+  control is visible+enabled with the effect absent.
+- §7.7c — A RETRY COUNTER PROVES A RETRY HAPPENED, NEVER THAT IT WAS NECESSARY.
+  `clickUntilEffect`'s `{ clicks }` is a statement about our own code wearing the
+  authority of a measurement. A green `clicks === 1` is ONE data point about ONE
+  control, not a claim about the repo; and a `clicks > 1` does not prove a product
+  defect (cubes retracted its 2/2/2/3 counts — they were its own helper's ignored-
+  timeout `isVisible` toggling a popover, no product bug, escalated to the
+  maintainer on that false evidence). Before concluding ANYTHING from a count, find
+  the INDEPENDENT signal: element identity across clicks (same-node), not the
+  self-reported number.
+- FOOTGUN IN THIS REPO (found by the db3ec2d grep, fix DEFERRED to the notice-lane
+  work, do NOT touch mid-gate): `isVisible({ timeout })` / `isHidden({ timeout })`
+  COMPILE AND IGNORE the timeout (Playwright marks it deprecated-and-ignored), so
+  the check runs BEFORE the render and an optional-dialog dismissal silently no-
+  ops. Two sites: `funding-guard-inscription-regtest.spec.ts:138` and
+  `cat21-mint-regtest.spec.ts:188` (both `notNow.isVisible({ timeout: 1_500 })`).
+  Fix with `isVisibleWithin(locator, ms)` from the `/e2e` barrel (sdk `013faa7`,
+  needs a pin carrying it) — NOT a bare `waitFor` (it THROWS when the optional
+  dialog legitimately is not there; only safe if catch-wrapped). The other
+  `isVisible()` calls in e2e/ pass no timeout and are honest synchronous guards.
+- And assert the dirty-only PREMISE at SETUP time with the remedy in the failure
+  message (a fixed-seed wallet accumulates across local runs: green in CI's fresh
+  stack, wrong-coin locally on run 2).
 
 SETTLED FEE-COLUMN SHAPE (three-way: cat21 + ordpool + cubes, 2026-09-18). The
 family agreed one shape, still shape-only, no builds until the maintainer lifts
