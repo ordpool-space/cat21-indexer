@@ -309,7 +309,7 @@ still needs a connected wallet + live electrs to REVIEW (not to build):
   coin needs a real asset-bearing UTXO). Do that review in a connected session,
   or via the regtest e2e, before calling the panel visually signed off.
 
-#### Asset-to-miner safeguard (mint DONE) + picker convergence (SEQUENCED, deferred)
+#### Asset-to-miner safeguard (mint DONE, sign-off LIFTED) + picker convergence (IN PROGRESS)
 
 The maintainer's "never spend an asset to the miners by accident" ruling. MINT is
 done + proven: separate-address wallet + dirty-only pool -> `asset-notice` (notice
@@ -319,8 +319,45 @@ and `asset-notice` (mint.ts) — adopting only `auto` was a shipped bug that mad
 notice never render (regression-guarded by mint.spec.ts E2b, mutation-checked).
 Proofs: `cat21wallet-mint-assetnotice-regtest.spec.ts` (4/4, names the seeded
 asset per class, CTA enabled) + E2 (one-address block) / E2b (asset-notice adopt).
-`fundingTopology: 'derive'` is passed by mint only; transfer + make-offer still
-OMIT it (safe over-block) until their own slices.
+
+SIGN-OFF LIFTED (2026-09-18): the maintainer approved the mint screenshots + the
+fee column, and switched to parallel / deploy-fast (ready bar unchanged). Build
+order + live state:
+
+- DONE + shipped: SDK pin bumped to `18cb6e7` (standalone `769dee4`, on-disk
+  verified) — carries candidateFees / absorbedSubDustSats / isVisibleWithin. And
+  the two `isVisible({ timeout })` footgun sites fixed (`54592b6`).
+- SHARED PICKER GROWN (local, unshipped): `UtxoPicker` now has the fee column
+  (three states via absorbedSubDustSats), confirmed/unconfirmed, and the mark-in-
+  place recommended annotation, as OPTIONAL inputs (`feeByOutpoint`,
+  `recommendedOutpoint`) so transfer/offer render unchanged until they wire them.
+  Needs a browser look once wired.
+- GAP CLOSED (SDK `207338a`): `candidateFees` was on the CORE
+  `simulateMint/Transfer/CreateOffer` result but the stateful orchestrators did
+  NOT re-expose it. Reporting it (rather than deriving from `UtxoSimulationRow`,
+  HQ-forbidden) is what got it fixed for ALL THREE surfaces at once instead of
+  just the mint page. `MintSnapshot` / `TransferSnapshot` / `CreateOfferSnapshot`
+  now carry `candidateFees: CandidateFeeRow[]` (keyed by `outpointKey`, every
+  status) + `fundingRequirementSats` (feasibility floor) + `fundingPreferredSats`
+  (change-headroom target — you need both, the requirement alone is half the
+  selection rule). Build `feeByOutpoint = new Map(candidateFees.map(f =>
+  [outpointKey(f), f]))`. A new SDK test pins the core fee to the mint's per-UTXO
+  grid, so swapping the mint page from the grid to `candidateFees` cannot silently
+  change an on-screen number. INSCRIBE is deliberately excluded: its orchestrator
+  builds `simulations[].preview` with `commitFeeSats`/`revealFeeSats`/`totalFeeSats`
+  split — if cat21 ever grows an inscribe surface, bind to `preview`, NOT a fee row.
+- TRANSFER + MAKE-OFFER NOTICE REPLICATION (unblocked, independent of the fee
+  column, next focused pass): both have `fundingExpertRequired` (the block) but
+  LACK `assetNotice` + `noticeAssets` and do NOT pass `fundingTopology: 'derive'`
+  (they "keep the safe over-block"). Replicate the signed-off mint pattern ATOMICALLY
+  per surface: pass `'derive'` + add the two computeds (mirror mint.ts) + render the
+  notice UI naming the assets (mirror mint.html's `mint-asset-notice`) + a notice-
+  lane regtest. `'derive'` MUST NOT ship without the notice UI in the same commit —
+  enabling the notice path (CTA becomes enabled via `resolveFundingPick`) while
+  hiding the notice is the exact "billed not informed" failure the HARD RULE forbids.
+  Notice lane per E2E_BEST_PRACTICES §7.7 (widened: re-render is the mechanism; the
+  scan resolving re-renders the rows, so route picker clicks through `clickUntilEffect`)
+  + §7.8 (assert the dirty-only premise at setup).
 
 CONTRAST: the mint picker's status labels + the "Use anyway"/"Selected" override
 control were bare colours on the orange body (asset-found #ff6b6b = 1.30:1). Fixed
