@@ -428,7 +428,16 @@ PICKER CONVERGENCE — the drift finding, sequenced across sessions:
   Fix with `isVisibleWithin(locator, ms)` from the `/e2e` barrel (sdk `013faa7`,
   needs a pin carrying it) — NOT a bare `waitFor` (it THROWS when the optional
   dialog legitimately is not there; only safe if catch-wrapped). The other
-  `isVisible()` calls in e2e/ pass no timeout and are honest synchronous guards.
+  `isVisible()` calls in e2e/ pass no timeout and are honest synchronous guards —
+  do NOT let a later sweep churn them; the defect is only the call that reads as a
+  wait and is not one. NB: because this fix needs a pin bump, run the workspace
+  pin-verify dance when you do it (see the workspace HQ "Pinning a sha pins neither
+  what it runs against nor itself" rule): confirm the on-disk `@scure/btc-signer`
+  version, the peer range the INSTALLED sdk declares, the lockfile entry, and a
+  diff of one known file against the sha you meant (`node_modules/ordpool-sdk/
+  package.json` carries a fixed `"version": "0.1.0"` and no `_resolved`, so it
+  cannot tell you which sha you have), then clear `.angular/cache` — a build error
+  that contradicts the files on disk is cache pollution, not dependency evidence.
 - And assert the dirty-only PREMISE at SETUP time with the remedy in the failure
   message (a fixed-seed wallet accumulates across local runs: green in CI's fresh
   stack, wrong-coin locally on run 2).
