@@ -69,6 +69,37 @@ async function shot(p: Page, name: string): Promise<void> {
   }).catch(() => undefined);
 }
 
+/**
+ * WCAG contrast of a rendered element's text against the background it actually
+ * paints on, MEASURED from getComputedStyle in the real browser — not assumed
+ * from "we switched to filled badges". This catches the incomplete-pair
+ * regression (a background set without pinning the text colour, so the label
+ * inherits the body's near-white) that a hex-pair math check on the source
+ * cannot see: if the fill is ever removed the element goes transparent, this
+ * walks up to the first painted ancestor (the orange body), and the ratio
+ * collapses. Returns the ratio so the assertion can name it.
+ */
+async function measuredTextContrast(page: Page, selector: string): Promise<number> {
+  return page.locator(selector).first().evaluate((el: Element) => {
+    const parse = (c: string): [number, number, number] => {
+      const m = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!m) throw new Error(`unparseable colour: ${c}`);
+      return [Number(m[1]), Number(m[2]), Number(m[3])];
+    };
+    const lin = (c: number) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    const lum = (rgb: [number, number, number]) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+    let bgEl: Element | null = el;
+    let bg = getComputedStyle(el).backgroundColor;
+    while (bgEl && (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent')) {
+      bgEl = bgEl.parentElement;
+      bg = bgEl ? getComputedStyle(bgEl).backgroundColor : 'rgb(255, 153, 0)'; // #FF9900 body
+    }
+    const fg = getComputedStyle(el).color;
+    const lf = lum(parse(fg)) + 0.05;
+    const lb = lum(parse(bg)) + 0.05;
+    return lf > lb ? lf / lb : lb / lf;
+  });
+}
 
 /** Connect cat21-wallet via the mint page; return the payment address. */
 async function connectAndReadPayment(page: Page): Promise<string> {
@@ -244,6 +275,35 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   // review point: enabled is not permission to bury the notice below the fold.
   await shot(page, `${asset}-notice`);
   console.log(`[${tag}] notice shown naming ${dirty.assetId}, CTA enabled`);
+
+  // CONTRAST, measured on the rendered page, once (the badge/control CSS is
+  // class-based and identical across cells). A funding-status label is
+  // information, so it must clear WCAG AA (4.5:1) on the orange body; a bare
+  // colour there fails ~1.3:1. The override CONTROL is checked first and hardest
+  // because it is the single button in the flow that spends an asset-bearing
+  // coin. Assert the MEASURED ratio, not "we used a filled badge" — the two are
+  // different claims, and only the measured one survives a palette change nobody
+  // re-photographs.
+  if (asset === 'inscription') {
+    // The picker opens by default for an asset-bucket selection, so the badge +
+    // override control are rendered; expand it defensively.
+    const pickerToggle = page.getByText('Choose a different funding source', { exact: false });
+    if (await pickerToggle.isVisible().catch(() => false)) {
+      const anyRow = page.locator('[data-testid^="mint-utxo-row-"]').first();
+      if (!(await anyRow.isVisible().catch(() => false))) await pickerToggle.click().catch(() => undefined);
+    }
+    const overrideRatio = await measuredTextContrast(page, '.mint-utxo-pick-override');
+    expect(
+      overrideRatio,
+      `"Use anyway"/"Selected" override control contrast is ${overrideRatio.toFixed(2)}:1 on the rendered page (WCAG AA needs 4.5) — this is the one control that spends an asset coin`,
+    ).toBeGreaterThanOrEqual(4.5);
+    const badgeRatio = await measuredTextContrast(page, '[class~="mint-utxo-bucket-assets"]');
+    expect(
+      badgeRatio,
+      `the "asset found" status badge contrast is ${badgeRatio.toFixed(2)}:1 on the rendered page (WCAG AA needs 4.5)`,
+    ).toBeGreaterThanOrEqual(4.5);
+    console.log(`[${tag}] contrast: override=${overrideRatio.toFixed(2)}:1 badge=${badgeRatio.toFixed(2)}:1`);
+  }
 
   // We do NOT execute the mint here. This is a MULTI-CELL suite sharing one
   // wallet, and a real mint's CLEAN change coin (the asset moves to the cat
