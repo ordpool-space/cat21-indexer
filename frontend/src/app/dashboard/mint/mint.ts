@@ -174,10 +174,12 @@ export class Mint {
   readonly debugFunding = computed(() => {
     const rec = this.fundingRecommendation();
     const w = this.connectedWallet();
+    const r = rec?.recommended;
     return {
       status: rec?.status ?? 'none',
       hasSelected: !!this.selectedUtxo(),
-      hasRecommended: !!rec?.recommended,
+      hasRecommended: !!r,
+      recommendedOutpoint: r ? `${r.txid}:${r.vout}` : '',
       candidates: rec?.candidates?.length ?? 0,
       payEqOrd: !!w && w.paymentAddress === w.ordinalsAddress,
     };

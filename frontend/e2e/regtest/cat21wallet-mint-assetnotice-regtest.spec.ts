@@ -186,24 +186,37 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   await manualInput.fill(String(RATE));
   await manualInput.press('Tab');
 
-  // Diagnostic: give the recommendation a moment to settle, then dump the
-  // funding state so a failure is attributable (status + topology inputs) rather
-  // than a bare "notice not visible".
+  // Wait until the recommendation actually reflects THIS cell's freshly-seeded
+  // coin, not a prior cell's already-scanned one. The four cells share one
+  // wallet, so a larger earlier coin can be the recommendation until the new
+  // (smaller) coin finishes scanning in the orchestrator. Nudge the fee each
+  // iteration to force a fresh recommendation; the decreasing per-cell sizes make
+  // this cell's coin the best-fit once it is a scanned candidate. Waiting on the
+  // recommended OUTPOINT (not a timeout) is what makes the naming assertion below
+  // deterministic — the seed's assetId is only on the seed's own coin.
   const debug = page.getByTestId('mint-debug-funding');
   await debug.waitFor({ state: 'attached', timeout: 30_000 });
-  for (let i = 0; i < 30; i++) {
-    const st = await debug.getAttribute('data-status').catch(() => null);
-    if (st && st !== 'none' && st !== 'scanning') break;
+  let recOutpoint = '';
+  for (let i = 0; i < 60; i++) {
+    recOutpoint = (await debug.getAttribute('data-recommended-outpoint').catch(() => '')) ?? '';
+    if (recOutpoint === dirty.outpoint) break;
+    await manualInput.fill(String(RATE + (i % 2))); // nudge to recompute
+    await manualInput.press('Tab');
     await debug.evaluate(() => new Promise((r) => setTimeout(r, 1000)));
   }
   const dbg = await debug.evaluate((el) => ({
     status: el.getAttribute('data-status'),
     hasSelected: el.getAttribute('data-has-selected'),
-    hasRecommended: el.getAttribute('data-has-recommended'),
-    candidates: el.getAttribute('data-candidates'),
+    recommendedOutpoint: el.getAttribute('data-recommended-outpoint'),
     payEqOrd: el.getAttribute('data-pay-eq-ord'),
   })).catch(() => null);
-  console.log(`[${tag}] debug-funding: ${JSON.stringify(dbg)}`);
+  console.log(`[${tag}] debug-funding: ${JSON.stringify(dbg)} (want recommended=${dirty.outpoint})`);
+  expect(
+    recOutpoint,
+    `the recommendation never settled on THIS cell's seeded ${asset} coin ${dirty.outpoint}`,
+  ).toBe(dirty.outpoint);
+  await manualInput.fill(String(RATE)); // settle back to the clean rate
+  await manualInput.press('Tab');
 
   // ─── THE LOAD-BEARING ASSERTIONS ─────────────────────────────────
   // The notice renders (separate-address wallet, dirty-only pool -> asset-notice).
@@ -213,9 +226,10 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
     `asset-notice failed: no mint-asset-notice for the ${asset} case (topology mis-derived, or the pool did not classify dirty)`,
   ).toBeVisible({ timeout: 90_000 });
 
-  // It NAMES the specific asset the FIXTURE seeded — dirty.assetId is the seed's
-  // own value (inscription id / cat id / rune name / sat number), held here and
-  // asserted against the rendered text. Not an id read back from the page.
+  // It NAMES the specific asset the FIXTURE seeded. The recommended coin IS the
+  // seed (asserted above), so its assets are the seed's. dirty.assetId is the
+  // seed's OWN value (inscription id / cat id / rune name / sat number), held here
+  // and asserted against the rendered text — never an id read back from the page.
   await expect(
     notice,
     `asset-notice for ${asset} did not name the seeded asset ${dirty.assetId}`,
