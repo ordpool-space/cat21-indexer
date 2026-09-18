@@ -14,6 +14,15 @@ import {
   waitForApprovalPopup,
 } from 'ordpool-sdk/e2e';
 import { installBrowserErrorGuard } from './console-guard';
+import { cleanOutputFixture } from 'ordpool-sdk/core';
+
+// Canonical clean `/output` body (indexed, carries nothing), merged across the
+// two ord surfaces the scanner reads (full ord: inscriptions/runes/sat_ranges;
+// cat21-ord: cats). Fixture-derived so it cannot drift from
+// `classifyUtxoContent`'s contract: the fail-closed classifier reads an
+// absent `sat_ranges` as NOT-INDEXED, so a hand-written body without it would
+// class the funding coin unknown and disable the mint button.
+const CLEAN_OUTPUT_BODY = { ...cleanOutputFixture().ord, ...cleanOutputFixture().cat21Ord };
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint
@@ -143,7 +152,7 @@ test.beforeAll(async () => {
       status: 200,
       contentType: 'application/json',
       headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({ inscriptions: [], runes: {}, cats: [] }),
+      body: JSON.stringify(CLEAN_OUTPUT_BODY),
     });
   });
 
@@ -510,7 +519,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
           value: SMALL_FUND_SATS,
           script_pubkey: '',
         }
-      : { inscriptions: [], runes: {}, cats: [] };
+      : CLEAN_OUTPUT_BODY;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

@@ -16,6 +16,15 @@ import {
   onboardCat21Wallet,
 } from 'ordpool-sdk/e2e';
 import { installContextErrorGuard } from './lib/browser-error-guard';
+import { cleanOutputFixture } from 'ordpool-sdk/core';
+
+// Canonical clean `/output` body (indexed, carries nothing), merged across the
+// two ord surfaces the scanner reads (full ord: inscriptions/runes/sat_ranges;
+// cat21-ord: cats). Fixture-derived so it cannot drift from
+// `classifyUtxoContent`'s contract: the fail-closed classifier reads an absent
+// `sat_ranges` as NOT-INDEXED, so a hand-written body without it would class the
+// funding coin unknown and disable the mint button.
+const CLEAN_OUTPUT_BODY = { ...cleanOutputFixture().ord, ...cleanOutputFixture().cat21Ord };
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint via CAT-21 wallet.
@@ -292,7 +301,7 @@ test.beforeAll(async () => {
       status: 200,
       contentType: 'application/json',
       headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({ inscriptions: [], runes: {}, cats: [] }),
+      body: JSON.stringify(CLEAN_OUTPUT_BODY),
     });
   });
 
@@ -581,7 +590,7 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
       body: JSON.stringify(
         isCatTarget
           ? { inscriptions: [], runes: {}, cats: [0] }
-          : { inscriptions: [], runes: {}, cats: [] },
+          : CLEAN_OUTPUT_BODY,
       ),
     });
   });
