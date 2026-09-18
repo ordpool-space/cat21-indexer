@@ -364,9 +364,21 @@ PICKER CONVERGENCE — the drift finding, sequenced across sessions:
   session before/while building — ordpool is landing the same ruling; this repo
   builds it into the SHARED component, so our shape wins by default and should win
   on purpose (one family shape, not two reasonable-in-isolation ones).
-- CORE SHAPE IS LIVE (ordpool-sdk `89db425`, bump the pin when you start this):
-  `CandidateFeeRow { txid; vout; finalFeeSats: number|null; vsize: number|null }`
-  and `outpointKey(u)` -> `${txid}:${vout}`, both exported from root + `/core`.
+- CORE SHAPE IS LIVE (ordpool-sdk `b407e62`, bump the pin when you start this):
+  `CandidateFeeRow { txid; vout; finalFeeSats: number|null; vsize: number|null;
+  absorbedSubDustSats: number|null }` and `outpointKey(u)` -> `${txid}:${vout}`,
+  both exported from root + `/core`. `absorbedSubDustSats` IS the three-state
+  distinction as an SDK-owned policy field, NOT something to re-derive per surface
+  (the derivation `value >= requirement && value < preferred` is a POLICY rule;
+  three surfaces re-implementing it is three chances to drift, and a drift shows a
+  usable coin as unavailable or an over-payer as clean): `0` = emits normal change
+  (state 1, normal); positive = sub-dust folded into the fee (state 2, over-pay,
+  FLAG it); `null` = cannot fund at this rate (state 3, unavailable). Do NOT
+  recompute it from finalFeeSats. Inscribe reports `absorbedSubDustSats: null`
+  even when it CAN fund, because `simulateInscribeFees` does not yet surface the
+  commit's own fold — an honest gap, so an inscribe row states the package cost
+  and says the fold is unknown rather than implying `0`. If the inscribe breakdown
+  panel needs the real fold, ask the SDK to surface it, don't derive it.
   `simulateMint/Transfer/CreateOffer/Inscribe` each return `candidateFees:
   CandidateFeeRow[]`, keyed on the same outpoint the recommendation uses, present
   on EVERY status incl. `expert-required` + `asset-notice` (exactly when a picker
@@ -419,17 +431,19 @@ the peers already had pickers on screen:
   destroys that comparison ("why not the cheaper one?" is only answerable while
   the cheaper row is still visibly above). The badge on the cheap row carries the
   answer (asset found, or over-pays via the dust fold).
-- THREE fee states, not two (ordpool's framing): (1) NORMAL — pickable,
-  "<n> sat (~<fiat>)"; (2) DUST-FOLD OVER-PAY — pickable but FLAGGED, the band
-  where sub-dust change folds into the miner fee (a 7-13% absorbed-change over-
-  pay; on cat21 the fold itself is a deliberate feature, rarer color + faster tx,
-  see `project_dust_absorb_is_feature`, so the flag is informational, not a
-  block); (3) TRULY-UNAVAILABLE — `finalFeeSats === null`, greyed + unpickable,
-  with a STATED REASON that names the RATE as the variable: "can't fund at this
-  rate" (so lowering the rate predictably flips the row). Never a dash, never 0.
-  The over-pay flag (state 2) is LOAD-BEARING for the mark-in-place choice: it is
-  what makes the recommended coin legible as the answer to "why not the cheaper
-  row?" without re-sorting. It is not decoration.
+- THREE fee states, not two (ordpool's framing), discriminated by the SDK's
+  `absorbedSubDustSats` field (see CORE SHAPE), NOT re-derived: (1) NORMAL —
+  `absorbedSubDustSats === 0`, pickable, "<n> sat (~<fiat>)"; (2) DUST-FOLD
+  OVER-PAY — `absorbedSubDustSats > 0`, pickable but FLAGGED, the band where sub-
+  dust change folds into the miner fee (a 7-13% absorbed-change over-pay; on cat21
+  the fold itself is a deliberate feature, rarer color + faster tx, see
+  `project_dust_absorb_is_feature`, so the flag is informational, not a block);
+  (3) TRULY-UNAVAILABLE — `absorbedSubDustSats === null` (finalFeeSats also null),
+  greyed + unpickable, with a STATED REASON that names the RATE as the variable:
+  "can't fund at this rate" (so lowering the rate predictably flips the row).
+  Never a dash, never 0. The over-pay flag (state 2) is LOAD-BEARING for the mark-
+  in-place choice: it is what makes the recommended coin legible as the answer to
+  "why not the cheaper row?" without re-sorting. It is not decoration.
 - ASSETS render on a SECOND LINE under the coin row, named + linked, not crammed
   into the badge: the badge says a coin is DIRTY, the line says WHAT ("Assets on
   this UTXO: <id linked>", "rare sat: uncommon · sat … · block …"). In a one-line
