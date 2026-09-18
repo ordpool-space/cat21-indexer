@@ -99,6 +99,30 @@ async function clickApprovalButton(popup: Page): Promise<void> {
 }
 
 /**
+ * Money-path assertion on the buyer's sign popup: a buy-offer is sniping-proof
+ * precisely because the BUYER signs only their own funding inputs and NEVER the
+ * seller's cat UTXO. ord's `wallet offer create` (which the SDK mirrors)
+ * pre-selects that seller UTXO as input 0 and leaves it UNSIGNED; the buyer's
+ * funding inputs follow at index >= 1. cat21-wallet drives which inputs it signs
+ * through `signAtIndex=<n>` params on the sign-psbt popup URL.
+ *
+ * Self-guarding against a vacuous check: assert the URL IS a sign-psbt route
+ * carrying at least one `signAtIndex` (so a URL that never encoded indices reds
+ * here, not silently), THEN assert none of those indices is 0. The `=0`
+ * substring only matches index 0 exactly — integer indices are `=`-delimited, so
+ * `signAtIndex=10` does not contain `signAtIndex=0`. If the builder ever asked
+ * the buyer to sign the seller's input, the second assertion goes red.
+ */
+async function assertBuyerNeverSignsSellerInput0(signPopup: Page): Promise<void> {
+  const url = signPopup.url();
+  expect(url, 'buyer sign popup must be the sign-psbt route').toContain('sign-psbt');
+  expect(url, 'buyer sign popup must carry at least one signAtIndex (else the check is vacuous)')
+    .toMatch(/signAtIndex=\d+/);
+  expect(url, 'buyer must NOT be asked to sign the seller cat input 0 (sniping-proof invariant)')
+    .not.toContain('signAtIndex=0');
+}
+
+/**
  * Connect cat21-wallet via the mint page and read BOTH addresses from the
  * header popover: the payment address (buyer funding, bcrt1q) and the
  * ordinals address (where the bought cat lands, bcrt1p). Both are the real
@@ -305,6 +329,7 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
     },
   });
   await shot(signPopup, `${valueSats}-02-sign-popup`);
+  await assertBuyerNeverSignsSellerInput0(signPopup);
   await clickApprovalButton(signPopup);
   await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
@@ -447,6 +472,7 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
       return true;
     },
   });
+  await assertBuyerNeverSignsSellerInput0(signPopup);
   await clickApprovalButton(signPopup);
   await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
