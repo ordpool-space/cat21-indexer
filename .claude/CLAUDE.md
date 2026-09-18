@@ -309,6 +309,51 @@ still needs a connected wallet + live electrs to REVIEW (not to build):
   coin needs a real asset-bearing UTXO). Do that review in a connected session,
   or via the regtest e2e, before calling the panel visually signed off.
 
+#### Asset-to-miner safeguard (mint DONE) + picker convergence (SEQUENCED, deferred)
+
+The maintainer's "never spend an asset to the miners by accident" ruling. MINT is
+done + proven: separate-address wallet + dirty-only pool -> `asset-notice` (notice
+naming the asset, CTA enabled, proceed); one-address wallet -> `expert-required`
+(CTA disabled + picker). The component adopts the recommendation for BOTH `auto`
+and `asset-notice` (mint.ts) — adopting only `auto` was a shipped bug that made the
+notice never render (regression-guarded by mint.spec.ts E2b, mutation-checked).
+Proofs: `cat21wallet-mint-assetnotice-regtest.spec.ts` (4/4, names the seeded
+asset per class, CTA enabled) + E2 (one-address block) / E2b (asset-notice adopt).
+`fundingTopology: 'derive'` is passed by mint only; transfer + make-offer still
+OMIT it (safe over-block) until their own slices.
+
+CONTRAST: the mint picker's status labels + the "Use anyway"/"Selected" override
+control were bare colours on the orange body (asset-found #ff6b6b = 1.30:1). Fixed
+to filled badges (light fill + dark text, the shared UtxoPicker's Bootstrap pairs,
+~7:1). PINNED by a RENDERED-PAGE WCAG assertion in the assetnotice lane
+(`measuredTextContrast` reads computed colour vs the actually-painted background,
+walks up if a fill is removed, asserts >= 4.5, ratio in the message), mutation-
+checked. A status label is INFORMATION and must read on its ground; a bare colour
+on a saturated body fails and a hex-math check on the source can't see it.
+
+PICKER CONVERGENCE — the drift finding, sequenced across sessions:
+
+- cat21.space's MINT page has its OWN inline picker (`mint-utxo-*` in mint.html /
+  mint.scss); transfer + make-offer use the shared `UtxoPicker` component. That
+  divergence IS why the contrast bug existed in one place and not the other.
+- Mint's picker differs by exactly: (1) a per-row miner FEE
+  (`row.simulation.finalTransactionFee`) — NOT uniform per coin, because sub-dust
+  change is absorbed into the fee (`finalFeeSats = feeSats + absorbedIntoFee`), so
+  identical-rate coins cost different money out; (2) a confirmed/unconfirmed label.
+- Ruling (with the ordpool-sdk coordinator): KEEP the fee, CONVERGE mint onto the
+  shared picker, via a TYPED optional per-row input (`feeByOutpoint` / detail
+  record), NOT a projected slot (a slot just relocates the divergence). Confirmed/
+  unconfirmed goes in the shared component for all three (electrs can list one
+  outpoint twice around confirmation — two rows disagreeing on `confirmed` is the
+  known HQ dedup bug, not a mystery).
+- ORDER (do NOT reorder): the SDK coordinator FIRST lifts the per-candidate fee
+  into the core (`recommendFunding` candidates today carry `bucket` + `assets`,
+  NO fee — the real gap), THEN this repo grows the shared `UtxoPicker`'s typed
+  input against that shape, THEN mint drops its inline picker. Do NOT build against
+  mint's orchestrator-local `UtxoSimulationRow`. Do this during the transfer/
+  make-offer replication, AFTER the maintainer signs off the mint pattern — never
+  touch a surface mid-review.
+
 ### Commands
 ```bash
 cd frontend
