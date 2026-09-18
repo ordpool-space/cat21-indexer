@@ -394,6 +394,61 @@ PICKER CONVERGENCE — the drift finding, sequenced across sessions:
   with the remedy in the failure message (a fixed-seed wallet accumulates across
   local runs: green in CI's fresh stack, wrong-coin locally on run 2).
 
+SETTLED FEE-COLUMN SHAPE (three-way: cat21 + ordpool + cubes, 2026-09-18). The
+family agreed one shape, still shape-only, no builds until the maintainer lifts
+the mint sign-off gate. Points, some sharper than the original proposal because
+the peers already had pickers on screen:
+
+- FEE cell renders the family Money shape, `<n> sat (~<fiat>)`, sats space-
+  grouped, and the FIAT HALF IS OMITTED ENTIRELY when no rate is known (never 0,
+  never a dash). cat21 + cubes format via the SDK's `formatSatsWithUsd`; ordpool
+  via mempool's `<app-fiat>` over its websocket. Same SHAPE, each site's own rate
+  source, deliberately NOT byte-identical.
+- The commit+reveal qualifier is PER-SURFACE, not per-repo. Inscribe-type
+  surfaces price the commit+reveal PACKAGE and take the qualifier; mint-type
+  surfaces omit it. Qualifying surfaces across the family: cubes, ordpool-inscribe,
+  cat21-inscribe-if-any. cat21's MINT picker omits it (a mint is one tx). Wording
+  is TRAILING: `fee 4 750 sat (commit + reveal)`, never a parenthetical between
+  the label and its value (that breaks the number-column scan for the two surfaces
+  that don't need it). The qualifier is a REMINDER only; the teaching version
+  (`commit 1540 + reveal 3210 = 4750 sat`) lives in a breakdown panel the inscribe
+  surface owns, NOT in the shared row.
+- RECOMMENDED coin: MARK IN PLACE, keep the natural/value sort, do NOT sort the
+  recommendation to the top. The cost column exists so the reader sees the
+  cheaper-looking row is cheaper for a reason; sorting the recommendation first
+  destroys that comparison ("why not the cheaper one?" is only answerable while
+  the cheaper row is still visibly above). The badge on the cheap row carries the
+  answer (asset found, or over-pays via the dust fold).
+- THREE fee states, not two (ordpool's framing): (1) NORMAL — pickable,
+  "<n> sat (~<fiat>)"; (2) DUST-FOLD OVER-PAY — pickable but FLAGGED, the band
+  where sub-dust change folds into the miner fee (a 7-13% absorbed-change over-
+  pay; on cat21 the fold itself is a deliberate feature, rarer color + faster tx,
+  see `project_dust_absorb_is_feature`, so the flag is informational, not a
+  block); (3) TRULY-UNAVAILABLE — `finalFeeSats === null`, greyed + unpickable,
+  with a STATED REASON that names the RATE as the variable: "can't fund at this
+  rate" (so lowering the rate predictably flips the row). Never a dash, never 0.
+  The over-pay flag (state 2) is LOAD-BEARING for the mark-in-place choice: it is
+  what makes the recommended coin legible as the answer to "why not the cheaper
+  row?" without re-sorting. It is not decoration.
+- ASSETS render on a SECOND LINE under the coin row, named + linked, not crammed
+  into the badge: the badge says a coin is DIRTY, the line says WHAT ("Assets on
+  this UTXO: <id linked>", "rare sat: uncommon · sat … · block …"). In a one-line
+  row that content truncates or shoves the fee column (the one being added) off
+  the edge.
+- "ONE SHAPE" is a shared visual/textual SPEC, not necessarily one component.
+  ordpool is the mempool AGPL fork: it hand-rolls its pickers, imports no
+  `UtxoPicker`, and has no transfer/offer surfaces (those are cat21 + wallet). It
+  MATCHES the shape locally. So the contract is: the shared SDK `UtxoPicker` for
+  cat21's own surfaces, and a matched spec everyone else replicates. Each repo's
+  extras (ordpool's Scan/Retry + Use-anyway) stay local around the shared columns.
+- CONTRAST is measured PER-GROUND, never inherited from the ground that passed.
+  cubes measured its own panel and it FAILED on the dark ground (badge 3.48:1,
+  override 2.94:1) with every colour individually valid and only the pairing
+  wrong. Any shared measurement helper must carry the translucent-refusal /
+  alpha-compositing guard from the overlay finding (the `measuredTextContrast`
+  shape in the assetnotice spec), and the pair must be re-measured on orange
+  (cat21), dark (cubes), and ordpool's ground separately.
+
 ### Commands
 ```bash
 cd frontend
