@@ -351,12 +351,14 @@ export class Mint {
       this.scanner.autoScan(rows.map((r) => ({ txid: r.utxo.txid, vout: r.utxo.vout, value: r.utxo.value })));
     });
 
-    // Auto-select ONLY the SDK's safe recommendation: a content-clean covering
-    // coin (fundingRecommendation$ status 'auto'). Never a raw value-based
-    // pre-pick, so an asset-bearing, unscanned, or scan-failed coin is never
-    // auto-spent. When only asset / scanning / insufficient coins cover, the
-    // selection is left null and the expert picker surfaces
-    // (fundingExpertRequired) for a deliberate override.
+    // Auto-select the SDK's recommendation for the two statuses where the SDK
+    // ITSELF picks a coin: 'auto' (a content-clean covering coin) and
+    // 'asset-notice' (no clean coin covers, but a dirty one does AND the wallet
+    // keeps a separate payment address, so the SDK proceeds and the UI NOTICEs).
+    // Never a raw value-based pre-pick. For 'expert-required' (a one-address
+    // wallet's dirty-only pool), 'scanning', and 'insufficient', the SDK returns
+    // no pick, so the selection is left null: the button blocks and the expert
+    // picker surfaces for a deliberate override.
     effect(() => {
       const rows = this.allViableRows();
       const current = this.selectedUtxo();
@@ -374,7 +376,8 @@ export class Mint {
         && rows.some((r) => r.utxo.txid === current.txid && r.utxo.vout === current.vout);
       if (userStillThere) return;
       const rec = this.fundingRecommendation();
-      const recommended = rec?.status === 'auto' ? rec.recommended : null;
+      const recommended =
+        rec?.status === 'auto' || rec?.status === 'asset-notice' ? rec.recommended : null;
       // Adopt the recommendation only when it's actually a viable row (covers
       // postage + fee at the current rate); otherwise clear so canMint gates
       // on a deliberate pick.
