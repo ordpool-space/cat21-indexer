@@ -324,14 +324,40 @@ SIGN-OFF LIFTED (2026-09-18): the maintainer approved the mint screenshots + the
 fee column, and switched to parallel / deploy-fast (ready bar unchanged). Build
 order + live state:
 
-- DONE + shipped: SDK pin bumped to `18cb6e7` (standalone `769dee4`, on-disk
-  verified) — carries candidateFees / absorbedSubDustSats / isVisibleWithin. And
+- MINT CONVERGENCE SHIPPED + VERIFIED LIVE on cat21.space (2026-09-18). The mint
+  page's inline `mint-utxo-*` picker is gone; it renders `<app-utxo-picker>` wired
+  with `feeByOutpoint` (from the snapshot's `candidateFees`, keyed by `outpointKey`)
+  + `recommendedOutpoint`. The shared `UtxoPicker` has the fee column (three states
+  via `absorbedSubDustSats`: normal / dust-fold over-pay / can't-fund-at-this-rate),
+  confirmed/unconfirmed, and the mark-in-place recommended annotation, as OPTIONAL
+  inputs (transfer/offer render unchanged until they wire them). Commits: pin
+  `77d4668` (207338a) + convergence `3139f9c` + regtest re-point `30d9f9e` + panel
+  re-point `29729f2`. Deployed by `git push main:stage_prod` (frontend-only: the
+  delta had ZERO backend files and `build-backend.yml` is path-filtered to
+  `backend/**`, so no backend restart / no migration). Verified live: the deployed
+  `main-<hash>.js` carries the picker's distinctive strings ("can't fund at this
+  rate", "over-pays", "recommended"), and a fresh Playwright context on the nested
+  `/dashboard/mint` deep link boots with 0 console errors (no Cloudflare-Pages
+  module-MIME trap). New screenshots went to the maintainer via SendUserFile as the
+  changed-artifact FYI (the earlier inline-picker sign-off is stale; sent, not gated).
+- BENEATH IT, also shipped in the same deploy: the whole asset-to-miner safeguard
+  (asset-notice UI, funding-safety gating) that had accumulated undeployed on
+  `main` all session. The `main:stage_prod` push drained the entire frontend
+  backlog in one deploy, which is the accumulated-release-queue the continuous-
+  deploy philosophy wants gone.
+- EARLIER, DONE + shipped: SDK pin bumped to `18cb6e7` (standalone `769dee4`) — and
   the two `isVisible({ timeout })` footgun sites fixed (`54592b6`).
-- SHARED PICKER GROWN (local, unshipped): `UtxoPicker` now has the fee column
-  (three states via absorbedSubDustSats), confirmed/unconfirmed, and the mark-in-
-  place recommended annotation, as OPTIONAL inputs (`feeByOutpoint`,
-  `recommendedOutpoint`) so transfer/offer render unchanged until they wire them.
-  Needs a browser look once wired.
+- NICE-TO-HAVE BACKLOG (NOT a safety hole — the safety-critical trio is covered at
+  each owning layer): a cat21.space regtest lane driving a REAL one-address wallet
+  (unisat/wizz/okx) to prove the BLOCK path end-to-end via real ord. Today: the
+  topology DECISION is unit-covered (SDK `funding-safety.spec.ts`), the page RENDER
+  is unit-covered (`mint.spec.ts` E2), and the REAL-WALLET topology fact (a real
+  unisat presents one address, real Xverse two) is covered in the SDK wallet
+  matrices via `isOneAddressWallet(info)` (SDK `4b8ecf9`). No regtest drives a real
+  one-address wallet, so the BLOCK path has no full-stack lane — a nice-to-have
+  end-to-end wiring proof, not an open hole. `funding-guard-inscription-regtest`
+  drives Xverse and proves the scanner-reads-ord + names-the-inscription path (its
+  panel is `mint-asset-notice`, since Xverse is notice-and-proceed).
 - GAP CLOSED (SDK `207338a`): `candidateFees` was on the CORE
   `simulateMint/Transfer/CreateOffer` result but the stateful orchestrators did
   NOT re-expose it. Reporting it (rather than deriving from `UtxoSimulationRow`,
