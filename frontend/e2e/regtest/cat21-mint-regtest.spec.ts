@@ -12,6 +12,7 @@ import {
   getTx,
   waitForTxConfirmed,
   waitForApprovalPopup,
+  isVisibleWithin,
 } from 'ordpool-sdk/e2e';
 import { installBrowserErrorGuard } from './console-guard';
 import { cleanOutputFixture } from 'ordpool-sdk/core';
@@ -185,7 +186,10 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
     }, undefined, { timeout: 30_000, polling: 250 });
   }
   const notNow = primer.getByText('Not now', { exact: true }).first();
-  if (await notNow.isVisible({ timeout: 1_500 }).catch(() => false)) {
+  // isVisibleWithin, not isVisible({ timeout }): Playwright ignores the timeout
+  // on isVisible (it is @deprecated-and-ignored), so the check would run before
+  // an optional "Not now" dialog had rendered and the dismissal would no-op.
+  if (await isVisibleWithin(notNow, 1_500)) {
     await notNow.click({ force: true }).catch(() => undefined);
   }
   await shot(primer, '01-unlocked');

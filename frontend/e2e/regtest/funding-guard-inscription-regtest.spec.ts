@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import {
   seedInscribedCoin,
   waitForApprovalPopup,
+  isVisibleWithin,
   rpc,
 } from 'ordpool-sdk/e2e';
 import { installBrowserErrorGuard } from './console-guard';
@@ -135,7 +136,10 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
     }, undefined, { timeout: 30_000, polling: 250 });
   }
   const notNow = primer.getByText('Not now', { exact: true }).first();
-  if (await notNow.isVisible({ timeout: 1_500 }).catch(() => false)) {
+  // isVisibleWithin, not isVisible({ timeout }): Playwright ignores the timeout
+  // on isVisible (it is @deprecated-and-ignored), so the check would run before
+  // an optional "Not now" dialog had rendered and the dismissal would no-op.
+  if (await isVisibleWithin(notNow, 1_500)) {
     await notNow.click({ force: true }).catch(() => undefined);
   }
   await primer.close();
