@@ -29,10 +29,14 @@ import { installBrowserErrorGuard } from './console-guard';
  *     (:8081) for the `inscriptions` field, cat21-ord (:8080) for cats. No mock.
  *   - With a working guard the coin lands in the unsafe bucket: the row shows
  *     "⚠ asset found" and offers "Use anyway" instead of auto-selecting it, and
- *     the warning panel names the inscription.
+ *     the asset-notice panel names the inscription. (Xverse keeps a separate
+ *     payment address, so a dirty-only funding pool is NOTICE-and-proceed, not a
+ *     block; the panel that names the asset is `mint-asset-notice`. The proof
+ *     here is topology-independent: the scanner reading stock ord's inscriptions
+ *     field, not the wallet's block/notice behaviour.)
  *
- * THE LOAD-BEARING ASSERTION is the inscription id in the warning panel, NOT the
- * "asset found" badge or the "Use anyway" override. The seeded coin ALSO carries
+ * THE LOAD-BEARING ASSERTION is the inscription id in the asset-notice panel, NOT
+ * the "asset found" badge or the "Use anyway" override. The seeded coin ALSO carries
  * a coinbase rare sat (both ords run --index-sats), so the generic badge + the
  * override fire for the rare sat too and persist even under the mutation below.
  * Only the inscription line depends on the stock ord's `inscriptions` field.
@@ -230,19 +234,19 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
   const overrideBtn = seededRow.locator('.utxo-pick-override');
   await expect(overrideBtn).toBeVisible({ timeout: 30_000 });
 
-  // ─── 7. Override, then read the warning panel ────────────────────
+  // ─── 7. Override, then read the asset-notice panel ───────────────
   await overrideBtn.click();
-  const warning = page.getByTestId('asset-found-warning');
-  await expect(warning).toBeVisible({ timeout: 30_000 });
-  await shot(page, '02-warning');
+  const notice = page.getByTestId('mint-asset-notice');
+  await expect(notice).toBeVisible({ timeout: 30_000 });
+  await shot(page, '02-notice');
 
   // ─── 7. THE PROOF: the inscription-specific line, full id ────────
   // Populated only from content.inscriptionIds, which only the stock ord's
   // `inscriptions` field produces. Under the :8080 mutation this is empty and
   // the assertion goes RED, while the badge + override above stay green on the
   // coin's rare sat. That red is the guard's proof.
-  await expect(warning).toContainText('Inscription');
-  await expect(warning).toContainText(inscribed.inscriptionId);
+  await expect(notice).toContainText('Inscription');
+  await expect(notice).toContainText(inscribed.inscriptionId);
 
   errorGuard.assertNone();
 });
