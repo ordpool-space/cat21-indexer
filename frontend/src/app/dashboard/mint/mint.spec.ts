@@ -415,13 +415,22 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       pushRows([
         { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } },
       ]);
-      // This is the asset-to-miner ruling's one-address branch: the SDK returns
-      // expert-required (no auto-pick), so the component leaves the mint BLOCKED —
-      // selectedUtxo null, the expert warning up, and canMint false so the CTA
-      // stays disabled until a deliberate pick. (The one-address TOPOLOGY that
-      // yields expert-required is derived in the SDK, mutation-checked there, and
-      // exercised on a real wallet in the assetnotice regtest lane; here we pin
-      // that cat21.space's own template turns that status into a blocked CTA.)
+      // This is the asset-to-miner ruling's one-address branch: given
+      // expert-required, the component leaves the mint BLOCKED — selectedUtxo
+      // null, the expert warning up, canMint false so the CTA stays disabled
+      // until a deliberate pick.
+      //
+      // WHAT THIS PINS, AND WHAT IT DOES NOT: this INJECTS the status
+      // (expert-required) via the orchestrator stub, so it pins STATUS -> CTA in
+      // cat21.space's own component. It does NOT prove the DERIVATION (a
+      // one-address wallet -> that status). The derivation is proven twice
+      // elsewhere, on purpose, since jsdom cannot run it here: recommendFunding's
+      // fee model needs a valid pubkey AND the coin's previous-transaction bytes
+      // (real on-chain data), which is the boundary telling us the regtest owns
+      // that proof, not this unit. So: isOneAddressWallet + its thread-through are
+      // SDK units (mutation-checked); the real 'derive' runs on a real wallet in
+      // the assetnotice regtest lane (separate-address path) and on a real
+      // one-address wallet in ordpool's lanes; this file owns only status -> CTA.
       expect(orch.selectedUtxo()).toBeNull();
       expect(component.fundingExpertRequired()).toBe(true);
       expect(component.canMint()).toBe(false);
