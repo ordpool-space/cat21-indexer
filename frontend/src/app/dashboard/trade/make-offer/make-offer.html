@@ -254,7 +254,58 @@
           to your wallet.
         </p>
       }
-      <details [open]="buyerFundingExpertRequired()">
+      @if (buyerAssetNotice()) {
+        @if (buyerNoticeAssets(); as assets) {
+          <div class="alert alert-warning small" data-testid="make-offer-asset-notice">
+            <p class="mb-1">
+              <strong>Heads up.</strong> The only coin that can cover this offer
+              carries an on-chain asset. Creating the offer spends it into the
+              trade, so that asset goes to the miner (or to the seller). You can
+              go ahead, or send a plain payment UTXO to your wallet first to keep it.
+            </p>
+            @if (assets.inscriptionIds.length > 0) {
+              <p class="mb-1">
+                <strong>Inscription{{ assets.inscriptionIds.length === 1 ? '' : 's' }}:</strong>
+                @for (id of assets.inscriptionIds; track id) {
+                  <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
+                     data-testid="make-offer-asset-notice-inscription">{{ id }}</a>
+                  @if (!$last) { , }
+                }
+              </p>
+            }
+            @if (assets.runeNames.length > 0) {
+              <p class="mb-1">
+                <strong>Rune{{ assets.runeNames.length === 1 ? '' : 's' }}:</strong>
+                @for (name of assets.runeNames; track name) {
+                  @if (runeEtchingHref(name); as href) {
+                    <a [href]="href" target="_blank" rel="noopener"
+                       data-testid="make-offer-asset-notice-rune">{{ name }}</a>
+                  } @else {
+                    <span data-testid="make-offer-asset-notice-rune">{{ name }}</span>
+                  }
+                  @if (!$last) { , }
+                }
+              </p>
+            }
+            @if (assets.catIds.length > 0) {
+              <p class="mb-1">
+                <strong>CAT-21 cat{{ assets.catIds.length === 1 ? '' : 's' }}:</strong>
+                @for (id of assets.catIds; track id) {
+                  <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
+                     data-testid="make-offer-asset-notice-cat">{{ id }}</a>
+                  @if (!$last) { , }
+                }
+              </p>
+            }
+            @if (assets.rareSat; as rare) {
+              <p class="mb-0"><strong>Rare sat:</strong>
+                <span data-testid="make-offer-asset-notice-raresat">{{ rareSatLabel(rare) }}</span>
+              </p>
+            }
+          </div>
+        }
+      }
+      <details [open]="buyerFundingExpertRequired() || buyerAssetNotice()">
         <summary class="make-offer-section-heading" style="cursor: pointer;">
           Funding source <small class="text-muted">— we auto-pick the safest; expand to review or override</small>
         </summary>
@@ -268,6 +319,8 @@
         <app-utxo-picker
           [utxos]="fundingUtxos()"
           [selected]="selectedFundingUtxo()"
+          [feeByOutpoint]="feeByOutpoint()"
+          [recommendedOutpoint]="recommendedOutpoint()"
           (selectionChange)="onFundingUtxoSelectionChange($event)"
           data-testid="make-offer-funding-picker" />
       </details>

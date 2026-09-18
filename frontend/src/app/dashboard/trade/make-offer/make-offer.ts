@@ -5,13 +5,16 @@ import { firstValueFrom } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import {
   buildAcceptOfferQueryParams,
+  CandidateFeeRow,
   CapabilitySupport,
   Cat21CreateOfferOrchestrator,
   Cat21Service,
   CreateOfferSnapshot,
+  UtxoAssetDetail,
   WalletCapability,
   WalletService,
   capabilityOf,
+  outpointKey,
   parseBuyOfferQueryParams,
   toPaymentAddress,
   TxnOutput,
@@ -20,6 +23,9 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../../shared/cat21-orchestrator-ports';
+import { inscriptionReviewLink, runeEtchingReviewLink } from '../../../shared/funding-asset-links';
+import { rareSatLabel } from '../../../shared/rare-sat-label';
+import { RuneEtchingService } from '../../../shared/rune-etching.service';
 import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { PsbtExportBridgeService } from '../../../shared/psbt-export-bridge/psbt-export-bridge.service';
@@ -64,9 +70,11 @@ export class MakeOffer {
     ?? ((): Cat21CreateOfferOrchestrator => {
       const cfg = inject(cat21Config);
       return new Cat21CreateOfferOrchestrator(
-        // No `fundingTopology` yet: create-offer keeps the safe over-block on a
-        // dirty-only funding pool until its own topology slice wires the notice.
-        cat21OrchestratorPorts(inject(Cat21Service), cfg, inject(bitcoinNetwork)),
+        // `'derive'` opts create-offer into the asset-to-miner safeguard, same as
+        // mint + transfer: a separate-address wallet with a dirty-only funding pool
+        // NOTICEs and proceeds (asset-notice); a one-address wallet WARNs and blocks
+        // (expert-required). MUST ship together with the notice UI below.
+        cat21OrchestratorPorts(inject(Cat21Service), cfg, inject(bitcoinNetwork), 'derive'),
       );
     })();
   private snap = signal<CreateOfferSnapshot>(this.orch.getSnapshot());
@@ -186,6 +194,52 @@ export class MakeOffer {
     () => this.buyerFundingRecommendation().status === 'expert-required',
   );
 
+  private runeEtching = inject(RuneEtchingService);
+
+  /**
+   * `asset-notice`: no clean coin covers the fee, but a dirty one does AND the
+   * wallet keeps a SEPARATE payment address, so the SDK auto-selects the dirty
+   * coin and we INFORM rather than block (the asset-to-miner ruling). CTA stays
+   * enabled; the obligation is to NAME what sits on the coin before the click.
+   * The recommended coin can itself over-pay here (dirty-branch best-fit against
+   * the requirement) — that ★+over-pay pair is intended, rendered by the picker.
+   */
+  readonly buyerAssetNotice = computed(() => this.buyerFundingRecommendation().status === 'asset-notice');
+
+  /**
+   * The asset detail the notice must name, from the RECOMMENDATION itself (the
+   * coin the selection would have taken had it been clean). Null unless `asset-notice`.
+   */
+  readonly buyerNoticeAssets = computed<UtxoAssetDetail | null>(() => {
+    const rec = this.buyerFundingRecommendation();
+    return rec.status === 'asset-notice' ? (rec.recommended?.assets ?? null) : null;
+  });
+
+  /** Per-coin fee for the picker's fee column, keyed by `outpointKey`, from the
+   *  snapshot's `candidateFees`. Present on every status where a picker renders. */
+  readonly feeByOutpoint = computed<ReadonlyMap<string, CandidateFeeRow>>(
+    () => new Map(this.snap().candidateFees.map((f) => [outpointKey(f), f])),
+  );
+
+  /** `outpointKey` of the SDK-recommended coin, for the picker's mark-in-place
+   *  recommendation (never a re-sort). Null when the SDK returns no pick. */
+  readonly recommendedOutpoint = computed<string | null>(() => {
+    const r = this.buyerFundingRecommendation().recommended;
+    return r ? outpointKey(r) : null;
+  });
+
+  /** In-family review link for an inscription/cat found on a funding UTXO. */
+  readonly inscriptionReviewLink = inscriptionReviewLink;
+
+  /** Shared rare-sat identity line; same on the picker. */
+  readonly rareSatLabel = rareSatLabel;
+
+  /** In-family etching-tx link for a rune once resolved, else null (plain text). */
+  runeEtchingHref(name: string): string | null {
+    const txid = this.runeEtching.etchings().get(name);
+    return txid ? runeEtchingReviewLink(txid, name) : null;
+  }
+
   /**
    * What the seller actually receives if this offer is accepted: the
    * asking price PLUS the cat's own UTXO value. Ordinal theory keeps the
@@ -266,6 +320,15 @@ export class MakeOffer {
   constructor() {
     // Bind the orchestrator snapshot to a signal; unsubscribe on destroy.
     this.destroyRef.onDestroy(this.orch.subscribe((s) => this.snap.set(s)));
+
+    // Resolve rune etchings named in the asset-notice so the notice links them,
+    // when the notice appears (not per render). The service is idempotent + caches.
+    effect(() => {
+      const assets = this.buyerNoticeAssets();
+      if (assets && assets.runeNames.length > 0) {
+        this.runeEtching.resolve(assets.runeNames);
+      }
+    });
 
     // Push the connected wallet into the orchestrator (it fetches funding UTXOs,
     // recomputes, and seeds buyerReceiveAddress from the ordinals address). Async.
