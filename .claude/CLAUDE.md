@@ -593,6 +593,17 @@ PICKER CONVERGENCE — the drift finding, sequenced across sessions:
   mocked lane does not need and changes nothing the classifier sees. The notice lane
   uses seedDirtyCoin/seedListedCat (deterministic) and has no clean-CTA cell, so the
   cardinal-funding half of §7.7e has no cell to attach to here.
+  THE TRADE, NAMED (SDK `7b0ec03` folded it into §7.7e): the context mock buys
+  determinism at the cost of NEVER EXERCISING THE REAL SCAN. A repo that mocks
+  `/output` in its flow lanes therefore NEEDS at least one lane that hits real ord,
+  or the classifier has zero proof. That lane is
+  `funding-guard-inscription-regtest.spec.ts` — verified "No mock" (hits stock ord
+  :8081 for `inscriptions`, cat21-ord :8080 for cats), and its load-bearing
+  assertion is the inscription id in the asset-notice panel, which ONLY stock ord's
+  `inscriptions` field can produce. The arrangement is sound (mocked lanes for the
+  flows, one real-ord lane for the classifier) but LOAD-BEARING: retire
+  funding-guard-inscription for being awkward and the mocks flip from a reasonable
+  trade to a blind spot in one step. Do not delete or neuter it.
 
 SETTLED FEE-COLUMN SHAPE (three-way: cat21 + ordpool + cubes, 2026-09-18). The
 family agreed one shape, still shape-only, no builds until the maintainer lifts
