@@ -1043,7 +1043,20 @@ re-emission re-fires the effect -> setWallet -> `loading-utxos` flip -> the pick
 summary (all gated `@if (state()==='loading-utxos')`, mint.html:30 / make-offer:152 /
 transfer:32) tear out of the DOM for a frame -> a click landing then is lost.
 
-FIX = pin SDK `d42f028` when its lanes are green ("setWallet is a no-op when the wallet
+FIXED: pinned `d42f028` (22ade6b on main; installed orchestrator now opens setWallet
+with `if (sameWallet(this.wallet, wallet)) return;` before the loading flip). Guarded by
+`mint-wallet-reemit.spec.ts` — a SEAM test at THIS wiring with the REAL orchestrator, so
+the pin is the mutation-check: RED on the prior pin (getUtxos 2x on re-emission), GREEN on
+d42f028 (getUtxos 1x). BOTH mechanism halves asserted so neither decays: `setWalletSpy`
+called 2x (our effect delivered the repeat) AND `getUtxos` 1x (the SDK recognised it) — if
+an upstream dedupe later stops the effect firing, spy===2 reds and names the changed
+premise rather than the count silently agreeing at 1. ASYMMETRY (do NOT delete this spec as
+redundant): our lanes are the ONLY ones that exercise the guard — ordpool keeps its page
+dedupe, so its matrix proves the bump breaks nothing but cannot prove the guard works; remove
+our seam test and nothing anywhere tests the central fix. The E2E lanes prove only the
+CHANGED direction (connect still works); a red there after this pin most likely = the identity
+tuple missing a field our wallets vary (send the failing lane to the SDK, do not work around).
+ORIGINAL PLAN was: pin SDK `d42f028` when its lanes are green ("setWallet is a no-op when the wallet
 is unchanged"; identity is now the full tuple via a shared `sameWallet`; create-offer's
 `paymentAddress`-vs-`ordinalsAddress` field mismatch fixed). NO page change needed, and
 NOTHING breaks: grepped all four surfaces — every `setWallet` is the wallet-change
