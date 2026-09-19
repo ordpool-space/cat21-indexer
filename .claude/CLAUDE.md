@@ -372,10 +372,19 @@ order + live state:
   change an on-screen number. INSCRIBE is deliberately excluded: its orchestrator
   builds `simulations[].preview` with `commitFeeSats`/`revealFeeSats`/`totalFeeSats`
   split — if cat21 ever grows an inscribe surface, bind to `preview`, NOT a fee row.
-- TRANSFER + MAKE-OFFER NOTICE REPLICATION — CODE DONE + ON MAIN, NOTICE LANE
-  PENDING (stage_prod HELD). The feature is committed and on main: pin 9e578ef
+- TRANSFER + MAKE-OFFER NOTICE REPLICATION — SHIPPED. Notice lane green on
+  `3663b02`; pushed `main:stage_prod` (`29729f2..3663b02`) 2026-09-19 after the
+  full airtight sweep + a local production `ng build` (warnings only: pre-existing
+  initial-bundle + wallet-connect.scss budgets, no errors). Blast radius:
+  frontend-only, NO schema migrations. Both screenshots (transfer three-fee-states,
+  make-offer ★+over-pay) delivered to the maintainer. Deploy = Build Cat21 Frontend
+  on stage_prod -> cat21-frontend-build -> Cloudflare Pages; landed-check
+  (live-bundle grep for the notice string + fresh-context nested deep link) is the
+  last step. The feature commits: pin 9e578ef
   `014f7da` (asset-notice carries its simulation — the precondition), transfer
-  `167999a`, make-offer `4f6c9c3`. Each surface got, ATOMICALLY: `'derive'` on the
+  `167999a`, make-offer `4f6c9c3`. The verification: dedicated fresh-wallet notice
+  lane `04907cd` (spec + workflow, own regtest stack), measured contrast added
+  `3663b02`. Each surface got, ATOMICALLY: `'derive'` on the
   orchestrator ports + `assetNotice`/`noticeAssets` computeds (mirror mint.ts) +
   the named-asset notice UI (transfer-asset-notice / make-offer-asset-notice, mirror
   mint.html's `mint-asset-notice`, TRIMMED to what each renders — no picker chip
@@ -385,7 +394,8 @@ order + live state:
   today's code: without `'derive'` transfer/make-offer over-block but still work via
   the expert-required warning + honored "Use anyway", verified against source in
   resolveFundingPick).
-  - WHAT IS NOT DONE: the notice VERIFICATION lane. First attempt appended the
+  - THE VERIFICATION LANE (DONE, `04907cd` + contrast `3663b02`, green). First
+    attempt appended the
     dirty-only notice cells to the dirty-coin GUARD lanes and it went red — the
     guard cells run first and each funds a clean coin + transfers, leaving clean
     change on cat21wallet's fixed-seed payment address, so the recommendation took
@@ -397,7 +407,7 @@ order + live state:
     clean-covers, unaffected by `'derive'`). The premise-assertion payoff held: the
     failure message named shared-address accumulation as suspect #1 and the
     diagnosis was over — no rendering debug.
-  - THE FIX (next focused pass, do NOT cram): a DEDICATED FRESH-WALLET notice lane —
+  - THE FIX (SHIPPED as `04907cd`): a DEDICATED FRESH-WALLET notice lane —
     new spec + new workflow, mirroring `cat21wallet-mint-assetnotice-regtest.spec.ts`
     + `mint-assetnotice-regtest.yml` (its own regtest stack, wallet starts empty).
     Put BOTH cells there (neither completes a tx, so both premises hold): the
@@ -418,11 +428,11 @@ order + live state:
     rows is too tall; the ★ must land on the SMALLEST covering coin, dirty-branch
     best-fit is against the REQUIREMENT — report to the SDK coordinator if not) ->
     FYI the maintainer (changed artifact) -> stage_prod.
-  - WATCH WHILE HELD: main carries `'derive'` + the notice UI, but its green lanes
-    exercise only clean-covers, so "main is green" says NOTHING about the notice
-    branch until this lane exists. Do NOT ship on the strength of the clean-covers
-    lanes: a changed money-path branch with nothing exercising it is the fact that
-    says no.
+  - THE HOLD LOGIC (why it was held, kept as the durable lesson): main's other
+    green lanes exercise only clean-covers, so "main is green" said NOTHING about the
+    notice branch until the dedicated lane existed. A changed money-path branch with
+    nothing exercising it is the fact that says no — the notice lane IS that
+    exercise, and only its green un-held stage_prod.
   TWO THINGS FROM `recommendFunding` (SDK coordinator read the source) THAT SHAPE
   THESE LANES — plan for them, don't discover them:
   1. THE RECOMMENDED COIN IN A NOTICE CAN ITSELF BE THE OVER-PAYER. The headroom
