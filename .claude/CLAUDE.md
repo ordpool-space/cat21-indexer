@@ -411,11 +411,29 @@ order + live state:
   + a jest transformIgnorePatterns change to transform ordpool-sdk ESM (keep the
   existing empty-`sats-connect` moduleNameMapper); (B) SDK-side = ship the lean
   subpaths ALSO as CJS (dual-format / dist-cjs), making the backend a near-trivial
-  bump with no jest change. Recommended (B) to the coordinator; backend stays on
-  b9d4da10 (reverted, builds clean, still deployed) until decided. The backend's
-  other bump move `@scure/btc-signer` 1.2.2->1.6.0 is verified fine (uses only
-  `btc.Transaction.fromPSBT`); pin dance caught npm serving a stale b9d4da10 git
-  resolution twice — the explicit `npm install github:...#<sha>` forces it.
+  bump with no jest change. Recommended (B); the maintainer asked and chose (B).
+  RESOLVED VIA (B), SHIPPING. SDK `77a7633` ("a CommonJS build behind the
+  server-facing subpaths") adds a `require` exports condition -> `dist-cjs/` for
+  `./cat21-validation`, `./cat21-session`, `./network`. No browser bundle moves (no
+  bundler resolves `require`; no frontend imports these). Backend bumped to 77a7633
+  (`51f3c8a` on main): imports repointed to the three subpaths, tsconfig `paths`
+  aliases repointed at the subpath `dist/*.d.ts` (compile-time types; Node/jest
+  resolve the runtime `require` condition to dist-cjs), `@scure/btc-signer`
+  1.2.2->1.6.0. NO jest change, NO shim. PROBE PASSES: the spec that gave `SyntaxError:
+  Cannot use import statement outside a module` against the ESM subpath now loads
+  under ts-jest via the `require` condition. Specs retargeted (requireActual +
+  override the controlled collaborator; real MAX_ASK_SATS/Network match the old
+  stubs, no behaviour change); bids validator mock mutation-checked (misdirect reds 15
+  tests). Build clean, full unit suite green (370), code-only deploy (empty migration
+  diff), prod happysrv Node 25.8.1. Deploy gated on Test Backend green on 51f3c8a +
+  the SDK e2e lanes green on 77a7633.
+  `@scure/btc-signer` 1.2.2->1.6.0 verified fine (uses only `btc.Transaction.fromPSBT`).
+  Pin dance caught npm serving a stale git resolution TWICE — the explicit `npm
+  install github:...#<sha>` forces re-resolution; the on-disk lockfile+dist check is
+  the only proof, never the package.json edit. When the SDK ships a whole-package CJS
+  build it costs cat21.space/cubes ~500kB each and breaks ordpool's budget — but a
+  `require`-condition CJS emit on server-only subpaths no browser imports moves zero
+  bytes (coordinator checked, not assumed).
 - (superseded) The frontend half of this batch, when it was still pending:
   (a) `0ab9fd4` — one candidate coin the builder refuses is a ROW, not an emptied
       pool with the reason dropped. VERIFIED UNREACHABLE on cat21.space (all funding
