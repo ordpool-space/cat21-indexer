@@ -193,6 +193,7 @@
           [selected]="selectedFundingUtxo()"
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
+          [minScanValueSat]="fundingRequirementSats()"
           (selectionChange)="onFundingUtxoSelectionChange($event)"
           data-testid="transfer-funding-picker" />
       </details>

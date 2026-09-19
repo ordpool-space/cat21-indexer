@@ -5,6 +5,8 @@ import {
   AUTO_SCAN_MAX_VALUE_SAT,
   bucketOf,
   CandidateFeeRow,
+  CandidateFeeState,
+  classifyCandidateFee,
   formatSatsWithUsd,
   outpointKey,
   runeNamesFromContent,
@@ -31,25 +33,18 @@ export interface UtxoPickerRow {
 }
 
 /**
- * The fee states a funding coin can be in, from the SDK's `CandidateFeeRow`.
- * Picked here, not derived per-surface, because the distinction is a policy the
- * SDK owns (`absorbedSubDustSats`): re-deriving it in each consumer is a chance
- * to show a usable coin as unavailable or an over-payer as clean.
- *
- *  - `normal`          — pays the requested rate and emits change.
- *  - `overpay`         — usable, but sub-dust change folds into the miner fee
- *                        (a deliberate, informational over-pay, never a block).
- *  - `unavailable`     — cannot fund the action at this rate; the row is greyed
- *                        and its pick control disabled.
- *  - `overpay-unknown` — the fee is known, but the SDK did not report whether
- *                        sub-dust change folds (`absorbedSubDustSats === null`,
- *                        e.g. an inscribe row before the fold is surfaced). The
- *                        coin is fundable and pickable; render the fee and claim
- *                        nothing about over-pay. NEVER collapse this into
- *                        `normal`: a `0` there asserts change was emitted, which
- *                        a null cannot know.
+ * The fee states a funding coin can be in. Bound to the SDK's `CandidateFeeState`
+ * and read through the SDK's `classifyCandidateFee`, never re-derived per surface:
+ * the fold distinction is a policy the SDK owns (`absorbedSubDustSats`), and three
+ * consumers reading the two raw fields three ways is exactly the drift that reader
+ * exists to prevent. States: `normal` (pays the rate and emits change), `overpay`
+ * (sub-dust change folds into the fee, a deliberate informational over-pay),
+ * `overpay-unknown` (fee known, fold not reported, e.g. an inscribe row before the
+ * fold is surfaced, so claim nothing about over-pay), `unavailable` (cannot fund at
+ * this rate). Order is load-bearing: `unavailable` wins whatever the fold says,
+ * because a null fee is not a fold question.
  */
-export type FundingFeeState = 'normal' | 'overpay' | 'unavailable' | 'overpay-unknown';
+export type FundingFeeState = CandidateFeeState;
 
 /** A picker row enriched with its fee, recommendation, and confirmation for
  *  display. `fee: null` = no fee data for this row (the column is absent,
@@ -119,6 +114,14 @@ export class UtxoPicker {
    */
   readonly recommendedOutpoint = input<string | null>(null);
 
+  /**
+   * The action's funding requirement in sats. Coins below it cannot fund the
+   * action, so the scanner skips them (`autoScan`'s `minValueSat` floor) instead
+   * of spending two ord round-trips per dust coin on rows no screen can act on.
+   * Null = scan every coin (a surface that has not wired its requirement).
+   */
+  readonly minScanValueSat = input<number | null>(null);
+
   /** Above this threshold, autoScan does nothing — picker shows "Scan" affordance. */
   readonly autoScanThreshold = AUTO_SCAN_MAX_VALUE_SAT;
 
@@ -158,10 +161,9 @@ export class UtxoPicker {
   /**
    * `rows()` enriched with fee state, recommendation, and confirmation. Keeps
    * each `row` reference identical to `rows()` so `row === selectedRow()` still
-   * holds. The fee states are read from the SDK's `absorbedSubDustSats`
-   * (see `FundingFeeState`), never re-derived: `finalFeeSats === null` is
-   * unavailable; then a null `absorbedSubDustSats` is `overpay-unknown` (fee
-   * known, fold not reported), `> 0` folded sats is over-pay, else normal.
+   * holds. Each row's fee state comes from the SDK's `classifyCandidateFee`
+   * (see `FundingFeeState`), never re-derived here; `money`/`overpaySats` are
+   * display projections layered on top.
    */
   readonly displayRows = computed<UtxoDisplayRow[]>(() => {
     const feeMap = this.feeByOutpoint();
@@ -172,25 +174,15 @@ export class UtxoPicker {
       const feeRow = feeMap?.get(key) ?? null;
       let fee: UtxoDisplayRow['fee'] = null;
       if (feeRow) {
-        if (feeRow.finalFeeSats === null) {
-          fee = { state: 'unavailable', money: '', overpaySats: 0 };
-        } else if (feeRow.absorbedSubDustSats === null) {
-          // Fee known, fold not reported. A `?? 0` here would render `normal`
-          // (change emitted), a claim a null cannot make. Show the fee, keep
-          // the coin pickable, assert nothing about over-pay.
-          fee = {
-            state: 'overpay-unknown',
-            money: formatSatsWithUsd(feeRow.finalFeeSats, usd),
-            overpaySats: 0,
-          };
-        } else {
-          const overpay = feeRow.absorbedSubDustSats;
-          fee = {
-            state: overpay > 0 ? 'overpay' : 'normal',
-            money: formatSatsWithUsd(feeRow.finalFeeSats, usd),
-            overpaySats: overpay,
-          };
-        }
+        // The STATE is the SDK's reading of the row, never re-derived here.
+        // `money`/`overpaySats` are display projections: the over-pay amount
+        // renders only in the `overpay` state, where the fold is a real > 0.
+        const state = classifyCandidateFee(feeRow);
+        fee = {
+          state,
+          money: feeRow.finalFeeSats === null ? '' : formatSatsWithUsd(feeRow.finalFeeSats, usd),
+          overpaySats: state === 'overpay' ? (feeRow.absorbedSubDustSats ?? 0) : 0,
+        };
       }
       return { row, isRecommended: key === rec, confirmed: row.utxo.status.confirmed, fee };
     });
@@ -199,7 +191,11 @@ export class UtxoPicker {
   constructor() {
     // Fire off scans for every incoming UTXO. The scanner dedupes.
     effect(() => {
-      this.scanner.autoScan(this.utxos().map((u) => ({ txid: u.txid, vout: u.vout, value: u.value })));
+      const floor = this.minScanValueSat();
+      this.scanner.autoScan(
+        this.utxos().map((u) => ({ txid: u.txid, vout: u.vout, value: u.value })),
+        floor ?? undefined,
+      );
     });
 
     // Resolve rune etchings for every rune on every scanned row, when scans

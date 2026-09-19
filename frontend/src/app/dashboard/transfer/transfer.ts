@@ -164,6 +164,10 @@ export class Transfer {
     () => new Map(this.snap().candidateFees.map((f) => [outpointKey(f), f])),
   );
 
+  /** Scan floor: coins below the funding requirement can't fund the transfer,
+   *  so the picker skips scanning them. */
+  readonly fundingRequirementSats = computed(() => this.snap().fundingRequirementSats);
+
   /** `outpointKey` of the SDK-recommended coin, for the picker's mark-in-place
    *  recommendation (never a re-sort). Null when the SDK returns no pick. */
   readonly recommendedOutpoint = computed<string | null>(() => {

@@ -241,6 +241,7 @@
           [selected]="selectedUtxo()"
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
+          [minScanValueSat]="fundingRequirementSats()"
           (selectionChange)="selectUtxoOutput($event)" />
       </details>
     }

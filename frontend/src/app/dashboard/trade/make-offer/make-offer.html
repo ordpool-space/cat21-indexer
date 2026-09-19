@@ -321,6 +321,7 @@
           [selected]="selectedFundingUtxo()"
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
+          [minScanValueSat]="fundingRequirementSats()"
           (selectionChange)="onFundingUtxoSelectionChange($event)"
           data-testid="make-offer-funding-picker" />
       </details>
