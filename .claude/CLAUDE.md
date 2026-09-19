@@ -412,7 +412,7 @@ order + live state:
   existing empty-`sats-connect` moduleNameMapper); (B) SDK-side = ship the lean
   subpaths ALSO as CJS (dual-format / dist-cjs), making the backend a near-trivial
   bump with no jest change. Recommended (B); the maintainer asked and chose (B).
-  RESOLVED VIA (B), SHIPPING. SDK `77a7633` ("a CommonJS build behind the
+  RESOLVED VIA (B), SHIPPED + VERIFIED LIVE (693b93d on stage_prod; /api/cat/0, /api/v1/bids/25/1, /api/v1/listings/25/1 all 200 post-restart; health status ok, uptime reset; lastSyncedCat -1/total 0 is expected cold-start per cache.service.ts:71). SDK `77a7633` ("a CommonJS build behind the
   server-facing subpaths") adds a `require` exports condition -> `dist-cjs/` for
   `./cat21-validation`, `./cat21-session`, `./network`. No browser bundle moves (no
   bundler resolves `require`; no frontend imports these). Backend bumped to 77a7633
