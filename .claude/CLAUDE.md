@@ -372,11 +372,32 @@ order + live state:
   change an on-screen number. INSCRIBE is deliberately excluded: its orchestrator
   builds `simulations[].preview` with `commitFeeSats`/`revealFeeSats`/`totalFeeSats`
   split — if cat21 ever grows an inscribe surface, bind to `preview`, NOT a fee row.
-- PENDING PIN-BUMP BATCH (gated on the maintainer's go/no-go — a SECOND money-path
-  prod re-ship in one day, put to him 2026-09-19, NOT the borrowed gate: it is his
-  risk call, verified with the SDK coordinator as such). The shipped frontend pin
-  `9e578ef` predates three SDK improvements now on SDK main; when greenlit, bump and
-  batch ALL of these in one verified deploy:
+- PIN-BUMP BATCH — FRONTEND SHIPPED (`89193f0`), BACKEND BLOCKED (2026-09-19).
+  Maintainer said "alles bumpen, alles deployen" (relayed via the SDK coordinator).
+  FRONTEND: bumped to `a1cde1f`, adopted `classifyCandidateFee`, wired the autoScan
+  floor to all three flows; full pin dance on disk; all lanes green (incl. a
+  dispatched Xverse mint `e2e-regtest-mint.yml` to close a path-filter gap — that
+  workflow watches only `e2e/**` + `frontend/e2e/regtest/**`, NOT `frontend/src/**`,
+  so src changes never trigger it: WIDEN THAT FILTER in a follow-up); shipped
+  `main:stage_prod`, landed-check passed (new bundle `main-4UYLHL4C.js` served with
+  the `overpay-unknown` marker, nested deep link 0 errors).
+  BACKEND BLOCKED by an SDK `/core` packaging regression at `a1cde1f` — reverted to
+  its working pin `b9d4da10` (still deployed, builds clean). a1cde1f REMOVED
+  `dist-core` and moved `exports['./core']` to `dist/core.js` under a `{type:module}`
+  dist, so /core is now ESM AND transitively pulls `dist/wallet/signers/
+  xverse.signer.js` -> `sats-connect` (not a backend dep). The CommonJS backend
+  (module:commonjs, classic resolution, a compile-time paths alias
+  `ordpool-sdk/core -> dist-core/core`, runtime `require`) fails BOTH ways: `nest
+  build` -> 7x TS2307 (dangling dist-core alias), and `require('ordpool-sdk/core')`
+  -> ERR_MODULE_NOT_FOUND sats-connect. b9d4da10's `dist-core` was CJS + lean (no
+  signers). The backend can only bump once the SDK ships a backend-consumable /core
+  (CJS, signer-free) again; reported to the coordinator. The SDK's own CI is green on
+  a1cde1f because nothing there exercises a CJS consumer of /core — the break only
+  surfaces at the backend, and the pin dance + build gate + a runtime require caught
+  it before it shipped as a backend boot failure. The backend's only other bump
+  move (`@scure/btc-signer` 1.2.2->1.6.0) is verified fine (backend uses only
+  `btc.Transaction.fromPSBT`).
+- (superseded) The frontend half of this batch, when it was still pending:
   (a) `0ab9fd4` — one candidate coin the builder refuses is a ROW, not an emptied
       pool with the reason dropped. VERIFIED UNREACHABLE on cat21.space (all funding
       candidates come from ONE payment address = one script type, so the builder
