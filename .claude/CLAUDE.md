@@ -575,6 +575,24 @@ PICKER CONVERGENCE — the drift finding, sequenced across sessions:
 - And assert the dirty-only PREMISE at SETUP time with the remedy in the failure
   message (a fixed-seed wallet accumulates across local runs: green in CI's fresh
   stack, wrong-coin locally on run 2).
+- §7.7e (SDK `5c73896`) — A FUNDING COIN IS NOT CLEAN BECAUSE YOU JUST CREATED IT:
+  on regtest with `--index-sats` a coinbase output's first sat is an UNCOMMON rare
+  sat, and prior mints leave cats on the funder's coins, so a plain `sendtoaddress`
+  + expect-auto-select is rolling dice; the SDK's own real-ord lanes fund with
+  `fundCommonSats` (forces change to vout 0, absorbs the boundary sat) instead.
+  AUDITED here 2026-09-19: the ONLY two cat21-indexer lanes that use `sendtoaddress`
+  (`cat21-mint-regtest.spec.ts`, `cat21wallet-mint-regtest.spec.ts`, 12 sites) are
+  NOT bitten, because BOTH install a CONTEXT-level `context.route('**/output/*')`
+  in beforeAll (lines 151 / 299) returning `CLEAN_OUTPUT_BODY`. The funding-safety
+  classifier fetches ord `/output/<outpoint>` as a BROWSER request -> hits that mock
+  -> the real coin's dirtiness is invisible to the product. The context mock IS
+  these lanes' determinism guarantee (same job fundCommonSats does for a real-ord
+  lane). The asset-scanner tests (mint 475/509, wallet 556/578) override with a
+  PAGE-level `cats:[0]` route for their target outpoint — deterministic, not luck.
+  DO NOT "fix" these lanes by swapping in fundCommonSats: it adds ord-sync waits a
+  mocked lane does not need and changes nothing the classifier sees. The notice lane
+  uses seedDirtyCoin/seedListedCat (deterministic) and has no clean-CTA cell, so the
+  cardinal-funding half of §7.7e has no cell to attach to here.
 
 SETTLED FEE-COLUMN SHAPE (three-way: cat21 + ordpool + cubes, 2026-09-18). The
 family agreed one shape, still shape-only, no builds until the maintainer lifts
