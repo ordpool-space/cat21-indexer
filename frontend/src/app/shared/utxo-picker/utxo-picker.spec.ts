@@ -70,7 +70,7 @@ describe('UtxoPicker (shared funding-coin picker)', () => {
     }
   });
 
-  describe('displayRows: the three fee states from absorbedSubDustSats', () => {
+  describe('displayRows: the fee states from absorbedSubDustSats', () => {
     it('NORMAL: finalFeeSats set + absorbedSubDustSats 0 -> normal, money rendered, no over-pay', () => {
       const u = utxo('aa', 0, 5000);
       fixture.componentRef.setInput('utxos', [u]);
@@ -102,6 +102,21 @@ describe('UtxoPicker (shared funding-coin picker)', () => {
       const d = component.displayRows().find((x) => x.row.utxo.txid === 'cc')!;
       expect(d.fee?.state).toBe('unavailable');
       expect(d.fee?.money).toBe('');
+    });
+
+    it('OVERPAY-UNKNOWN: finalFeeSats set + absorbedSubDustSats null -> not `normal`, fee shown, no over-pay claim', () => {
+      // A null fold is not a zero fold. `?? 0` would render `normal` (change
+      // emitted) for a coin whose fold status the SDK did not report; the coin
+      // is fundable and pickable, but we must claim nothing about over-pay.
+      const u = utxo('ee', 0, 5000);
+      fixture.componentRef.setInput('utxos', [u]);
+      fixture.componentRef.setInput('feeByOutpoint', new Map([[outpointKey(u), feeRow('ee', 0, 300, null)]]));
+      fixture.detectChanges();
+      const d = component.displayRows().find((x) => x.row.utxo.txid === 'ee')!;
+      expect(d.fee?.state).toBe('overpay-unknown');
+      expect(d.fee?.state).not.toBe('normal');
+      expect(d.fee?.money).toContain('300');
+      expect(d.fee?.overpaySats).toBe(0);
     });
 
     it('no fee entry for a row -> fee null (column absent, e.g. an unwired surface)', () => {

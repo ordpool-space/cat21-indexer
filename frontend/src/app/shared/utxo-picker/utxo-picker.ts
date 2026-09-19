@@ -31,19 +31,25 @@ export interface UtxoPickerRow {
 }
 
 /**
- * The three fee states a funding coin can be in, from the SDK's
- * `CandidateFeeRow`. Picked here, not derived per-surface, because the
- * distinction is a policy the SDK owns (`absorbedSubDustSats`): re-deriving it
- * in each consumer is a chance to show a usable coin as unavailable or an
- * over-payer as clean.
+ * The fee states a funding coin can be in, from the SDK's `CandidateFeeRow`.
+ * Picked here, not derived per-surface, because the distinction is a policy the
+ * SDK owns (`absorbedSubDustSats`): re-deriving it in each consumer is a chance
+ * to show a usable coin as unavailable or an over-payer as clean.
  *
- *  - `normal`      — pays the requested rate and emits change.
- *  - `overpay`     — usable, but sub-dust change folds into the miner fee
- *                    (a deliberate, informational over-pay, never a block).
- *  - `unavailable` — cannot fund the action at this rate; the row is greyed
- *                    and its pick control disabled.
+ *  - `normal`          — pays the requested rate and emits change.
+ *  - `overpay`         — usable, but sub-dust change folds into the miner fee
+ *                        (a deliberate, informational over-pay, never a block).
+ *  - `unavailable`     — cannot fund the action at this rate; the row is greyed
+ *                        and its pick control disabled.
+ *  - `overpay-unknown` — the fee is known, but the SDK did not report whether
+ *                        sub-dust change folds (`absorbedSubDustSats === null`,
+ *                        e.g. an inscribe row before the fold is surfaced). The
+ *                        coin is fundable and pickable; render the fee and claim
+ *                        nothing about over-pay. NEVER collapse this into
+ *                        `normal`: a `0` there asserts change was emitted, which
+ *                        a null cannot know.
  */
-export type FundingFeeState = 'normal' | 'overpay' | 'unavailable';
+export type FundingFeeState = 'normal' | 'overpay' | 'unavailable' | 'overpay-unknown';
 
 /** A picker row enriched with its fee, recommendation, and confirmation for
  *  display. `fee: null` = no fee data for this row (the column is absent,
@@ -152,9 +158,10 @@ export class UtxoPicker {
   /**
    * `rows()` enriched with fee state, recommendation, and confirmation. Keeps
    * each `row` reference identical to `rows()` so `row === selectedRow()` still
-   * holds. The three fee states are read from the SDK's `absorbedSubDustSats`
+   * holds. The fee states are read from the SDK's `absorbedSubDustSats`
    * (see `FundingFeeState`), never re-derived: `finalFeeSats === null` is
-   * unavailable, then `> 0` folded sats is over-pay, else normal.
+   * unavailable; then a null `absorbedSubDustSats` is `overpay-unknown` (fee
+   * known, fold not reported), `> 0` folded sats is over-pay, else normal.
    */
   readonly displayRows = computed<UtxoDisplayRow[]>(() => {
     const feeMap = this.feeByOutpoint();
@@ -167,8 +174,17 @@ export class UtxoPicker {
       if (feeRow) {
         if (feeRow.finalFeeSats === null) {
           fee = { state: 'unavailable', money: '', overpaySats: 0 };
+        } else if (feeRow.absorbedSubDustSats === null) {
+          // Fee known, fold not reported. A `?? 0` here would render `normal`
+          // (change emitted), a claim a null cannot make. Show the fee, keep
+          // the coin pickable, assert nothing about over-pay.
+          fee = {
+            state: 'overpay-unknown',
+            money: formatSatsWithUsd(feeRow.finalFeeSats, usd),
+            overpaySats: 0,
+          };
         } else {
-          const overpay = feeRow.absorbedSubDustSats ?? 0;
+          const overpay = feeRow.absorbedSubDustSats;
           fee = {
             state: overpay > 0 ? 'overpay' : 'normal',
             money: formatSatsWithUsd(feeRow.finalFeeSats, usd),
