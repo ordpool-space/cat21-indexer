@@ -1024,3 +1024,34 @@ npm run build && cd dist && npm link
 # In cat21-indexer/backend
 npm link ordpool-parser
 ```
+
+## LIVE EXPOSURE (2026-09-19): setWallet re-emission tears out loading-gated controls
+
+CONFIRMED against the installed `a1cde1f` SDK source, on the LIVE frontend pin. Real,
+intermittent, pre-existing, and it presents as a money-path control that occasionally
+does nothing (a lost click).
+
+Mechanism: `WalletService.connectedWallet$` is a plain `BehaviorSubject` (no
+`distinctUntilChanged` on itself; the dedup pipes are on DERIVED streams), and
+`onAccountChange` (which Xverse + cat21-wallet fire repeatedly) re-`.next()`s a wallet
+into it. All four wallet-driven pages (mint, transfer, make-offer, accept-offer) bind
+it via `toSignal(connectedWallet$)` and, in an `effect()`, call `orch.setWallet(...)`.
+On `a1cde1f`, `setWallet` computes `changed` from `ordinalsAddress` ONLY, guards ONLY
+the form reset with it, then patches `state:'loading-utxos'` and re-fetches UTXOs
+UNCONDITIONALLY (verified `cat21-mint-orchestrator.js:80-92`). So a same-wallet
+re-emission re-fires the effect -> setWallet -> `loading-utxos` flip -> the picker/CTA/
+summary (all gated `@if (state()==='loading-utxos')`, mint.html:30 / make-offer:152 /
+transfer:32) tear out of the DOM for a frame -> a click landing then is lost.
+
+FIX = pin SDK `d42f028` when its lanes are green ("setWallet is a no-op when the wallet
+is unchanged"; identity is now the full tuple via a shared `sameWallet`; create-offer's
+`paymentAddress`-vs-`ordinalsAddress` field mismatch fixed). NO page change needed, and
+NOTHING breaks: grepped all four surfaces — every `setWallet` is the wallet-change
+effect, there is NO `setWallet(currentWallet)`-as-refresh pattern and no `refreshUtxos`
+call, so the breaking half of d42f028 (setWallet stops doubling as refresh) does not
+touch us. The comments in mint.ts:350 / transfer.ts:283 that claim "setWallet dedupes
+internally, re-emission is a no-op" are WRONG on a1cde1f (only the form reset is guarded)
+and become TRUE once d42f028 is pinned. Do NOT pin until d42f028's lanes land (coordinator).
+Interim page-side `distinctUntilChanged(sameWallet)` is possible but redundant with the
+imminent central fix; not worth a separate money-path frontend change for an intermittent,
+pre-existing bug.
