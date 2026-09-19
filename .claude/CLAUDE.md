@@ -372,18 +372,57 @@ order + live state:
   change an on-screen number. INSCRIBE is deliberately excluded: its orchestrator
   builds `simulations[].preview` with `commitFeeSats`/`revealFeeSats`/`totalFeeSats`
   split — if cat21 ever grows an inscribe surface, bind to `preview`, NOT a fee row.
-- TRANSFER + MAKE-OFFER NOTICE REPLICATION (unblocked, independent of the fee
-  column, next focused pass): both have `fundingExpertRequired` (the block) but
-  LACK `assetNotice` + `noticeAssets` and do NOT pass `fundingTopology: 'derive'`
-  (they "keep the safe over-block"). Replicate the signed-off mint pattern ATOMICALLY
-  per surface: pass `'derive'` + add the two computeds (mirror mint.ts) + render the
-  notice UI naming the assets (mirror mint.html's `mint-asset-notice`) + a notice-
-  lane regtest. `'derive'` MUST NOT ship without the notice UI in the same commit —
-  enabling the notice path (CTA becomes enabled via `resolveFundingPick`) while
-  hiding the notice is the exact "billed not informed" failure the HARD RULE forbids.
-  Notice lane per E2E_BEST_PRACTICES §7.7 (widened: re-render is the mechanism; the
-  scan resolving re-renders the rows, so route picker clicks through `clickUntilEffect`)
-  + §7.8 (assert the dirty-only premise at setup).
+- TRANSFER + MAKE-OFFER NOTICE REPLICATION — CODE DONE + ON MAIN, NOTICE LANE
+  PENDING (stage_prod HELD). The feature is committed and on main: pin 9e578ef
+  `014f7da` (asset-notice carries its simulation — the precondition), transfer
+  `167999a`, make-offer `4f6c9c3`. Each surface got, ATOMICALLY: `'derive'` on the
+  orchestrator ports + `assetNotice`/`noticeAssets` computeds (mirror mint.ts) +
+  the named-asset notice UI (transfer-asset-notice / make-offer-asset-notice, mirror
+  mint.html's `mint-asset-notice`, TRIMMED to what each renders — no picker chip
+  helpers) + rune-etching resolution + `feeByOutpoint`/`recommendedOutpoint` on the
+  shared picker. `'derive'` ships WITH the notice UI by construction — apart they are
+  the disabled-CTA-no-reason dead end (which is one commit into the change, not in
+  today's code: without `'derive'` transfer/make-offer over-block but still work via
+  the expert-required warning + honored "Use anyway", verified against source in
+  resolveFundingPick).
+  - WHAT IS NOT DONE: the notice VERIFICATION lane. First attempt appended the
+    dirty-only notice cells to the dirty-coin GUARD lanes and it went red — the
+    guard cells run first and each funds a clean coin + transfers, leaving clean
+    change on cat21wallet's fixed-seed payment address, so the recommendation took
+    `auto` and no notice rendered. That is E2E_BEST_PRACTICES §7.8 WIDENED (SDK
+    coordinator `d5d45a7`): the dirty-only premise breaks not only across runs but
+    INSIDE ONE LANE — a fresh chain does not save you from the cell before yours,
+    because any completed tx hands change back to the same address. Removed the
+    misplaced cells (`d463c49`); main is green again (dirty-coin lanes test
+    clean-covers, unaffected by `'derive'`). The premise-assertion payoff held: the
+    failure message named shared-address accumulation as suspect #1 and the
+    diagnosis was over — no rendering debug.
+  - THE FIX (next focused pass, do NOT cram): a DEDICATED FRESH-WALLET notice lane —
+    new spec + new workflow, mirroring `cat21wallet-mint-assetnotice-regtest.spec.ts`
+    + `mint-assetnotice-regtest.yml` (its own regtest stack, wallet starts empty).
+    Put BOTH cells there (neither completes a tx, so both premises hold): the
+    TRANSFER cell seeds a dirty-coin SPREAD [600,900,1100,1300,1700,3000,12000]
+    bracketing the over-pay band (band = [fundingRequirementSats,
+    fundingPreferredSats); preferred edge is the PAYMENT address's own
+    changeDustFloor, 294 for cat21wallet's P2WPKH — NOT flat 546) and asserts
+    data-fee-state shows at least one `overpay` + one `unavailable` (fails LOUD
+    listing what was found — a spread that stops bracketing reds, not green-proving-
+    nothing; do NOT re-tune the spread to match a predicted state, that is the spread
+    working) + notice visible + names an Inscription + transfer-cta ENABLED. The
+    MAKE-OFFER cell is the surface gate: notice + make-offer-cta ENABLED (the shared
+    picker's three states are the transfer cell's job). Each cell asserts its §7.8
+    premise at setup with the remedy in the failure text. The saved cell code is in
+    this session's transcript. Then: browser-verify by LOOKING at the screenshot
+    myself (contrast of the new labels as a NEW PAIR on the orange body; all three
+    states visible together — trim the SCREENSHOT pool, not the assertion, if seven
+    rows is too tall; the ★ must land on the SMALLEST covering coin, dirty-branch
+    best-fit is against the REQUIREMENT — report to the SDK coordinator if not) ->
+    FYI the maintainer (changed artifact) -> stage_prod.
+  - WATCH WHILE HELD: main carries `'derive'` + the notice UI, but its green lanes
+    exercise only clean-covers, so "main is green" says NOTHING about the notice
+    branch until this lane exists. Do NOT ship on the strength of the clean-covers
+    lanes: a changed money-path branch with nothing exercising it is the fact that
+    says no.
   TWO THINGS FROM `recommendFunding` (SDK coordinator read the source) THAT SHAPE
   THESE LANES — plan for them, don't discover them:
   1. THE RECOMMENDED COIN IN A NOTICE CAN ITSELF BE THE OVER-PAYER. The headroom
