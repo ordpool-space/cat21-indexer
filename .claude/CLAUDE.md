@@ -117,7 +117,7 @@ Why: a "cleanup" swapping panels for `var(--bs-tertiary-bg)` reintroduces the ne
 
 - Separate-address wallet + no clean coin covers: `asset-notice` (notice names the asset, CTA enabled, proceed). One-address wallet: `expert-required` (CTA disabled + coin picker). Clean coin covers: silent auto-pick.
 - The component adopts the recommendation for BOTH `auto` and `asset-notice` (adopting only `auto` makes the notice never render). Topology is `'derive'`d from the wallet, never a hardcoded wallet list.
-- What our picker must offer (local half of the HQ rule): the coin picker stays REACHABLE at all times, including the clean-covers happy path where the user is just not pushed through it. It NAMES the assets exactly (inscription, rune, cat number, rare sat, each linked), marks the RECOMMENDED coin, and lets the user override.
+- What cat21.space's own picker must offer (a DELIBERATE duplicate of HQ's clause, not a copy to dedupe: HQ answers "what every surface must do", this answers "what cat21.space must do", so a future divergence is a decision, not drift): the coin picker stays REACHABLE at all times, including the clean-covers happy path where the user is just not pushed through it. It NAMES the assets exactly (inscription, rune, cat number, rare sat, each linked), marks the RECOMMENDED coin, and lets the user override.
 Ref: workspace HQ HARD RULE "Never let a user spend an asset to the miners by accident"; SDK `funding-safety.ts`. Lanes: `cat21wallet-mint-assetnotice-regtest.spec.ts`, `cat21wallet-transfer-offer-assetnotice-regtest.spec.ts`, `funding-guard-inscription-regtest.spec.ts`.
 
 ## RULE: The funding-coin fee column is mandatory on every picker surface
