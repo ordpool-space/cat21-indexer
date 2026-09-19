@@ -21,18 +21,12 @@ let mockFromPSBT: jest.Mock;
 let mockOutScriptDecode: jest.Mock;
 let mockAddressEncode: jest.Mock;
 
-jest.mock('ordpool-sdk/core', () => ({
+// Control the validator (the collaborator the seller-side path exercises);
+// keep the real constants via requireActual. The lean `cat21-validation`
+// subpath loads under ts-jest via its CJS `require` condition, no wallet graph.
+jest.mock('ordpool-sdk/cat21-validation', () => ({
+  ...jest.requireActual('ordpool-sdk/cat21-validation'),
   validateCat21BuyOfferPsbt: (args: unknown) => mockValidate(args),
-  Network: {
-    Mainnet: 'mainnet',
-    Testnet3: 'testnet3',
-    Testnet4: 'testnet4',
-    Signet: 'signet',
-    Regtest: 'regtest',
-  },
-  MAX_ASK_SATS: 21_000_000 * 100_000_000,
-  CAT21_POSTAGE_SATS: 546,
-  toScureNetwork: () => ({ name: 'mock' }),
 }));
 
 jest.mock('@scure/btc-signer', () => ({

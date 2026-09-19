@@ -17,14 +17,17 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["src/*"],
-      // Direct alias to the SDK's plain-CJS `dist-core` bundle. The
-      // SDK's package.json declares this via the exports map subpath
-      // `./core`, but tsc under classic-node resolution + module=cjs
-      // can't parse exports maps (would need moduleResolution=node16 +
-      // module=node16, a much bigger change). Node's runtime require
-      // DOES respect the exports map, so the paths alias is a
-      // compile-time-only accommodation.
-      "ordpool-sdk/core": ["node_modules/ordpool-sdk/dist-core/core"]
+      // The backend imports the SDK's lean, server-facing subpaths, never
+      // `/core` (whose graph reaches the wallet connectors + `sats-connect`).
+      // The SDK declares each via its exports map, with a `require` condition
+      // pointing at a CommonJS emit (`dist-cjs`) so classic-node resolution +
+      // module=cjs can load them at runtime. tsc under classic resolution can't
+      // parse exports maps, so these aliases resolve the compile-time TYPES
+      // (`dist/*.d.ts`); Node/jest resolve the runtime `require` condition
+      // themselves. Compile-time-only accommodation.
+      "ordpool-sdk/cat21-validation": ["node_modules/ordpool-sdk/dist/cat21-validation/index"],
+      "ordpool-sdk/cat21-session": ["node_modules/ordpool-sdk/dist/cat21-session/index"],
+      "ordpool-sdk/network": ["node_modules/ordpool-sdk/dist/network"]
     }
   },
   "include": ["src/**/*"],

@@ -1,4 +1,4 @@
-import { Network } from 'ordpool-sdk/core';
+import { Network } from 'ordpool-sdk/network';
 
 export type BackendNetworkString = 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest';
 

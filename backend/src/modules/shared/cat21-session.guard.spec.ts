@@ -10,12 +10,13 @@ import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
  * (`ok: true | { ok: false, reason, detail? }`, from
  * verify-bip322-signature.d.ts), not an invented shape.
  */
-jest.mock('ordpool-sdk/core', () => ({
-  ...jest.requireActual('ordpool-sdk/core'),
+jest.mock('ordpool-sdk/cat21-validation', () => ({
+  ...jest.requireActual('ordpool-sdk/cat21-validation'),
   verifyBip322Signature: jest.fn(),
 }));
 
-import { buildCat21SessionMessage, verifyBip322Signature } from 'ordpool-sdk/core';
+import { buildCat21SessionMessage } from 'ordpool-sdk/cat21-session';
+import { verifyBip322Signature } from 'ordpool-sdk/cat21-validation';
 
 import { Cat21SessionAddress, Cat21SessionGuard } from './cat21-session.guard';
 

@@ -1,4 +1,4 @@
-import { Network } from 'ordpool-sdk/core';
+import { Network } from 'ordpool-sdk/network';
 
 import { readBackendNetworkFromEnv, toSdkNetwork, type BackendNetworkString } from './backend-network';
 

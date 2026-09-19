@@ -11,7 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { MAX_ASK_SATS } from 'ordpool-sdk/core';
+import { MAX_ASK_SATS } from 'ordpool-sdk/cat21-validation';
 
 /**
  * POST body for `/api/v1/listings`.

@@ -1,10 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException, createParamDecorator } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import {
-  buildCat21SessionMessage,
-  checkSessionValidity,
-  verifyBip322Signature,
-} from 'ordpool-sdk/core';
+import { buildCat21SessionMessage, checkSessionValidity } from 'ordpool-sdk/cat21-session';
+import { verifyBip322Signature } from 'ordpool-sdk/cat21-validation';
 
 /**
  * Session-token capability guard for marketplace mutations.

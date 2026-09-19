@@ -9,16 +9,9 @@ import { ListingsService } from './listings.service';
 // drift against ord, on-chain owner match, upsert shape.
 // ---------------------------------------------------------------------------
 
-jest.mock('ordpool-sdk/core', () => ({
-  Network: {
-    Mainnet: 'mainnet',
-    Testnet3: 'testnet3',
-    Testnet4: 'testnet4',
-    Signet: 'signet',
-    Regtest: 'regtest',
-  },
-  MAX_ASK_SATS: 21_000_000 * 100_000_000,
-}));
+// No SDK mock needed: this spec controls no SDK collaborator, and the lean
+// `cat21-validation` / `network` subpaths load real under ts-jest via their CJS
+// `require` condition (real MAX_ASK_SATS / Network, no wallet graph).
 
 // ---------------------------------------------------------------------------
 

@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { base64, hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { and, count, desc, eq } from 'drizzle-orm';
-import { validateCat21BuyOfferPsbt } from 'ordpool-sdk/core';
+import { validateCat21BuyOfferPsbt } from 'ordpool-sdk/cat21-validation';
 
 import { catsArraysEqual } from '../shared/array-utils';
 import {
