@@ -389,14 +389,33 @@ order + live state:
   (module:commonjs, classic resolution, a compile-time paths alias
   `ordpool-sdk/core -> dist-core/core`, runtime `require`) fails BOTH ways: `nest
   build` -> 7x TS2307 (dangling dist-core alias), and `require('ordpool-sdk/core')`
-  -> ERR_MODULE_NOT_FOUND sats-connect. b9d4da10's `dist-core` was CJS + lean (no
-  signers). The backend can only bump once the SDK ships a backend-consumable /core
-  (CJS, signer-free) again; reported to the coordinator. The SDK's own CI is green on
-  a1cde1f because nothing there exercises a CJS consumer of /core — the break only
-  surfaces at the backend, and the pin dance + build gate + a runtime require caught
-  it before it shipped as a backend boot failure. The backend's only other bump
-  move (`@scure/btc-signer` 1.2.2->1.6.0) is verified fine (backend uses only
-  `btc.Transaction.fromPSBT`).
+  -> ERR_MODULE_NOT_FOUND sats-connect.
+  ATTRIBUTION CORRECTED (I first blamed a1cde1f — the range-vs-endpoint error the HQ
+  warns about): `dist-core` was removed in `8b642a8` (15 Sep), 93 commits BEFORE
+  a1cde1f and after the backend's pin. So it is "the backend never bumped past a
+  packaging migration", not "a1cde1f broke it". Revert to b9d4da10 was still right.
+  THE FIX IS VIABLE and mapped (SDK coordinator built a server-facing subpath
+  `d7ca026`): the backend's 5 symbols all live on LEAN ESM subpaths —
+  validateCat21BuyOfferPsbt / verifyBip322Signature / MAX_ASK_SATS ->
+  `ordpool-sdk/cat21-validation`, buildCat21SessionMessage / checkSessionValidity ->
+  `ordpool-sdk/cat21-session`, Network -> `ordpool-sdk/network`. None pull
+  sats-connect. RUNTIME require of all three PROVEN from CommonJS on the backend's
+  Node (local v24.16, PROD happysrv v25.8.1 confirmed via SSH:
+  `ExecStart=.../linuxbrew/bin/node main.js`), past the require-ESM threshold.
+  BUT THE BLOCKER IS NOW JEST, NOT RUNTIME: the backend's unit tests are ts-jest in
+  CommonJS with default `transformIgnorePatterns` (node_modules untransformed), and
+  jest's CJS runtime CANNOT load the ESM subpaths — empirically `SyntaxError: Cannot
+  use import statement outside a module` on a probe importing `ordpool-sdk/network`.
+  b9d4da10 never hit this because dist-core was CJS. THE FORK (coordinator's
+  packaging call): (A) backend-side = shim + repoint the 5 imports + tsconfig aliases
+  + a jest transformIgnorePatterns change to transform ordpool-sdk ESM (keep the
+  existing empty-`sats-connect` moduleNameMapper); (B) SDK-side = ship the lean
+  subpaths ALSO as CJS (dual-format / dist-cjs), making the backend a near-trivial
+  bump with no jest change. Recommended (B) to the coordinator; backend stays on
+  b9d4da10 (reverted, builds clean, still deployed) until decided. The backend's
+  other bump move `@scure/btc-signer` 1.2.2->1.6.0 is verified fine (uses only
+  `btc.Transaction.fromPSBT`); pin dance caught npm serving a stale b9d4da10 git
+  resolution twice — the explicit `npm install github:...#<sha>` forces it.
 - (superseded) The frontend half of this batch, when it was still pending:
   (a) `0ab9fd4` — one candidate coin the builder refuses is a ROW, not an emptied
       pool with the reason dropped. VERIFIED UNREACHABLE on cat21.space (all funding
