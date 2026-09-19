@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
 # Guard against the "nLockTime=21 as protocol requirement on non-mint
-# txs" framing bug. See workspace HQ HARD RULE:
-#   "nLockTime=21 is PROTOCOL for MINT, CONVENTION for everything else"
-# in /Users/johanneshoppe/Work/ordpool/CLAUDE.md.
+# txs" framing bug. See workspace HQ:
+#   ## RULE: `nLockTime=21` is PROTOCOL for a mint, CONVENTION everywhere else
+# in /Users/johanneshoppe/Work/ordpool/CLAUDE.md. This script holds the
+# authoritative banned-phrase list; HQ points here rather than copying it.
 #
 # The bug: reviewers / AI agents keep writing comments that claim
 # non-mint transactions (transfers, offer settles, bid settles) MUST
