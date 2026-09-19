@@ -1043,7 +1043,7 @@ re-emission re-fires the effect -> setWallet -> `loading-utxos` flip -> the pick
 summary (all gated `@if (state()==='loading-utxos')`, mint.html:30 / make-offer:152 /
 transfer:32) tear out of the DOM for a frame -> a click landing then is lost.
 
-FIXED: pinned `d42f028` (22ade6b on main; installed orchestrator now opens setWallet
+FIXED + SHIPPED LIVE (2026-09-20): pinned `d42f028` (22ade6b on main; deployed 3cfdb4b to stage_prod, served bundle main-ILRNI47A.js == local build, nested deep link 0 errors; all frontend lanes green incl. a dispatched Xverse mint for the changed-direction proof; installed orchestrator now opens setWallet
 with `if (sameWallet(this.wallet, wallet)) return;` before the loading flip). Guarded by
 `mint-wallet-reemit.spec.ts` — a SEAM test at THIS wiring with the REAL orchestrator, so
 the pin is the mutation-check: RED on the prior pin (getUtxos 2x on re-emission), GREEN on
