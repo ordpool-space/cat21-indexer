@@ -372,6 +372,36 @@ order + live state:
   change an on-screen number. INSCRIBE is deliberately excluded: its orchestrator
   builds `simulations[].preview` with `commitFeeSats`/`revealFeeSats`/`totalFeeSats`
   split — if cat21 ever grows an inscribe surface, bind to `preview`, NOT a fee row.
+- PENDING PIN-BUMP BATCH (gated on the maintainer's go/no-go — a SECOND money-path
+  prod re-ship in one day, put to him 2026-09-19, NOT the borrowed gate: it is his
+  risk call, verified with the SDK coordinator as such). The shipped frontend pin
+  `9e578ef` predates three SDK improvements now on SDK main; when greenlit, bump and
+  batch ALL of these in one verified deploy:
+  (a) `0ab9fd4` — one candidate coin the builder refuses is a ROW, not an emptied
+      pool with the reason dropped. VERIFIED UNREACHABLE on cat21.space (all funding
+      candidates come from ONE payment address = one script type, so the builder
+      cannot refuse one-but-not-others; a sub-feasibility coin returns
+      `finalFeeSats: null`, it does not throw). Robustness, not a live bug.
+  (b) Adopt `classifyCandidateFee` (SDK `a1cde1f`, exported from `'ordpool-sdk'`,
+      `src/index.ts:80`): swap utxo-picker's INLINE displayRows derivation for the
+      call. Verified byte-identical order (unavailable -> overpay-unknown ->
+      overpay/normal) and `CandidateFeeState` === my `FundingFeeState` exactly, so it
+      is a swap of derivation for the call, NOT a behaviour change. The field
+      (`absorbedSubDustSats`) was the wrong unit — three consumers re-derived it
+      three ways (we grew a 4th state `6b636c6`, ordpool collapsed null+0, cubes
+      rendered nothing); the READING is the right unit.
+  (c) Wire the `autoScan` floor: pass `fundingRequirementSats` as `minValueSat`
+      (SDK `99ebbf2`). This is the LIVE user-facing half — the picker currently
+      scans the whole dust tail, two HTTP round-trips per coin against OUR OWN ord
+      instances, for rows no screen can act on. Plus mint pricing 936ms->513ms on a
+      200-coin wallet.
+  Do the FULL pin-verify dance (workspace HQ "Pinning a sha pins neither what it
+  runs against nor itself"): SDK's own lanes green on the target sha FIRST, on-disk
+  scure-version + installed-peer-range + lockfile-sha + known-file-diff, then clear
+  `.angular/cache`. #2 (`6b636c6`) already rides main and folds into this batch. The
+  BACKEND pin (`b9d4da10`, 231 behind) is a SEPARATE decision/pipeline: it imports
+  `validateCat21BuyOfferPsbt` from `/core` and the offer-validation core changed in
+  the offer-size-parity era, so its bump ADOPTS real work, non-urgent.
 - TRANSFER + MAKE-OFFER NOTICE REPLICATION — SHIPPED. Notice lane green on
   `3663b02`; pushed `main:stage_prod` (`29729f2..3663b02`) 2026-09-19 after the
   full airtight sweep + a local production `ng build` (warnings only: pre-existing
