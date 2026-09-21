@@ -69,7 +69,8 @@ Why: the SDK ships a CJS emit only behind those three subpaths (`require` export
 - `npm install github:ordpool-space/ordpool-sdk#<sha>` to force it, then `rm -rf node_modules/ordpool-sdk .angular/cache`.
 - Verify ON DISK, never from package.json: lockfile resolved sha, installed `@scure/btc-signer` version, the INSTALLED sdk's peer range, and diff one known file against the sha. `node_modules/ordpool-sdk/package.json` carries a fixed `"version": "0.1.0"` and no `_resolved`, so it cannot tell you the sha.
 - Frontend and backend pin the sha separately and can dedupe `@scure/btc-signer` down a shared range; pin it exactly (`1.6.0`) to stop that.
-Why: npm serves stale git resolutions from cache; the on-disk check is the only proof. Full rule: workspace HQ "Pinning a sha pins neither what it runs against nor itself".
+- Pin the FULL 40-char sha, never the short form: short resolves on npm but pnpm cannot see an ancestor sha (it fails `git ls-remote`). Both cat21-indexer package.jsons pin short today; normalise to the full sha on the next bump.
+Why: npm serves stale git resolutions from cache; the on-disk check is the only proof. Full rule: workspace HQ "Pinning a sha pins neither what it runs against nor itself" + the full-sha ruling `5c6e915`.
 
 ## Frontend reference
 
