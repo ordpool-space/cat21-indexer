@@ -2,20 +2,20 @@ import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { BehaviorSubject, of } from 'rxjs';
+import { of } from 'rxjs';
 
 import {
   Cat21MintOrchestrator,
   Cat21Service,
   Network,
   UtxoContentScanner,
-  UtxoScanState,
   WalletService,
 } from 'ordpool-sdk';
 
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 import { Mint } from './mint';
 import { makeWallet, WalletServiceStub } from '../../testing/wallet.fixtures';
+import { ScannerStub } from '../../testing/scanner.fixtures';
 
 // ---------------------------------------------------------------------------
 // Wallet RE-EMISSION seam test, at THIS component's wiring rather than the
@@ -26,7 +26,7 @@ import { makeWallet, WalletServiceStub } from '../../testing/wallet.fixtures';
 //
 // The exposure: if `setWallet` re-fetches UTXOs on an unchanged wallet, the
 // re-emission drops the orchestrator back through `loading-utxos` and tears
-// out every control gated on that state for a frame — an intermittent lost
+// out every control gated on that state for a frame, an intermittent lost
 // click on a money path. The E2E lanes CANNOT prove this is fixed: they
 // connect once per spec, so they only exercise the CHANGED path (null->wallet)
 // and never the unchanged one, and the bug is intermittent so a green run is
@@ -37,17 +37,11 @@ import { makeWallet, WalletServiceStub } from '../../testing/wallet.fixtures';
 // setWallet re-fetches unconditionally, GREEN once setWallet no-ops on an
 // unchanged wallet. The deterministic anchor is the getUtxos CALL COUNT (not a
 // transient state read): a second setWallet that no-ops never calls the port.
-// It ties the fix to THIS wiring — the fresh object the effect builds must be
+// It ties the fix to THIS wiring: the fresh object the effect builds must be
 // value-equal enough for the SDK's `sameWallet` to recognise it (the risk a
 // sibling surface hit by building a context object that differed each emission).
 // ---------------------------------------------------------------------------
 
-class ScannerStub {
-  readonly statesSubject = new BehaviorSubject<ReadonlyMap<string, UtxoScanState>>(new Map());
-  readonly states$ = this.statesSubject.asObservable();
-  autoScan = jest.fn();
-  scan = jest.fn(() => of(undefined));
-}
 
 const TEST_TEMPLATE = `
   @if (!connectedWallet()) {
@@ -59,7 +53,7 @@ const TEST_TEMPLATE = `
   }
 `;
 
-describe('Mint — wallet re-emission does not re-fetch UTXOs (setWallet no-op on unchanged)', () => {
+describe('Mint: wallet re-emission does not re-fetch UTXOs (setWallet no-op on unchanged)', () => {
   let wallets: WalletServiceStub;
   let getUtxos: jest.Mock;
   let fixture: ComponentFixture<Mint>;
@@ -122,20 +116,20 @@ describe('Mint — wallet re-emission does not re-fetch UTXOs (setWallet no-op o
     expect(component.state()).toBe('ready');
     expect(getUtxos).toHaveBeenCalledTimes(1);
 
-    // Re-emit the SAME wallet as a NEW object — exactly what an onAccountChange
+    // Re-emit the SAME wallet as a NEW object, exactly what an onAccountChange
     // re-emission delivers through the bare BehaviorSubject.
     wallets.connectedWalletSubject.next(makeWallet());
     await settle();
 
     // BOTH halves of the mechanism, asserted so neither can silently decay:
-    //  (1) OUR WIRING delivered the repeat — the effect re-fired on the new
+    //  (1) OUR WIRING delivered the repeat: the effect re-fired on the new
     //      object, so setWallet was reached a second time. If a later upstream
     //      dedupe (a `distinctUntilChanged`, a by-reference signal) stopped the
     //      effect firing, this reds and tells the reader the premise changed,
     //      rather than the getUtxos count silently agreeing at 1 for the wrong
     //      reason.
     expect(setWalletSpy).toHaveBeenCalledTimes(2);
-    //  (2) The SDK RECOGNISED the repeat and no-op'd — no second fetch, so no
+    //  (2) The SDK RECOGNISED the repeat and no-op'd: no second fetch, so no
     //      loading-utxos flip and no torn-out control. On a pin that re-fetches
     //      unconditionally this is 2 and the test reds.
     expect(getUtxos).toHaveBeenCalledTimes(1);

@@ -1,29 +1,15 @@
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { BehaviorSubject } from 'rxjs';
 import {
   CandidateFeeRow,
   TxnOutput,
   UtxoContentScanner,
-  UtxoScanState,
   outpointKey,
 } from 'ordpool-sdk';
 
 import { UtxoPicker } from './utxo-picker';
-
-/**
- * Minimal scanner stub: the picker reads `states$` (a stream of the outpoint →
- * scan-state map) and calls `autoScan` on every input change. For these tests
- * no coin is scanned, so every row is `not-scanned` (bucket `unscanned`), which
- * is orthogonal to the fee-state logic under test.
- */
-class ScannerStub {
-  readonly statesSubject = new BehaviorSubject<ReadonlyMap<string, UtxoScanState>>(new Map());
-  readonly states$ = this.statesSubject.asObservable();
-  autoScan = jest.fn((_: unknown[]) => undefined);
-  scan = jest.fn(() => ({ subscribe: () => undefined }));
-}
+import { ScannerStub } from '../../testing/scanner.fixtures';
 
 function utxo(txid: string, vout: number, value: number, confirmed = true): TxnOutput {
   return { txid, vout, value, status: { confirmed } };

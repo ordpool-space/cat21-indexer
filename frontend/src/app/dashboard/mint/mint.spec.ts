@@ -3,11 +3,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import {
-  BehaviorSubject,
   Observable,
   Subject,
   firstValueFrom,
-  of,
   throwError,
 } from 'rxjs';
 
@@ -27,6 +25,7 @@ import { cat21Config } from '../../shared/sdk-tokens';
 
 import { Mint } from './mint';
 import { makeWallet, WalletServiceStub } from '../../testing/wallet.fixtures';
+import { ScannerStub } from '../../testing/scanner.fixtures';
 
 // ---------------------------------------------------------------------------
 // Tiny fixture builders. Real production types have lots of fields we don't
@@ -136,26 +135,6 @@ class OrchestratorStub {
   selectedUtxo(): TxnOutput | null { return this._snap.selectedUtxo; }
 }
 
-/**
- * UtxoContentScanner stand-in. The states$ observable feeds the Mint
- * component's `scanStates` signal; the scan/autoScan spies let us
- * assert what the component asked for. No actual network is touched.
- */
-class ScannerStub {
-  readonly statesSubject = new BehaviorSubject<ReadonlyMap<string, UtxoScanState>>(new Map());
-  readonly states$ = this.statesSubject.asObservable();
-  scan = jest.fn((_: string) => of<UtxoScanState>({ kind: 'scanned-clean' }));
-  autoScan = jest.fn((_: unknown[]) => undefined);
-  reset = jest.fn(() => {
-    this.statesSubject.next(new Map());
-  });
-  getState = jest.fn((outpoint: string): UtxoScanState => this.statesSubject.value.get(outpoint) ?? { kind: 'not-scanned' });
-
-  /** Test helper: push a state map update. */
-  setStates(states: Iterable<[string, UtxoScanState]>): void {
-    this.statesSubject.next(new Map(states));
-  }
-}
 
 // ---------------------------------------------------------------------------
 

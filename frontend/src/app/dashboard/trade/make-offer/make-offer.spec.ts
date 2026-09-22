@@ -2,7 +2,7 @@ import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 
 import {
   AnnotatedFundingUtxo,
@@ -11,7 +11,6 @@ import {
   FundingRecommendation,
   TxnOutput,
   UtxoContentScanner,
-  UtxoScanState,
   WalletInfo,
   WalletService,
 } from 'ordpool-sdk';
@@ -22,6 +21,7 @@ import { Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../share
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../../../shared/ord-api.service';
 import { makeWallet, WalletServiceStub } from '../../../testing/wallet.fixtures';
+import { ScannerStub } from '../../../testing/scanner.fixtures';
 
 class OrdApiServiceStub {
   private catsAtOutputImpl: (txid: string, vout: number) => Observable<number[]> = () => of([]);
@@ -150,15 +150,6 @@ class OrchestratorStub {
   readonly buyerFundingRecommendationSubject = {
     next: (v: FundingRecommendation<TxnOutput & AnnotatedFundingUtxo>) => this._patch({ fundingRecommendation: v }),
   };
-}
-
-class ScannerStub {
-  readonly statesSubject = new BehaviorSubject<ReadonlyMap<string, UtxoScanState>>(new Map());
-  readonly states$ = this.statesSubject.asObservable();
-  scan = jest.fn((_: string) => of<UtxoScanState>({ kind: 'scanned-clean' }));
-  autoScan = jest.fn((_: unknown[]) => undefined);
-  reset = jest.fn();
-  getState = jest.fn((_: string): UtxoScanState => ({ kind: 'not-scanned' }));
 }
 
 class LookupStub {
