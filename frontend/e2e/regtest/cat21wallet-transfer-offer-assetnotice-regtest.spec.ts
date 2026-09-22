@@ -11,6 +11,7 @@ import {
   rpc,
 } from 'ordpool-sdk/e2e';
 import { installContextErrorGuard } from './lib/browser-error-guard';
+import { measuredTextContrast } from './lib/measured-text-contrast';
 
 /**
  * E2E (regtest) — cat21.space TRANSFER + MAKE-OFFER asset-notice path, END TO END
@@ -53,41 +54,6 @@ async function shot(p: Page, name: string): Promise<void> {
     path: path.resolve(RESULTS_DIR, `transfer-offer-assetnotice-${name}.png`),
     fullPage: true,
   }).catch(() => undefined);
-}
-
-/**
- * WCAG contrast of a rendered element's text against the background it actually
- * paints on, MEASURED from getComputedStyle in the real browser (alpha-composited
- * up to the first opaque layer, orange body fallback). This is the panel whose
- * contrast regressed twice, and a hex-pair check on the source cannot see a
- * background set without pinning the text colour — this can. Same shape as the
- * mint assetnotice lane's helper.
- */
-async function measuredTextContrast(page: Page, selector: string): Promise<number> {
-  return page.locator(selector).first().evaluate((el: Element) => {
-    const parse = (c: string): [number, number, number, number] => {
-      const m = c.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/);
-      if (!m) throw new Error(`unparseable colour: ${c}`);
-      return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
-    };
-    const layers: Array<[number, number, number, number]> = [];
-    let base: [number, number, number] = [255, 153, 0]; // #FF9900 body fallback
-    for (let node: Element | null = el; node; node = node.parentElement) {
-      const [r, g, b, a] = parse(getComputedStyle(node).backgroundColor);
-      if (a >= 1) { base = [r, g, b]; break; }
-      if (a > 0) layers.push([r, g, b, a]);
-    }
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const [r, g, b, a] = layers[i];
-      base = [a * r + (1 - a) * base[0], a * g + (1 - a) * base[1], a * b + (1 - a) * base[2]];
-    }
-    const lin = (c: number) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-    const lum = (rgb: number[]) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
-    const [fr, fg2, fb] = parse(getComputedStyle(el).color);
-    const lf = lum([fr, fg2, fb]) + 0.05;
-    const lb = lum(base) + 0.05;
-    return lf > lb ? lf / lb : lb / lf;
-  });
 }
 
 /**
@@ -261,18 +227,25 @@ async function runTransferNoticeCell(): Promise<void> {
   expect(states, `${found} — no OVER-PAY row: the dirty-coin spread missed [fundingRequirementSats, fundingPreferredSats); widen/densify it`).toContain('overpay');
   expect(states, `${found} — no UNAVAILABLE row: add a dirty coin strictly below fundingRequirementSats`).toContain('unavailable');
 
-  // Contrast of the NEW cost-column labels, MEASURED on the rendered page against
-  // the orange body (not "we used filled badges"). This panel's contrast regressed
-  // twice; a filled badge whose text colour is later dropped goes near-white and a
-  // source check misses it — this catches it. All three states are present (asserted
-  // above), so each label is in the DOM.
+  // Contrast of the ACTIONABLE cost-column labels, MEASURED on the rendered page
+  // against the orange body (not "we used filled badges"). This panel's contrast
+  // regressed twice; a filled badge whose text colour is later dropped goes
+  // near-white and a source check misses it. Both labels sit on pickable
+  // (undimmed) rows and are present (asserted above), so each is in the DOM.
   const overpayRatio = await measuredTextContrast(page, '.utxo-overpay');
   expect(overpayRatio, `over-pays badge contrast ${overpayRatio.toFixed(2)}:1 on the orange body (WCAG AA needs 4.5)`).toBeGreaterThanOrEqual(4.5);
-  const unavailRatio = await measuredTextContrast(page, '.utxo-fee-unavailable');
-  expect(unavailRatio, `can't-fund badge contrast ${unavailRatio.toFixed(2)}:1 (WCAG AA needs 4.5)`).toBeGreaterThanOrEqual(4.5);
   const recRatio = await measuredTextContrast(page, '.utxo-recommended');
   expect(recRatio, `recommended badge contrast ${recRatio.toFixed(2)}:1 (WCAG AA needs 4.5)`).toBeGreaterThanOrEqual(4.5);
-  console.log(`[${tag}] contrast: overpay=${overpayRatio.toFixed(2)}:1 unavailable=${unavailRatio.toFixed(2)}:1 recommended=${recRatio.toFixed(2)}:1`);
+  console.log(`[${tag}] contrast: overpay=${overpayRatio.toFixed(2)}:1 recommended=${recRatio.toFixed(2)}:1`);
+
+  // The UNAVAILABLE row is DELIBERATELY dimmed (opacity 0.55, a disabled/de-
+  // emphasised state WCAG AA exempts), so its badge is NOT held to 4.5:1 and
+  // measuredTextContrast REFUSES a dimmed element. Assert the intended state
+  // instead: the row is dimmed AND names the rate as the reason.
+  const unavailRow = page.locator('.utxo-row-unavailable').first();
+  const rowOpacity = await unavailRow.evaluate((el) => Number(getComputedStyle(el).opacity));
+  expect(rowOpacity, `unavailable row opacity ${rowOpacity} (deliberate de-emphasis, expected < 1)`).toBeLessThan(1);
+  await expect(unavailRow.locator('.utxo-fee-unavailable')).toHaveText(/can.t fund at this rate/i);
 
   await shot(page, 'transfer-notice-three-states');
 

@@ -11,6 +11,7 @@ import {
   rpc,
 } from 'ordpool-sdk/e2e';
 import { installContextErrorGuard } from './lib/browser-error-guard';
+import { measuredTextContrast } from './lib/measured-text-contrast';
 
 /**
  * E2E (regtest) — cat21.space MINT asset-notice path, END TO END in cat21.space's
@@ -67,50 +68,6 @@ async function shot(p: Page, name: string): Promise<void> {
     path: path.resolve(RESULTS_DIR, `mint-assetnotice-${name}.png`),
     fullPage: true,
   }).catch(() => undefined);
-}
-
-/**
- * WCAG contrast of a rendered element's text against the background it actually
- * paints on, MEASURED from getComputedStyle in the real browser — not assumed
- * from "we switched to filled badges". This catches the incomplete-pair
- * regression (a background set without pinning the text colour, so the label
- * inherits the body's near-white) that a hex-pair math check on the source
- * cannot see: if the fill is ever removed the element goes transparent, this
- * walks up to the first painted ancestor (the orange body), and the ratio
- * collapses. Returns the ratio so the assertion can name it.
- */
-async function measuredTextContrast(page: Page, selector: string): Promise<number> {
-  return page.locator(selector).first().evaluate((el: Element) => {
-    // Parse rgb()/rgba() INCLUDING alpha — the alpha is the whole point. A naive
-    // parser drops it and reads a translucent overlay (e.g. the selected row's
-    // rgba(0,0,0,0.15)) as SOLID black, which fakes a high contrast when the
-    // badge fill has been removed. That is how a mutation slips through.
-    const parse = (c: string): [number, number, number, number] => {
-      const m = c.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/);
-      if (!m) throw new Error(`unparseable colour: ${c}`);
-      return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
-    };
-    // The text's real background is the COMPOSITE of every painted layer from the
-    // element up to the first opaque one (or the orange body). Collect the
-    // translucent layers front-to-back, then alpha-composite them onto that base.
-    const layers: Array<[number, number, number, number]> = [];
-    let base: [number, number, number] = [255, 153, 0]; // #FF9900 body fallback
-    for (let node: Element | null = el; node; node = node.parentElement) {
-      const [r, g, b, a] = parse(getComputedStyle(node).backgroundColor);
-      if (a >= 1) { base = [r, g, b]; break; }
-      if (a > 0) layers.push([r, g, b, a]);
-    }
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const [r, g, b, a] = layers[i];
-      base = [a * r + (1 - a) * base[0], a * g + (1 - a) * base[1], a * b + (1 - a) * base[2]];
-    }
-    const lin = (c: number) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-    const lum = (rgb: number[]) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
-    const [fr, fg2, fb] = parse(getComputedStyle(el).color);
-    const lf = lum([fr, fg2, fb]) + 0.05;
-    const lb = lum(base) + 0.05;
-    return lf > lb ? lf / lb : lb / lf;
-  });
 }
 
 /** Connect cat21-wallet via the mint page; return the payment address. */
