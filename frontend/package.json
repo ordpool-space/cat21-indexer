@@ -15,7 +15,7 @@
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui",
-    "generate:api-client": "openapi-generator-cli generate -i http://localhost:3333/docs-json -g typescript-angular -o ./src/app/shared/cat21-api"
+    "generate:api-client": "openapi-generator-cli generate -i http://localhost:3333/docs-json -g typescript-angular -o ./src/app/shared/cat21-api --type-mappings=set=Array"
   },
   "dependencies": {
     "@angular/animations": "21.2.4",
