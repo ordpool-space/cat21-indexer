@@ -346,7 +346,7 @@ export class CatsController {
       'closest to that rate within ±0.5 sat/vB. Used by the frontend color ' +
       'debug page to anchor each fee-rate row to a real minted cat.',
   })
-  @ApiQuery({ name: 'rates', description: 'Comma-separated list of fee rates (sat/vB), max 200 entries', example: '1,2,5,10,69,75,420,600' })
+  @ApiQuery({ name: 'rates', type: String, description: 'Comma-separated list of fee rates (sat/vB), max 200 entries', example: '1,2,5,10,69,75,420,600' })
   @ApiOkResponse({ type: FeeRateSampleDto, isArray: true })
   @ApiBadRequestResponse({ description: 'rates query is missing, malformed, or has more than 200 entries' })
   async sampleCatsByFeeRate(@Query('rates') rates?: string): Promise<FeeRateSampleDto[]> {

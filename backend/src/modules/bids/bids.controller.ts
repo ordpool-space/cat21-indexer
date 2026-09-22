@@ -147,7 +147,7 @@ export class BidsController {
   })
   @ApiParam({ name: 'catTxid', description: 'Cat UTXO txid.' })
   @ApiParam({ name: 'catVout', example: 0 })
-  @ApiQuery({ name: 'buyer', description: 'Buyer ordinals address (unique-key second half). Must match the session address.' })
+  @ApiQuery({ name: 'buyer', type: String, description: 'Buyer ordinals address (unique-key second half). Must match the session address.' })
   @ApiNoContentResponse({ description: 'Deleted (or already absent).' })
   async delete(
     @Param('catTxid') catTxid: string,
