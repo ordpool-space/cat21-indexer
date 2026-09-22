@@ -288,18 +288,18 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
 
 // dirtySats decreases 12k -> 9k -> 6k -> 3k so each cell's coin is the sole cover
 // and no prior ~clean change undercuts it (the shared-wallet sizing trap).
-test('mint asset-notice: an INSCRIPTION-only funding pool notices', { timeout: 300_000 }, async () => {
+test('mint asset-notice: an INSCRIPTION-only funding pool notices', async () => {
   await runAssetNoticeCell('inscription', 12_000);
 });
 
-test('mint asset-notice: a CAT-only funding pool notices', { timeout: 300_000 }, async () => {
+test('mint asset-notice: a CAT-only funding pool notices', async () => {
   await runAssetNoticeCell('cat', 9_000);
 });
 
-test('mint asset-notice: a RUNE-only funding pool notices', { timeout: 300_000 }, async () => {
+test('mint asset-notice: a RUNE-only funding pool notices', async () => {
   await runAssetNoticeCell('rune', 6_000);
 });
 
-test('mint asset-notice: a RARE-SAT-only funding pool notices', { timeout: 300_000 }, async () => {
+test('mint asset-notice: a RARE-SAT-only funding pool notices', async () => {
   await runAssetNoticeCell('rareSat', 3_000);
 });

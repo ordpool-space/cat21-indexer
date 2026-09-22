@@ -382,7 +382,7 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   await page.close();
 }
 
-test('make-offer @ 546 (fresh-postage cat): page pays typed P, never owner O', { timeout: 300_000 }, async () => {
+test('make-offer @ 546 (fresh-postage cat): page pays typed P, never owner O', async () => {
   await runMakeOfferCell(546, 10_000);
 });
 
@@ -391,7 +391,7 @@ test('make-offer @ 546 (fresh-postage cat): page pays typed P, never owner O', {
 // end to end (offer output 0 = the incoming cat value, byte for byte) — the
 // property the 2026-08-29 546-hardcode in the offer builder broke, and the one
 // thing the SDK's builder-level byte-parity proof cannot reach.
-test('make-offer @ 9000 (non-postage cat): page preserves the size + pays typed P', { timeout: 300_000 }, async () => {
+test('make-offer @ 9000 (non-postage cat): page preserves the size + pays typed P', async () => {
   await runMakeOfferCell(9_000, 12_000);
 });
 
@@ -508,18 +508,18 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   await page.close();
 }
 
-test('make-offer dirty-coin guard: an INSCRIPTION funding coin is not spent', { timeout: 300_000 }, async () => {
+test('make-offer dirty-coin guard: an INSCRIPTION funding coin is not spent', async () => {
   await runMakeOfferDirtyCell('inscription');
 });
 
-test('make-offer dirty-coin guard: a CAT funding coin is not spent', { timeout: 300_000 }, async () => {
+test('make-offer dirty-coin guard: a CAT funding coin is not spent', async () => {
   await runMakeOfferDirtyCell('cat');
 });
 
-test('make-offer dirty-coin guard: a RUNE funding coin is not spent', { timeout: 300_000 }, async () => {
+test('make-offer dirty-coin guard: a RUNE funding coin is not spent', async () => {
   await runMakeOfferDirtyCell('rune');
 });
 
-test('make-offer dirty-coin guard: a RARE-SAT funding coin is not spent', { timeout: 300_000 }, async () => {
+test('make-offer dirty-coin guard: a RARE-SAT funding coin is not spent', async () => {
   await runMakeOfferDirtyCell('rareSat');
 });

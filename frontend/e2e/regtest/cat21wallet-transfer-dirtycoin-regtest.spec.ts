@@ -286,18 +286,18 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): P
 // dirtySats STRICTLY DECREASES 12k -> 9k -> 6k -> 3k (step 3_000 > any transfer
 // fee at 5 sat/vB), so each cell's dirty coin is the global smallest covering
 // coin in the shared wallet despite prior cells' leftovers — see runTransferDirtyCell's JSDoc.
-test('transfer dirty-coin guard: an INSCRIPTION funding coin is not spent', { timeout: 300_000 }, async () => {
+test('transfer dirty-coin guard: an INSCRIPTION funding coin is not spent', async () => {
   await runTransferDirtyCell('inscription', 12_000);
 });
 
-test('transfer dirty-coin guard: a CAT funding coin is not spent', { timeout: 300_000 }, async () => {
+test('transfer dirty-coin guard: a CAT funding coin is not spent', async () => {
   await runTransferDirtyCell('cat', 9_000);
 });
 
-test('transfer dirty-coin guard: a RUNE funding coin is not spent', { timeout: 300_000 }, async () => {
+test('transfer dirty-coin guard: a RUNE funding coin is not spent', async () => {
   await runTransferDirtyCell('rune', 6_000);
 });
 
-test('transfer dirty-coin guard: a RARE-SAT funding coin is not spent', { timeout: 300_000 }, async () => {
+test('transfer dirty-coin guard: a RARE-SAT funding coin is not spent', async () => {
   await runTransferDirtyCell('rareSat', 3_000);
 });

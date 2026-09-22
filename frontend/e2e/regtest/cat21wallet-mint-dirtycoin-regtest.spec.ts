@@ -269,18 +269,18 @@ async function runMintDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   await page.close();
 }
 
-test('mint dirty-coin guard: an INSCRIPTION funding coin is not spent', { timeout: 300_000 }, async () => {
+test('mint dirty-coin guard: an INSCRIPTION funding coin is not spent', async () => {
   await runMintDirtyCell('inscription');
 });
 
-test('mint dirty-coin guard: a CAT funding coin is not spent', { timeout: 300_000 }, async () => {
+test('mint dirty-coin guard: a CAT funding coin is not spent', async () => {
   await runMintDirtyCell('cat');
 });
 
-test('mint dirty-coin guard: a RUNE funding coin is not spent', { timeout: 300_000 }, async () => {
+test('mint dirty-coin guard: a RUNE funding coin is not spent', async () => {
   await runMintDirtyCell('rune');
 });
 
-test('mint dirty-coin guard: a RARE-SAT funding coin is not spent', { timeout: 300_000 }, async () => {
+test('mint dirty-coin guard: a RARE-SAT funding coin is not spent', async () => {
   await runMintDirtyCell('rareSat');
 });

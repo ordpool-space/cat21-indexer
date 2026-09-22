@@ -130,7 +130,7 @@ test.afterAll(async () => {
   await context?.close();
 });
 
-test('capture cat21.space mint funding-state screenshots', { timeout: 300_000 }, async () => {
+test('capture cat21.space mint funding-state screenshots', async () => {
   const page = await context.newPage();
   const payment = await connectAndReadPayment(page);
   console.log(`[screenshots] payment=${payment}`);

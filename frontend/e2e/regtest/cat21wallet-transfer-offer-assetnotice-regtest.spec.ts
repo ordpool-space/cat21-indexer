@@ -230,10 +230,16 @@ async function runTransferNoticeCell(): Promise<void> {
   // Contrast of the ACTIONABLE cost-column labels, MEASURED on the rendered page
   // against the orange body (not "we used filled badges"). This panel's contrast
   // regressed twice; a filled badge whose text colour is later dropped goes
-  // near-white and a source check misses it. Both labels sit on pickable
-  // (undimmed) rows and are present (asserted above), so each is in the DOM.
+  // near-white and a source check misses it. `.utxo-overpay` rides the 'overpay'
+  // state asserted above; `.utxo-recommended` is the best-fit pick badge, tied to
+  // no fee-state, so assert it is present in its own right before measuring it,
+  // or a missing recommendation reads as a generic contrast timeout.
   const overpayRatio = await measuredTextContrast(page, '.utxo-overpay');
   expect(overpayRatio, `over-pays badge contrast ${overpayRatio.toFixed(2)}:1 on the orange body (WCAG AA needs 4.5)`).toBeGreaterThanOrEqual(4.5);
+  await expect(
+    page.locator('.utxo-recommended'),
+    'no RECOMMENDED coin badge rendered: the picker must surface a best-fit pick',
+  ).toBeVisible();
   const recRatio = await measuredTextContrast(page, '.utxo-recommended');
   expect(recRatio, `recommended badge contrast ${recRatio.toFixed(2)}:1 (WCAG AA needs 4.5)`).toBeGreaterThanOrEqual(4.5);
   console.log(`[${tag}] contrast: overpay=${overpayRatio.toFixed(2)}:1 recommended=${recRatio.toFixed(2)}:1`);
@@ -312,10 +318,10 @@ async function runMakeOfferNoticeCell(): Promise<void> {
   await page.close();
 }
 
-test('transfer asset-notice: a dirty-only pool notices + proceeds, three fee states in one picker', { timeout: 300_000 }, async () => {
+test('transfer asset-notice: a dirty-only pool notices + proceeds, three fee states in one picker', async () => {
   await runTransferNoticeCell();
 });
 
-test('make-offer asset-notice: a dirty-only pool notices + proceeds (CTA enabled)', { timeout: 300_000 }, async () => {
+test('make-offer asset-notice: a dirty-only pool notices + proceeds (CTA enabled)', async () => {
   await runMakeOfferNoticeCell();
 });

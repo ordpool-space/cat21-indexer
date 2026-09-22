@@ -464,7 +464,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
  *      `.utxo-pick-override` styling — a deliberate friction
  *      step so the user can't single-click into a cat-burning mint.
  */
-test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning', { timeout: 180_000 }, async () => {
+test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning', async () => {
   if (!sharedPaymentAddress) {
     throw new Error('first test must have set sharedPaymentAddress');
   }
@@ -680,7 +680,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
  *      tier is "active" (none, since 7 isn't a tier rate) — this is
  *      the user-overrides-tier path.
  */
-test('fee picker: tier clicks update the manual input + active state', { timeout: 120_000 }, async () => {
+test('fee picker: tier clicks update the manual input + active state', async () => {
   const page = await context.newPage();
   await navigateViaHeaderToMint(page);
   await shot(page, 'fp-01-loaded');
@@ -969,7 +969,7 @@ test('manual override: typing 1 while the picker suggests 100 (mempool hot) — 
  * The orchestrator's mint() must reject cleanly, the success card
  * must NOT render, and no on-chain tx must be broadcast.
  */
-test('sign-popup cancel keeps state coherent', { timeout: 180_000 }, async () => {
+test('sign-popup cancel keeps state coherent', async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const FUND_BTC = 0.0003;
@@ -1021,7 +1021,7 @@ test('sign-popup cancel keeps state coherent', { timeout: 180_000 }, async () =>
  * surface as a `[data-testid="mint-error"]` alert, NOT as a fake
  * `mint-success`.
  */
-test('broadcast failure surfaces as an error, not a fake success', { timeout: 240_000 }, async () => {
+test('broadcast failure surfaces as an error, not a fake success', async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const FUND_BTC = 0.0003;

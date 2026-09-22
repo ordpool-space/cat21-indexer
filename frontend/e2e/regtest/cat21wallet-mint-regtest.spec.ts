@@ -354,7 +354,7 @@ test.afterAll(async () => {
   await context?.close();
 });
 
-test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', { timeout: 180_000 }, async () => {
+test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', async () => {
   // Connect flow already ran in beforeAll; sharedPaymentAddress is set.
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
   const paymentAddr = sharedPaymentAddress;
@@ -678,7 +678,7 @@ test('manual override: typing 1 while the picker suggests 100 — low rate wins 
   expect(Math.abs(rate - 1)).toBeLessThan(1);
 });
 
-test('sign-popup cancel keeps state coherent on CAT-21 wallet', { timeout: 180_000 }, async () => {
+test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
   rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
@@ -732,7 +732,7 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', { timeout: 180_0
   await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });
 
-test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake success)', { timeout: 240_000 }, async () => {
+test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake success)', async () => {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
   rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
@@ -930,7 +930,7 @@ async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress
   });
 }
 
-test('/cat/N: three action buttons + Sell modal generates the shareable permalink', { timeout: 120_000 }, async () => {
+test('/cat/N: three action buttons + Sell modal generates the shareable permalink', async () => {
   const owner = await ensureSellerOrdinalsAddress();
   const N = CAT_NUMBER_FOR_UI_TEST;
   const page = await context.newPage();
@@ -988,7 +988,7 @@ test('/cat/N?ask=X: owner-variant ask banner is visible on the seller\'s own lin
   await page.close();
 });
 
-test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask" banner surfaces prefill intent', { timeout: 60_000 }, async () => {
+test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask" banner surfaces prefill intent', async () => {
   const N = CAT_NUMBER_FOR_UI_TEST;
   const page = await context.newPage();
 
@@ -1008,7 +1008,7 @@ test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask
   await page.close();
 });
 
-test('/dashboard/transfer?catNumber=X: page loads and the connected-wallet heading is visible', { timeout: 60_000 }, async () => {
+test('/dashboard/transfer?catNumber=X: page loads and the connected-wallet heading is visible', async () => {
   const N = CAT_NUMBER_FOR_UI_TEST;
   const page = await context.newPage();
 
@@ -1072,7 +1072,7 @@ function hexDecode(hexStr: string): Uint8Array {
   return out;
 }
 
-test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves on-chain', { timeout: 240_000 }, async () => {
+test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves on-chain', async () => {
   // Real dependency: this test consumes the cat produced by the mint
   // test as its seller input. Under serial mode (see file-scope
   // `test.describe.configure({ mode: 'serial' })` above), Playwright
@@ -1292,7 +1292,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 // working through ord.
 // ============================================================
 
-test('full transfer round-trip: fresh mint → transfer via URL → cat moves on-chain', { timeout: 240_000 }, async () => {
+test('full transfer round-trip: fresh mint → transfer via URL → cat moves on-chain', async () => {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   // ─── Mint a fresh cat via the existing helper ───
@@ -1512,7 +1512,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 // and environment.ordExplorer patched to the local instance.
 // ============================================================
 
-test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdings picker lists it → transfer via picker selection', { timeout: 300_000 }, async () => {
+test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdings picker lists it → transfer via picker selection', async () => {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   // ─── Mint a fresh cat + let cat21-ord index it ───
@@ -1660,7 +1660,7 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
 // pre-fill) drops or mutates a byte, the seller's signed tx would be
 // malformed and the broadcast would reject.
 // ============================================================
-test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT → seller accepts via UI → cat moves on-chain', { timeout: 360_000 }, async () => {
+test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT → seller accepts via UI → cat moves on-chain', async () => {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   // ─── Step 1: Fresh mint so we don't fight the earlier offer test

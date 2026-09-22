@@ -27,13 +27,14 @@ export default defineConfig({
   // is the right primitive; transient browser flakes get investigated
   // and fixed rather than papered over with a retry.
   retries: 0,
-  // Default budget for a regtest-touching test: chain mine + electrs sync
-  // + wallet approval popup + mint/broadcast is ~3-6 min end-to-end. 7 min
-  // gives ~1 min of headroom for CI flakiness. Individual quick tests
-  // (route assertions, non-broadcast flows) tighten via
-  // `test('name', { timeout: N }, ...)` in the spec declaration —
-  // scattered `test.setTimeout(...)` calls inside test bodies are the
-  // pattern E2E_BEST_PRACTICES.md rule 10 rules out.
+  // The single budget for EVERY regtest-touching test: chain mine + electrs
+  // sync + wallet approval popup + mint/broadcast is ~3-6 min end-to-end, so
+  // 7 min gives ~1 min of headroom for CI flakiness. This ceiling applies to
+  // every test in the project; Playwright's `TestDetails` (the 2nd arg to
+  // `test(title, { ... }, body)`) accepts only `tag` and `annotation`, so a
+  // `{ timeout: N }` written there is silently dropped and never tightens
+  // anything. A group that genuinely needs a different ceiling sets it with
+  // `test.describe.configure({ timeout: N })`, which Playwright does honour.
   timeout: 420_000,
   expect: {
     timeout: 30_000,
