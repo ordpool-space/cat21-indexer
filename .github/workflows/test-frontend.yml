@@ -3,8 +3,11 @@ name: Test Frontend
 # The build-cat21-frontend workflow only runs on stage_prod and only compiles;
 # it never ran the Jest unit suite, so a frontend regression could land on main
 # and reach a deploy without any unit test firing in CI. This workflow gates
-# every frontend push (main + stage_prod) and PR on both the production build
-# AND the full Jest suite, so "unit tests green" is a CI fact, not a local one.
+# every frontend push (main + stage_prod) and PR on the production build, the
+# full Jest suite, AND a typecheck of the e2e specs. Playwright transpiles specs
+# with esbuild, which never typechecks, so a type error in e2e/ (a dropped option
+# silently ignored, an unknown-typed field read as an object) rides along green
+# forever. `tsc --noEmit -p tsconfig.e2e.json` is the gate that makes those fail.
 on:
   workflow_dispatch:
   pull_request:
@@ -27,6 +30,10 @@ jobs:
     - name: Install dependencies
       working-directory: frontend
       run: npm ci --legacy-peer-deps
+
+    - name: Typecheck e2e specs (tsc, esbuild never does)
+      working-directory: frontend
+      run: npm run typecheck:e2e
 
     - name: Unit tests (Jest)
       working-directory: frontend

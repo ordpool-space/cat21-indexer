@@ -10,6 +10,7 @@
     "build": "ng build",
     "build:production": "ng build --configuration=production",
     "test": "NODE_OPTIONS='--no-deprecation --experimental-vm-modules' jest --config jest.config.js",
+    "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
     "lint": "ng lint",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
