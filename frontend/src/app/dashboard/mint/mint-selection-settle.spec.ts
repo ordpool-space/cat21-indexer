@@ -19,20 +19,10 @@ import { WalletServiceStub } from '../../testing/wallet.fixtures';
 import { ScannerStub } from '../../testing/scanner.fixtures';
 
 /**
- * Settle guard for the mint funding effect, at the boundary the SDK owns.
- *
- * mint.ts's effect reads `selectedUtxo()` and writes `setSelectedUtxo(match.utxo)`
- * with a FRESH row out of `allViableRows()` on every recompute. If the setter
- * emitted a new snapshot for that same-coin refresh, the component's snapshot
- * subscription would re-fire the effect, which would call the setter again: an
- * unbounded recompute loop, ~800 emissions/second, and the mint page never
- * settles. The SDK's funding setters compare by OUTPOINT, so a same-outpoint set
- * is a no-op and does not emit, which is what breaks the cycle.
- *
- * This asserts that mechanism from the orchestrator my component actually
- * constructs. A build, a unit assertion on a rendered element and a Playwright
- * snapshot are all green over that loop, because each asks whether something is
- * THERE and none asks whether the page has STOPPED changing. This asks.
+ * mint.ts's effect writes setSelectedUtxo() with a fresh row of the same outpoint
+ * each recompute. The SDK setter compares by outpoint, so that is a no-op and does
+ * not emit; without it the effect re-fires on its own write (recompute loop).
+ * Asserts the no-op from the real orchestrator. See commit 8d44e2b.
  */
 describe('Mint: a same-outpoint funding refresh does not re-emit (recompute-loop guard)', () => {
   let orch: Cat21MintOrchestrator;
@@ -81,22 +71,17 @@ describe('Mint: a same-outpoint funding refresh does not re-emit (recompute-loop
     orch.setSelectedUtxo(coin(OUT_A));
 
     let emissions = 0;
-    // subscribe fires once immediately with the current snapshot: the baseline.
+    // subscribe fires once immediately: baseline.
     const unsub = orch.subscribe(() => {
       emissions++;
     });
     expect(emissions).toBe(1);
 
-    // Exactly what the effect passes each recompute: a new object, same outpoint.
+    // Fresh object, same outpoint: the no-op. Would be > 1 if compared by identity.
     orch.setSelectedUtxo(coin(OUT_A));
-    // The outpoint-compare guard makes it a no-op, so no new snapshot fires. If
-    // the setter compared by identity, this would be 2 and the loop would exist.
     expect(emissions).toBe(1);
 
-    // The counter CAN move, so the no-op assertion above is not vacuous: a
-    // genuinely different outpoint is a real change and emits. It emits more than
-    // once here (the recompute marks 'scanning' on entry, then lands the answer),
-    // so assert movement, not an exact count that pins that internal step.
+    // Different outpoint emits, so the no-op assertion is not vacuous.
     orch.setSelectedUtxo(coin(OUT_B));
     expect(emissions).toBeGreaterThan(1);
 
