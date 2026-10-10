@@ -1,3 +1,13 @@
+/**
+ * @test-kind e2e
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
+ *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Faked:
+ *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
+ * Proves: with a clean coin beside an inscription, cat, rune or rare-sat coin, the mint funds from the
+ *         clean coin and the dirty coin is still unspent on-chain
+ */
 /* eslint-disable no-console */
 import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
@@ -9,12 +19,12 @@ import {
   seedDirtyCoin,
   DirtyCoinAsset,
   fundCommonSats,
-  waitForElectrsSync,
   mineBlocks,
   waitForTxConfirmed,
   rpc,
+  installContextErrorGuard,
+  clickApprovalButton,
 } from 'ordpool-sdk/e2e';
-import { installContextErrorGuard } from './lib/browser-error-guard';
 
 /**
  * E2E (regtest) — cat21.space MINT funding guard, dirty-coin protection, END TO
@@ -82,23 +92,6 @@ async function shot(p: Page, name: string): Promise<void> {
 }
 
 /**
- * Approval-popup confirm click. cat21-wallet self-closes the sign-psbt popup the
- * moment the confirm dispatch reaches the service worker, so the close IS the
- * success signal — swallow only that teardown error, scoped to this wallet. The
- * downstream mint-success assertion is what proves the approval actually landed.
- */
-async function clickApprovalButton(popup: Page): Promise<void> {
-  const btn = popup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first();
-  await expect(btn).toBeVisible({ timeout: 10_000 });
-  try {
-    await btn.click({ noWaitAfter: true, timeout: 30_000 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!/Target page, context or browser has been closed/.test(msg)) throw err;
-  }
-}
-
-/**
  * Connect cat21-wallet via the mint page; return the payment address (the
  * funding source the guard selects from). Idempotent across cells.
  */
@@ -114,6 +107,7 @@ async function connectAndReadPayment(page: Page): Promise<string> {
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
     await expect(picker).toBeVisible({ timeout: 20_000 });
     await picker.click({ timeout: 20_000 });
+    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
     const approval = await waitForApprovalPopup({
       context, knownPages: knownBefore, timeoutMs: 20_000,
       isApproval: async (p) => {
@@ -199,6 +193,7 @@ async function runMintDirtyCell(asset: DirtyCoinAsset): Promise<void> {
 
   // ─── 3. Drive the mint: set the fee, let the picker auto-select ──
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
     isApproval: async (p) => p.url().startsWith('chrome-extension://'),
@@ -230,6 +225,7 @@ async function runMintDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   // ─── 4. Mint → cat21-wallet signs → broadcast ───────────────────
   const knownBeforeSign = new Set(context.pages());
   await mintBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const sign = await waitForApprovalPopup({
     context, knownPages: knownBeforeSign, timeoutMs: 120_000,
     isApproval: async (p) => {
@@ -239,7 +235,7 @@ async function runMintDirtyCell(asset: DirtyCoinAsset): Promise<void> {
       return true;
     },
   });
-  await clickApprovalButton(sign);
+  await clickApprovalButton(sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), sign, 30_000);
   await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   const successCard = page.getByTestId('mint-success');

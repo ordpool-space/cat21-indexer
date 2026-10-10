@@ -1,3 +1,14 @@
+/**
+ * @test-kind e2e
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
+ *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Faked:
+ *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
+ * Proves: the page-built buy offer for a 546-sat and a 9000-sat cat pays the typed seller address,
+ *         keeps the cat size, never asks the buyer to sign input 0 and settles on-chain; the buyer
+ *         funding guard leaves an inscription, cat, rune or rare-sat coin unspent
+ */
 /* eslint-disable no-console */
 import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
@@ -10,12 +21,12 @@ import {
   seedDirtyCoin,
   DirtyCoinAsset,
   fundCommonSats,
-  waitForElectrsSync,
   mineBlocks,
   waitForTxConfirmed,
   rpc,
+  installContextErrorGuard,
+  clickApprovalButton,
 } from 'ordpool-sdk/e2e';
-import { installContextErrorGuard } from './lib/browser-error-guard';
 
 /**
  * E2E (regtest) — cat21.space make-offer, driven THROUGH THE PAGE, zero mock.
@@ -82,23 +93,6 @@ async function shot(p: Page, name: string): Promise<void> {
 }
 
 /**
- * Approval-popup Sign/Confirm/Approve click. cat21-wallet self-closes the
- * popup the moment the dispatch reaches the service worker, so the close IS
- * the success signal — swallow only the teardown-race error. Mirrors the
- * helper of the same shape in `cat21wallet-mint-regtest.spec.ts`.
- */
-async function clickApprovalButton(popup: Page): Promise<void> {
-  const btn = popup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first();
-  await expect(btn).toBeVisible({ timeout: 10_000 });
-  try {
-    await btn.click({ noWaitAfter: true, timeout: 30_000 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!/Target page, context or browser has been closed/.test(msg)) throw err;
-  }
-}
-
-/**
  * Money-path assertion on the buyer's sign popup: a buy-offer is sniping-proof
  * precisely because the BUYER signs only their own funding inputs and NEVER the
  * seller's cat UTXO. ord's `wallet offer create` (which the SDK mirrors)
@@ -150,6 +144,7 @@ async function connectAndReadAddresses(
     // The approval popup is OPTIONAL: on the first connect it fires, but once
     // the origin is approved (a prior cell in this context) getAddresses
     // returns without prompting. Don't hard-require it.
+    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
     const approvalConnect = await waitForApprovalPopup({
       context,
       knownPages: knownPagesBeforeConnect,
@@ -280,6 +275,7 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   // ─── 5. Drive the make-offer PAGE: lookup N, type P, type price ─
   await page.goto(`${FRONTEND_URL}${MAKE_OFFER_PATH}`, { waitUntil: 'domcontentloaded' });
   // Re-approve get-addresses if the wallet re-prompts on this page load.
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: new Set(context.pages()),
@@ -317,6 +313,7 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   // ─── 6. Build the offer → cat21-wallet buyer-signs in a popup ───
   const knownBeforeSign = new Set(context.pages());
   await buildBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const signPopup = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeSign,
@@ -330,7 +327,7 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   });
   await shot(signPopup, `${valueSats}-02-sign-popup`);
   await assertBuyerNeverSignsSellerInput0(signPopup);
-  await clickApprovalButton(signPopup);
+  await clickApprovalButton(signPopup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), signPopup, 30_000);
   await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── 7. Read the PAGE-BUILT, buyer-signed PSBT ──────────────────
@@ -437,6 +434,7 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
 
   // ─── 4. Drive make-offer to a built, buyer-signed offer ─────────
   await page.goto(`${FRONTEND_URL}${MAKE_OFFER_PATH}`, { waitUntil: 'domcontentloaded' });
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
     isApproval: async (p) => p.url().startsWith('chrome-extension://'),
@@ -463,6 +461,7 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
 
   const knownBeforeSign = new Set(context.pages());
   await buildBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const signPopup = await waitForApprovalPopup({
     context, knownPages: knownBeforeSign, timeoutMs: 120_000,
     isApproval: async (p) => {
@@ -473,7 +472,7 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
     },
   });
   await assertBuyerNeverSignsSellerInput0(signPopup);
-  await clickApprovalButton(signPopup);
+  await clickApprovalButton(signPopup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), signPopup, 30_000);
   await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── 5. Read the page-built PSBT, seller settles on-chain ───────

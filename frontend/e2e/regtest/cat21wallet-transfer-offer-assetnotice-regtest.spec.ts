@@ -1,3 +1,14 @@
+/**
+ * @test-kind e2e
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
+ *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Faked:
+ *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
+ * Proves: a dirty-only funding pool on a separate-address wallet renders the transfer and make-offer
+ *         asset notices naming the inscription with the CTA enabled, and the transfer picker shows the
+ *         over-pay and unavailable fee states; browser errors on our pages fail each cell
+ */
 /* eslint-disable no-console */
 import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
@@ -9,8 +20,8 @@ import {
   seedListedCat,
   seedDirtyCoin,
   rpc,
+  installContextErrorGuard,
 } from 'ordpool-sdk/e2e';
-import { installContextErrorGuard } from './lib/browser-error-guard';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
 /**
@@ -48,6 +59,7 @@ const RESULTS_DIR = path.resolve(__dirname, '../../test-results');
 
 let context: BrowserContext;
 let extensionId: string;
+let browserErrorGuard: ReturnType<typeof installContextErrorGuard>;
 
 async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
@@ -73,6 +85,7 @@ async function connectAndReadAddresses(page: Page): Promise<{ paymentAddress: st
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
     await expect(picker).toBeVisible({ timeout: 20_000 });
     await picker.click({ timeout: 20_000 });
+    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
     const approval = await waitForApprovalPopup({
       context, knownPages: knownBefore, timeoutMs: 20_000,
       isApproval: async (p) => {
@@ -134,7 +147,7 @@ test.beforeAll(async () => {
     ],
     viewport: { width: 1280, height: 900 },
   });
-  installContextErrorGuard(context);
+  browserErrorGuard = installContextErrorGuard(context);
 
   let [worker] = context.serviceWorkers();
   if (!worker) {
@@ -186,6 +199,7 @@ async function runTransferNoticeCell(): Promise<void> {
   transferUrl.searchParams.set('catTxid', listed.txid);
   transferUrl.searchParams.set('catVout', String(listed.vout));
   await page.goto(transferUrl.toString(), { waitUntil: 'domcontentloaded' });
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
     isApproval: async (p) => p.url().startsWith('chrome-extension://'),
@@ -255,6 +269,7 @@ async function runTransferNoticeCell(): Promise<void> {
 
   await shot(page, 'transfer-notice-three-states');
 
+  browserErrorGuard.assertClean();
   await page.close();
 }
 
@@ -282,6 +297,7 @@ async function runMakeOfferNoticeCell(): Promise<void> {
   await waitForBackendCat(listed.catNumber);
 
   await page.goto(`${FRONTEND_URL}${MAKE_OFFER_PATH}`, { waitUntil: 'domcontentloaded' });
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
     isApproval: async (p) => p.url().startsWith('chrome-extension://'),
@@ -315,6 +331,7 @@ async function runMakeOfferNoticeCell(): Promise<void> {
   ).toBeEnabled({ timeout: 30_000 });
   await shot(page, 'make-offer-notice');
 
+  browserErrorGuard.assertClean();
   await page.close();
 }
 

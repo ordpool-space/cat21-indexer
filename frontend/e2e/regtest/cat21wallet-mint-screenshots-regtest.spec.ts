@@ -1,3 +1,13 @@
+/**
+ * @test-kind e2e
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
+ *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Faked:
+ *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
+ * Proves: the mint notice, safe and over-pay funding states render (visibility asserted) and are
+ *         captured as screenshots; browser errors on our pages fail the test
+ */
 /* eslint-disable no-console */
 import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
@@ -9,6 +19,7 @@ import {
   seedDirtyCoin,
   fundCommonSats,
   rpc,
+  installContextErrorGuard,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -46,6 +57,7 @@ const SHOT_DIR = path.resolve(RESULTS_DIR, 'mint-screenshots');
 
 let context: BrowserContext;
 let extensionId: string;
+let browserErrorGuard: ReturnType<typeof installContextErrorGuard>;
 
 async function shot(p: Page, name: string): Promise<void> {
   fs.mkdirSync(SHOT_DIR, { recursive: true });
@@ -64,6 +76,7 @@ async function connectAndReadPayment(page: Page): Promise<string> {
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
     await expect(picker).toBeVisible({ timeout: 20_000 });
     await picker.click({ timeout: 20_000 });
+    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
     const approval = await waitForApprovalPopup({
       context, knownPages: knownBefore, timeoutMs: 20_000,
       isApproval: async (p) => {
@@ -90,6 +103,7 @@ async function connectAndReadPayment(page: Page): Promise<string> {
  *  not on fee change), then re-connect if the reload dropped the session. */
 async function reloadMint(page: Page): Promise<void> {
   await page.goto(MINT_URL, { waitUntil: 'domcontentloaded' });
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reappr = await waitForApprovalPopup({
     context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
     isApproval: async (p) => p.url().startsWith('chrome-extension://'),
@@ -118,6 +132,7 @@ test.beforeAll(async () => {
     args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`, '--no-sandbox', '--disable-dev-shm-usage'],
     viewport: { width: 1280, height: 900 },
   });
+  browserErrorGuard = installContextErrorGuard(context);
   let [worker] = context.serviceWorkers();
   if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
   extensionId = worker.url().split('/')[2];
@@ -194,5 +209,6 @@ test('capture cat21.space mint funding-state screenshots', async () => {
   await shot(page, 'case5-overpay');
   console.log('[screenshots] case5-overpay captured');
 
+  browserErrorGuard.assertClean();
   await page.close();
 });

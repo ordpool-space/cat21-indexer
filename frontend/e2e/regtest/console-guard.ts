@@ -32,6 +32,7 @@ export interface BrowserErrorGuard {
  * test after positive assertions. Every JS regression the flow
  * uncovers becomes a hard failure instead of scrolling past in stdout.
  */
+// local: SDK installContextErrorGuard is context-level and its ignore list also filters pageerror; this one is per page and filters console only
 export function installBrowserErrorGuard(page: Page): BrowserErrorGuard {
   const errors: string[] = [];
   page.on('console', (msg) => {

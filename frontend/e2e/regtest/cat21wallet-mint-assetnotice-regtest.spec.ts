@@ -1,3 +1,13 @@
+/**
+ * @test-kind e2e
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
+ *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Faked:
+ *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
+ * Proves: for an inscription, cat, rune and rare-sat dirty-only pool, the mint page renders
+ *         mint-asset-notice naming the seeded asset id with the mint CTA enabled
+ */
 /* eslint-disable no-console */
 import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
@@ -9,8 +19,8 @@ import {
   seedDirtyCoin,
   DirtyCoinAsset,
   rpc,
+  installContextErrorGuard,
 } from 'ordpool-sdk/e2e';
-import { installContextErrorGuard } from './lib/browser-error-guard';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
 /**
@@ -83,6 +93,7 @@ async function connectAndReadPayment(page: Page): Promise<string> {
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
     await expect(picker).toBeVisible({ timeout: 20_000 });
     await picker.click({ timeout: 20_000 });
+    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
     const approval = await waitForApprovalPopup({
       context, knownPages: knownBefore, timeoutMs: 20_000,
       isApproval: async (p) => {
@@ -170,6 +181,7 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   // assertion deterministic.
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
 
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
     isApproval: async (p) => p.url().startsWith('chrome-extension://'),

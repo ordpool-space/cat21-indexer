@@ -1,22 +1,42 @@
+/**
+ * @test-kind e2e
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080, the transfer
+ *         holdings picker only), cat21-indexer backend (:9998, syncing from the :8999 stub, not from
+ *         cat21-ord), cat21-wallet (.crx)
+ * Faked:  fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest), all of it written in the stub, not captured:
+ *         /api/v1/fees/recommended (static DEFAULT_FEES; HIGH_FEES_PRESET posted to /admin/fees is
+ *         recommendedFeesFixture with an invented spread); ord /output for the frontend's ord URLs, the
+ *         backend and this spec (constant cats:[0] body, or a cat number registered via /admin/output);
+ *         every other /api/* path is proxied to the real electrs
+ *         context route on every /output/<outpoint> -> cleanOutputFixture (ordpool-sdk/core)
+ *         page route on /output/<outpoint> for one outpoint -> catOutputFixture (ordpool-sdk/core)
+ *         page route on POST /api/tx -> 400 (broadcast-failure test)
+ *         page routes /api/cat/N, /api/status, ord /cat/N -> hand-written bodies (installCatDetailMocks)
+ * Proves: mint round-trip with nLockTime=21 and sequence 0xfffffffd; "Use anyway" spends a cat-flagged
+ *         coin; manual fee overrides land on-chain; sign cancel and broadcast failure surface as errors;
+ *         /cat/N, trade and transfer deep links; offer, transfer, picker-transfer and bid-marketplace
+ *         round-trips move the cat on-chain
+ */
 /* eslint-disable no-console */
 import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
 import {
-  getUtxos,
   waitForElectrsSync,
   waitForUtxoAt,
   rpc,
   mineBlocks,
-  getTx,
   waitForTxConfirmed,
   waitForApprovalPopup,
   waitForOrdSync,
   onboardCat21Wallet,
+  installContextErrorGuard,
+  clickApprovalButton,
+  approveCat21WalletConnectPopup,
+  waitForUtxoMatching,
 } from 'ordpool-sdk/e2e';
-import { installContextErrorGuard } from './lib/browser-error-guard';
-import { cleanOutputFixture } from 'ordpool-sdk/core';
+import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
 // Canonical clean `/output` body (indexed, carries nothing), merged across the
 // two ord surfaces the scanner reads (full ord: inscriptions/runes/sat_ranges;
@@ -25,6 +45,10 @@ import { cleanOutputFixture } from 'ordpool-sdk/core';
 // `sat_ranges` as NOT-INDEXED, so a hand-written body without it would class the
 // funding coin unknown and disable the mint button.
 const CLEAN_OUTPUT_BODY = { ...cleanOutputFixture().ord, ...cleanOutputFixture().cat21Ord };
+
+// The same merge for a coin carrying a CAT-21 cat (cat21-ord reports the cat,
+// the full ord reports nothing), so the scanner classifies it as an asset coin.
+const CAT_OUTPUT_BODY = { ...catOutputFixture().ord, ...catOutputFixture().cat21Ord };
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint via CAT-21 wallet.
@@ -202,23 +226,12 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
   await expect(cat21Picker).toBeVisible({ timeout: 20_000 });
   await cat21Picker.click({ timeout: 20_000 });
 
-  const approvalConnect = await waitForApprovalPopup({
-    context,
-    knownPages: knownPagesBeforeConnect,
-    timeoutMs: 60_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByTestId('get-addresses-approve-button')
-        .waitFor({ state: 'visible', timeout: 60_000 });
-      return true;
-    },
-  });
-  await approvalConnect.getByTestId('get-addresses-approve-button').click();
-  // DO NOT explicitly `.close()` — cat21-wallet's userApprovesGetAddresses
-  // runs a ~400 ms animation BEFORE sending addresses back. Manual close
-  // cuts the dispatch (run 27502018547 trace.zip showed click→close = 44 ms).
-  await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-
+  await approveCat21WalletConnectPopup(context, knownPagesBeforeConnect);
+  // The popup is never closed from here: cat21-wallet's
+  // userApprovesGetAddresses runs a ~400 ms animation BEFORE sending the
+  // addresses back, and a manual close cuts that dispatch (run 27502018547
+  // trace.zip showed click->close = 44 ms). The hidden connect CTA is the
+  // signal that the addresses arrived.
   await expect(cta).toBeHidden({ timeout: 30_000 });
 
   // Path-1 proof: payment address is REGTEST bcrt1q. Extract from the
@@ -240,35 +253,6 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
   await expect(paymentAddrEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
   const paymentAddr = (await paymentAddrEl.textContent())!.trim();
   return { paymentAddress: paymentAddr };
-}
-
-/**
- * Approval-popup Sign/Confirm/Approve click.
- *
- * `{ noWaitAfter: true }` — cat21-wallet self-closes its sign-psbt
- * popup the moment the confirm dispatch reaches the service worker.
- * Playwright's default click awaits post-click stability; that race
- * surfaces as "Target page, context or browser has been closed"
- * when the popup tears down mid-click. The close IS the success
- * signal, so we don't wait for stability. Same pattern as the SDK's
- * `approveCat21WalletSignPopup` helper (`ordpool-sdk/e2e/playwright/
- * cat21wallet-sign-popup.ts`) — the two are semantically identical.
- */
-async function clickApprovalButton(popup: Page): Promise<void> {
-  const btn = popup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first();
-  await expect(btn).toBeVisible({ timeout: 10_000 });
-  // noWaitAfter skips POST-click auto-wait for navigation but does NOT
-  // protect the click dispatch itself: if the popup tears down between
-  // Playwright's "performing click action" and the mouseup, click()
-  // throws "Target page, context or browser has been closed". Per the
-  // block comment above, that close IS the success signal, so we
-  // swallow only that specific error and re-throw everything else.
-  try {
-    await btn.click({ noWaitAfter: true, timeout: 30_000 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!/Target page, context or browser has been closed/.test(msg)) throw err;
-  }
 }
 
 test.beforeAll(async () => {
@@ -384,6 +368,7 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
   // Reload so the orchestrator picks up the new UTXO.
   const knownBeforeReload = new Set(context.pages());
   await page.reload({ waitUntil: 'domcontentloaded' });
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeReload,
@@ -409,6 +394,7 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
 
   const knownBeforeSign = new Set(context.pages());
   await mintBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const approvalSign = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeSign,
@@ -421,7 +407,7 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
     },
   });
   await shot(approvalSign, '07-sign-approval');
-  await clickApprovalButton(approvalSign);
+  await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
   await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   const successCard = page.getByTestId('mint-success');
@@ -449,13 +435,16 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
   }
 });
 
-const HIGH_FEES_PRESET = {
+// Invented spread: every tier far above the typed rate, so the picker tiles
+// visibly disagree with the manual override. Typed against the SDK's
+// RecommendedFees contract via its fixture.
+const HIGH_FEES_PRESET = recommendedFeesFixture({
   fastestFee: 100,
   halfHourFee: 60,
   hourFee: 30,
   economyFee: 20,
   minimumFee: 10,
-};
+});
 
 async function cat21walletMintAtRate(opts: {
   rate: number;
@@ -481,6 +470,7 @@ async function cat21walletMintAtRate(opts: {
     const page = await context.newPage();
     await navigateViaHeaderToMint(page);
     const known = new Set(context.pages());
+    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
     const reapprove = await waitForApprovalPopup({
       context,
       knownPages: known,
@@ -509,6 +499,7 @@ async function cat21walletMintAtRate(opts: {
 
     const knownSign = new Set(context.pages());
     await mintBtn.click();
+    // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
     const sign = await waitForApprovalPopup({
       context,
       knownPages: knownSign,
@@ -520,7 +511,7 @@ async function cat21walletMintAtRate(opts: {
         return true;
       },
     });
-    await clickApprovalButton(sign);
+    await clickApprovalButton(sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), sign, 30_000);
     await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
     const successCard = page.getByTestId('mint-success');
@@ -555,16 +546,12 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
   const SMALL_FUND_SATS = 15_000;
   const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, '0.00015').trim();
   await waitForElectrsSync(mineBlocks(1));
-  let small: { txid: string; vout: number; value: number } | undefined;
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    small = (await getUtxos(sharedPaymentAddress)).find(
-      (u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid,
-    );
-    if (small) break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  if (!small) throw new Error('could not find small UTXO');
+  const small = await waitForUtxoMatching(
+    sharedPaymentAddress,
+    (u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid,
+    `the ${SMALL_FUND_SATS}-sat funding coin from ${fundTxid}`,
+    15_000,
+  );
   const catOutpoint = `${small.txid}:${small.vout}`;
 
   const page = await context.newPage();
@@ -589,13 +576,14 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
       headers: { 'access-control-allow-origin': '*' },
       body: JSON.stringify(
         isCatTarget
-          ? { inscriptions: [], runes: {}, cats: [0] }
+          ? CAT_OUTPUT_BODY
           : CLEAN_OUTPUT_BODY,
       ),
     });
   });
   await navigateViaHeaderToMint(page);
   const known = new Set(context.pages());
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: known,
@@ -630,6 +618,7 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
   await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
   const knownSign = new Set(context.pages());
   await mintBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const sign = await waitForApprovalPopup({
     context,
     knownPages: knownSign,
@@ -641,7 +630,7 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
       return true;
     },
   });
-  await clickApprovalButton(sign);
+  await clickApprovalButton(sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), sign, 30_000);
   await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   const successCard = page.getByTestId('mint-success');
@@ -686,6 +675,7 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
   const page = await context.newPage();
   await navigateViaHeaderToMint(page);
   const known = new Set(context.pages());
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: known,
@@ -706,6 +696,7 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
 
   const knownSign = new Set(context.pages());
   await mintBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const sign = await waitForApprovalPopup({
     context,
     knownPages: knownSign,
@@ -752,6 +743,7 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
   });
   await navigateViaHeaderToMint(page);
   const known = new Set(context.pages());
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: known,
@@ -772,6 +764,7 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
 
   const knownSign = new Set(context.pages());
   await mintBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const sign = await waitForApprovalPopup({
     context,
     knownPages: knownSign,
@@ -783,7 +776,7 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
       return true;
     },
   });
-  await clickApprovalButton(sign);
+  await clickApprovalButton(sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), sign, 30_000);
   await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   const errorAlert = page.getByTestId('mint-error');
@@ -1186,6 +1179,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 
   // Handle any get-addresses reapproval popup the wallet may pop up
   // when the page loads (mirrors the pattern from the mint test).
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeNavigate,
@@ -1216,6 +1210,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
   // ─── Click Accept → cat21-wallet approval popup → sign ───
   const knownBeforeSign = new Set(context.pages());
   await acceptBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const approvalSign = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeSign,
@@ -1228,7 +1223,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
     },
   });
   await shot(approvalSign, 'offer-03-sign-approval');
-  await clickApprovalButton(approvalSign);
+  await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
   await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── Success surfaces + broadcast txid available ───
@@ -1338,6 +1333,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   await page.goto(transferUrl.toString(), { waitUntil: 'domcontentloaded' });
 
   // The wallet may pop up a get-addresses reapproval on a fresh page.
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeNavigate,
@@ -1360,6 +1356,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   // Same pattern as the mint round-trip test uses at line 213.
   const knownBeforeReload = new Set(context.pages());
   await page.reload({ waitUntil: 'domcontentloaded' });
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapproveAfterReload = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeReload,
@@ -1420,6 +1417,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   let knownBeforeSign = new Set(context.pages());
   await transferBtn.click();
   for (let i = 0; i < 2; i++) {
+    // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
     const approvalSign = await waitForApprovalPopup({
       context,
       knownPages: knownBeforeSign,
@@ -1437,7 +1435,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
     }).catch(() => null);
     if (!approvalSign) break; // no more popups — the sign flow chained into broadcast
     await shot(approvalSign, `transfer-03-sign-approval-${i + 1}`);
-    await clickApprovalButton(approvalSign);
+    await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
     await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
     knownBeforeSign = new Set(context.pages()); // arm the next iteration to see any NEW popup
   }
@@ -1540,6 +1538,7 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
   });
   const knownBeforeNavigate = new Set(context.pages());
   await page.goto(`${FRONTEND_URL}/dashboard/transfer`, { waitUntil: 'domcontentloaded' });
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeNavigate,
@@ -1586,6 +1585,7 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
   let knownBeforeSign = new Set(context.pages());
   await transferBtn.click();
   for (let i = 0; i < 2; i++) {
+    // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
     const approvalSign = await waitForApprovalPopup({
       context,
       knownPages: knownBeforeSign,
@@ -1599,7 +1599,7 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
     }).catch(() => null);
     if (!approvalSign) break;
     await shot(approvalSign, `picker-transfer-04-sign-${i + 1}`);
-    await clickApprovalButton(approvalSign);
+    await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
     await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
     knownBeforeSign = new Set(context.pages());
   }
@@ -1860,6 +1860,7 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   const knownBeforeNavigate = new Set(context.pages());
   await page.goto(acceptUrl.toString(), { waitUntil: 'domcontentloaded' });
 
+  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
   const reapprove = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeNavigate,
@@ -1887,6 +1888,7 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   // ─── Step 10: Click Accept → cat21-wallet sign popup → sign. ───
   const knownBeforeSign = new Set(context.pages());
   await acceptBtn.click();
+  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const approvalSign = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeSign,
@@ -1899,7 +1901,7 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
     },
   });
   await shot(approvalSign, 'bid-mkt-03-sign-approval');
-  await clickApprovalButton(approvalSign);
+  await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
   await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── Step 11: Success surfaces. Extract the broadcast txid. ───

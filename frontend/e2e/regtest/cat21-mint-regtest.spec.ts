@@ -1,21 +1,35 @@
+/**
+ * @test-kind e2e
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, Xverse 2.3.2 (.crx, seeded user-data-dir)
+ * Faked:  fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest), written in the stub, not captured:
+ *         /api/v1/fees/recommended (static DEFAULT_FEES) and ord /output for both ord URLs; every other
+ *         /api/* path is proxied to the real electrs
+ *         context route on every /output/<outpoint> -> cleanOutputFixture (ordpool-sdk/core)
+ *         page route on /output/<outpoint> for one outpoint -> catOutputFixture (ordpool-sdk/core)
+ *         page route on /api/v1/fees/recommended -> recommendedFeesFixture with an invented spread
+ *         page route on POST /api/tx -> 400 (broadcast-failure test)
+ *         cat21ApiUrl points at :9998, where no server listens in this lane
+ * Proves: mint round-trip through Xverse with nLockTime=21; a cat-flagged coin shows the asset
+ *         warning and can still be spent; fee tiers drive the manual input; manual fee overrides land
+ *         on-chain; sign cancel and broadcast failure surface as errors
+ */
 /* eslint-disable no-console */
 import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
 import {
-  getUtxos,
   waitForUtxoAt,
+  waitForUtxoMatching,
   waitForElectrsSync,
   rpc,
   mineBlocks,
-  getTx,
   waitForTxConfirmed,
   waitForApprovalPopup,
   isVisibleWithin,
 } from 'ordpool-sdk/e2e';
 import { installBrowserErrorGuard } from './console-guard';
-import { cleanOutputFixture } from 'ordpool-sdk/core';
+import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
 // Canonical clean `/output` body (indexed, carries nothing), merged across the
 // two ord surfaces the scanner reads (full ord: inscriptions/runes/sat_ranges;
@@ -24,6 +38,10 @@ import { cleanOutputFixture } from 'ordpool-sdk/core';
 // absent `sat_ranges` as NOT-INDEXED, so a hand-written body without it would
 // class the funding coin unknown and disable the mint button.
 const CLEAN_OUTPUT_BODY = { ...cleanOutputFixture().ord, ...cleanOutputFixture().cat21Ord };
+
+// The same merge for a coin carrying a CAT-21 cat (cat21-ord reports the cat,
+// the full ord reports nothing), so the scanner classifies it as an asset coin.
+const CAT_OUTPUT_BODY = { ...catOutputFixture().ord, ...catOutputFixture().cat21Ord };
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint
@@ -39,13 +57,13 @@ const CLEAN_OUTPUT_BODY = { ...cleanOutputFixture().ord, ...cleanOutputFixture()
  *
  * Pre-conditions the workflow guarantees:
  *   - bitcoind regtest is up with ≥101 mined blocks (coinbase maturity)
- *   - electrs is up on :3000
- *   - ordpool-backend is up on :8999 (provides /api/v1/fees/recommended
- *     + electrs /api/* proxy that cat21.space's mint flow reads)
+ *   - ordpool-electrs is up on :3010
+ *   - the SDK's fees-electrs-stub is up on :8999: a static
+ *     /api/v1/fees/recommended, a static ord /output body, and a
+ *     path-for-path /api/* proxy to electrs
  *   - cat21-indexer/frontend is served at FRONTEND_URL with the regtest
- *     cat21Config (mempoolApiUrl → :8999, cat21ApiUrl → :3333, ord
- *     URLs are unused on regtest and stay as production fallbacks
- *     since the scanner gracefully tolerates failures)
+ *     cat21Config: mempoolApiUrl and both ord URLs -> :8999,
+ *     cat21ApiUrl -> :9998, where no server listens in this lane
  *   - the Xverse `.crx` is unpacked at XVERSE_EXT_PATH
  *   - a seeded user-data-dir is at XVERSE_SEED_USER_DATA_DIR (the
  *     SDK's globalSetup produced it during the workflow's earlier
@@ -479,20 +497,14 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   // electrs's address index can lag behind the chain tip by ~hundreds
   // of ms after a block is mined — `waitForElectrsSync` only blocks
   // until `/blocks/tip/height` advances, not until per-address UTXO
-  // queries see the new outputs. Poll-with-deadline so the test
-  // tolerates the lag.
-  let small: { txid: string; vout: number; value: number } | undefined;
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    small = (await getUtxos(paymentAddress)).find(
-      (u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid,
-    );
-    if (small) break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  if (!small) {
-    throw new Error(`could not find the ${SMALL_FUND_SATS}-sat funding UTXO under ${paymentAddress}`);
-  }
+  // queries see the new outputs. waitForUtxoMatching polls with a deadline
+  // so the test tolerates the lag.
+  const small = await waitForUtxoMatching(
+    paymentAddress,
+    (u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid,
+    `the ${SMALL_FUND_SATS}-sat funding coin from ${fundTxid}`,
+    15_000,
+  );
   const catOutpoint = `${small.txid}:${small.vout}`;
   console.log(`[asset-scanner] cat-bearing outpoint = ${catOutpoint}`);
 
@@ -514,16 +526,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
     }
     const requestedOutpoint = m ? `${m[1].toLowerCase()}:${m[2]}` : '';
     const isCatTarget = requestedOutpoint === catOutpoint.toLowerCase();
-    const body = isCatTarget
-      ? {
-          inscriptions: [],
-          runes: {},
-          cats: [0],
-          sat_ranges: [[1_000_000, 1_000_001]],
-          value: SMALL_FUND_SATS,
-          script_pubkey: '',
-        }
-      : CLEAN_OUTPUT_BODY;
+    const body = isCatTarget ? CAT_OUTPUT_BODY : CLEAN_OUTPUT_BODY;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -823,13 +826,13 @@ async function mintAtRateAndVerify(opts: {
         status: 200,
         contentType: 'application/json',
         headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' },
-        body: JSON.stringify({
+        body: JSON.stringify(recommendedFeesFixture({
           fastestFee: 100,
           halfHourFee: 60,
           hourFee: 30,
           economyFee: 20,
           minimumFee: 10,
-        }),
+        })),
       });
     });
   }
