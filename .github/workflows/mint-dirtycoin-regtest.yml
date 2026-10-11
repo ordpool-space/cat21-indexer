@@ -23,12 +23,22 @@ on:
       - 'frontend/e2e/regtest/cat21wallet-mint-dirtycoin-regtest.spec.ts'
       - 'frontend/e2e/regtest/lib/**'
       - 'frontend/playwright.regtest.config.ts'
-      - 'frontend/package.json'
-      - 'frontend/package-lock.json'
-      - 'frontend/src/app/dashboard/mint/**'
-      - 'frontend/src/app/shared/utxo-picker/**'
-      - 'frontend/src/app/shared/fees-picker/**'
+      - 'frontend/*.json'
+      - 'frontend/src/**'
+      - 'backend/*.json'
       - 'backend/src/**'
+      - 'backend/migrations/**'
+      - '.github/workflows/mint-dirtycoin-regtest.yml'
+  pull_request:
+    paths:
+      - 'frontend/e2e/regtest/cat21wallet-mint-dirtycoin-regtest.spec.ts'
+      - 'frontend/e2e/regtest/lib/**'
+      - 'frontend/playwright.regtest.config.ts'
+      - 'frontend/*.json'
+      - 'frontend/src/**'
+      - 'backend/*.json'
+      - 'backend/src/**'
+      - 'backend/migrations/**'
       - '.github/workflows/mint-dirtycoin-regtest.yml'
 
 permissions:
@@ -161,12 +171,21 @@ jobs:
             sleep 1
           done
 
+      # The SDK harness (bootstrap, extension staging, seed) comes from the
+      # same ordpool-sdk sha the frontend's package-lock.json pins.
+      - name: Read the pinned ordpool-sdk sha
+        id: sdk-pin
+        run: |
+          sha=$(jq -r '.packages["node_modules/ordpool-sdk"].resolved' frontend/package-lock.json | sed 's/.*#//')
+          echo "$sha" | grep -Eq '^[0-9a-f]{40}$' || { echo "no full ordpool-sdk sha in frontend/package-lock.json: $sha"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Checkout ordpool-sdk (for the cat21-wallet extension + bootstrap)
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/ordpool-sdk
           path: sdk
-          ref: main
+          ref: ${{ steps.sdk-pin.outputs.sha }}
 
       - name: Setup Node (sdk)
         uses: actions/setup-node@v4
@@ -248,6 +267,7 @@ jobs:
             -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
             src/app/app.config.ts
           sed -i \
+            -e "s|mempoolApiUrl: 'https://api\.ordpool\.space'|mempoolApiUrl: ''|" \
             -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
             -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
             -e "s|https://ord\.ordpool\.space|http://localhost:8081|g" \
@@ -330,6 +350,7 @@ jobs:
           ORD_API_URL: http://localhost:8080
           ELECTRS_API_URL: http://localhost:8999
           BACKEND_NETWORK: regtest
+          SYNC_INTERVAL_MS: '2000'
         run: |
           nohup node dist/main.js > indexer-backend.log 2>&1 &
           echo $! > indexer-backend.pid

@@ -15,11 +15,11 @@ import * as fs from 'node:fs';
 
 import {
   onboardCat21Wallet,
-  waitForApprovalPopup,
   seedDirtyCoin,
   fundCommonSats,
   rpc,
   installContextErrorGuard,
+  approveCat21WalletConnectPopup,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -61,7 +61,7 @@ let browserErrorGuard: ReturnType<typeof installContextErrorGuard>;
 
 async function shot(p: Page, name: string): Promise<void> {
   fs.mkdirSync(SHOT_DIR, { recursive: true });
-  await p.screenshot({ path: path.join(SHOT_DIR, `${name}.png`), fullPage: true }).catch(() => undefined);
+  await p.screenshot({ path: path.join(SHOT_DIR, `${name}.png`), fullPage: true });
 }
 
 /** Connect cat21-wallet (idempotent) and return the payment address. */
@@ -69,33 +69,21 @@ async function connectAndReadPayment(page: Page): Promise<string> {
   await page.goto(MINT_URL, { waitUntil: 'domcontentloaded' });
   const connectedBtn = page.getByTestId('wallet-connected-btn');
   const cta = page.getByTestId('mint-cta');
-  await expect(connectedBtn.or(cta)).toBeVisible({ timeout: 30_000 });
-  if (!(await connectedBtn.isVisible().catch(() => false))) {
+  await expect(connectedBtn.or(cta)).toBeVisible();
+  if (!(await connectedBtn.isVisible())) {
     const knownBefore = new Set(context.pages());
     await page.getByTestId('wallet-connect-btn').first().click();
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
-    await expect(picker).toBeVisible({ timeout: 20_000 });
-    await picker.click({ timeout: 20_000 });
-    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-    const approval = await waitForApprovalPopup({
-      context, knownPages: knownBefore, timeoutMs: 20_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByTestId('get-addresses-approve-button').waitFor({ state: 'visible', timeout: 20_000 });
-        return true;
-      },
-    }).catch(() => null);
-    if (approval) {
-      await approval.getByTestId('get-addresses-approve-button').click();
-      await approval.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-    }
-    await expect(connectedBtn).toBeVisible({ timeout: 30_000 });
+    await expect(picker).toBeVisible();
+    await picker.click();
+    await approveCat21WalletConnectPopup(context, knownBefore);
+    await expect(connectedBtn).toBeVisible();
   }
   await connectedBtn.click();
   const payEl = page.getByTestId('wallet-payment-address-full');
-  await expect(payEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
+  await expect(payEl).toHaveText(/^bcrt1q/);
   const payment = (await payEl.textContent())!.trim();
-  await page.getByTestId('wallet-connected-btn').click().catch(() => undefined);
+  await page.getByTestId('wallet-connected-btn').click();
   return payment;
 }
 
@@ -103,20 +91,11 @@ async function connectAndReadPayment(page: Page): Promise<string> {
  *  not on fee change), then re-connect if the reload dropped the session. */
 async function reloadMint(page: Page): Promise<void> {
   await page.goto(MINT_URL, { waitUntil: 'domcontentloaded' });
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reappr = await waitForApprovalPopup({
-    context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reappr) {
-    await reappr.getByTestId('get-addresses-approve-button').click({ timeout: 10_000 }).catch(() => undefined);
-    await reappr.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 }
 
 async function setFee(page: Page, rate: number): Promise<void> {
   const manualInput = page.getByTestId('fees-picker-manual-input');
-  await expect(manualInput).toBeVisible({ timeout: 60_000 });
+  await expect(manualInput).toBeVisible();
   await manualInput.fill(String(rate));
   await manualInput.press('Tab');
 }
@@ -134,11 +113,16 @@ test.beforeAll(async () => {
   });
   browserErrorGuard = installContextErrorGuard(context);
   let [worker] = context.serviceWorkers();
-  if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
+  if (!worker) worker = await context.waitForEvent('serviceworker');
   extensionId = worker.url().split('/')[2];
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
   await primer.close();
+  browserErrorGuard.assertClean();
+});
+
+test.afterEach(() => {
+  browserErrorGuard.assertClean();
 });
 
 test.afterAll(async () => {
@@ -156,9 +140,9 @@ test('capture cat21.space mint funding-state screenshots', async () => {
   await reloadMint(page); // orchestrator re-fetches so the seeded coin is a candidate
   await setFee(page, 5);
   const notice = page.getByTestId('mint-asset-notice');
-  await expect(notice).toBeVisible({ timeout: 120_000 });
+  await expect(notice).toBeVisible();
   // Scroll the CTA into view so the notice AND the enabled button are one frame.
-  await page.getByTestId('mint-btn').scrollIntoViewIfNeeded().catch(() => undefined);
+  await page.getByTestId('mint-btn').scrollIntoViewIfNeeded();
   await shot(page, 'case2-notice');
   console.log('[screenshots] case2-notice captured');
 
@@ -166,10 +150,10 @@ test('capture cat21.space mint funding-state screenshots', async () => {
   // The picker opens by default when the selected coin carries assets; expand it
   // only if its rows are not already visible, so the toggle never closes it.
   const anyRow = page.locator('[data-testid^="utxo-row-"]').first();
-  if (!(await anyRow.isVisible().catch(() => false))) {
-    await page.getByText('Choose a different funding source', { exact: false }).click().catch(() => undefined);
+  if (!(await anyRow.isVisible())) {
+    await page.getByText('Choose a different funding source', { exact: false }).click();
   }
-  await anyRow.scrollIntoViewIfNeeded().catch(() => undefined);
+  await anyRow.scrollIntoViewIfNeeded();
   await shot(page, 'case4-expert-picker');
   console.log('[screenshots] case4-expert-picker captured');
 
@@ -178,8 +162,8 @@ test('capture cat21.space mint funding-state screenshots', async () => {
   await reloadMint(page);
   await setFee(page, 5);
   const found = page.getByTestId('mint-found-funds');
-  await expect(found).toBeVisible({ timeout: 120_000 });
-  await page.getByTestId('mint-btn').scrollIntoViewIfNeeded().catch(() => undefined);
+  await expect(found).toBeVisible();
+  await page.getByTestId('mint-btn').scrollIntoViewIfNeeded();
   await shot(page, 'case1-safe');
   console.log('[screenshots] case1-safe captured');
 
@@ -204,11 +188,10 @@ test('capture cat21.space mint funding-state screenshots', async () => {
   // [data-fee-state="overpay"] row exists only when absorbedSubDustSats > 0. If
   // the coin sizing missed the band, this reds instead of shipping a wrong shot.
   const overpayRow = page.locator('[data-fee-state="overpay"]').first();
-  await expect(overpayRow).toBeVisible({ timeout: 120_000 });
-  await overpayRow.scrollIntoViewIfNeeded().catch(() => undefined);
+  await expect(overpayRow).toBeVisible();
+  await overpayRow.scrollIntoViewIfNeeded();
   await shot(page, 'case5-overpay');
   console.log('[screenshots] case5-overpay captured');
 
-  browserErrorGuard.assertClean();
   await page.close();
 });

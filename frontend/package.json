@@ -31,9 +31,9 @@
     "@noble/curves": "^1.6.0",
     "@popperjs/core": "^2.11.8",
     "@scure/base": "1.2.6",
-    "@scure/btc-signer": "1.6.x",
+    "@scure/btc-signer": "1.6.0",
     "bootstrap": "^5.3.1",
-    "ordpool-sdk": "github:ordpool-space/ordpool-sdk#e425e37ec5b8d5aa702c75168131f2dc8340def9",
+    "ordpool-sdk": "github:ordpool-space/ordpool-sdk#21924108d30a946577373c9076a27c4d9034601b",
     "rxjs": "~7.8.0",
     "sats-connect": "^4.0.0",
     "tslib": "^2.3.0"

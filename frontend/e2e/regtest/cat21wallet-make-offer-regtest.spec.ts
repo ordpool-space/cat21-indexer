@@ -16,7 +16,6 @@ import * as fs from 'node:fs';
 
 import {
   onboardCat21Wallet,
-  waitForApprovalPopup,
   seedListedCat,
   seedDirtyCoin,
   DirtyCoinAsset,
@@ -25,7 +24,8 @@ import {
   waitForTxConfirmed,
   rpc,
   installContextErrorGuard,
-  clickApprovalButton,
+  approveCat21WalletConnectPopup,
+  approveCat21WalletSignPopup,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -62,8 +62,8 @@ import {
  * The vout[1] address assertion goes RED while the cat-moved and price
  * assertions stay green. Proof the seller-payment line is load-bearing.
  *
- * CI-only (real cat21-wallet binary + full regtest stack + synced NestJS
- * backend); the regtest playwright config refuses to run locally.
+ * Needs: real cat21-wallet binary + full regtest stack + synced NestJS
+ * backend.
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
@@ -89,7 +89,7 @@ async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
     path: path.resolve(RESULTS_DIR, `make-offer-${name}.png`),
     fullPage: true,
-  }).catch(() => undefined);
+  });
 }
 
 /**
@@ -132,70 +132,41 @@ async function connectAndReadAddresses(
   // Idempotent: a later cell (new page, same context) may already be connected
   // — wait for EITHER the connected header or the connect CTA, then only run
   // the connect flow when not yet connected.
-  await expect(connectedBtn.or(cta)).toBeVisible({ timeout: 30_000 });
+  await expect(connectedBtn.or(cta)).toBeVisible();
 
-  if (!(await connectedBtn.isVisible().catch(() => false))) {
+  if (!(await connectedBtn.isVisible())) {
     const knownPagesBeforeConnect = new Set(context.pages());
     await page.getByTestId('wallet-connect-btn').first().click();
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
-    await expect(picker).toBeVisible({ timeout: 20_000 });
-    await picker.click({ timeout: 20_000 });
+    await expect(picker).toBeVisible();
+    await picker.click();
 
-    // The approval popup is OPTIONAL: on the first connect it fires, but once
-    // the origin is approved (a prior cell in this context) getAddresses
-    // returns without prompting. Don't hard-require it.
-    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-    const approvalConnect = await waitForApprovalPopup({
-      context,
-      knownPages: knownPagesBeforeConnect,
-      timeoutMs: 20_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByTestId('get-addresses-approve-button')
-          .waitFor({ state: 'visible', timeout: 20_000 });
-        return true;
-      },
-    }).catch(() => null);
-    if (approvalConnect) {
-      await approvalConnect.getByTestId('get-addresses-approve-button').click();
-      await approvalConnect.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-    }
-    await expect(connectedBtn).toBeVisible({ timeout: 30_000 });
+    await approveCat21WalletConnectPopup(context, knownPagesBeforeConnect);
+    await expect(connectedBtn).toBeVisible();
   }
 
   await connectedBtn.click();
   const payEl = page.getByTestId('wallet-payment-address-full');
-  await expect(payEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
+  await expect(payEl).toHaveText(/^bcrt1q/);
   const paymentAddress = (await payEl.textContent())!.trim();
   const ordEl = page.getByTestId('wallet-ordinals-address-full');
-  await expect(ordEl).toHaveText(/^bcrt1p/, { timeout: 15_000 });
+  await expect(ordEl).toHaveText(/^bcrt1p/);
   const ordinalsAddress = (await ordEl.textContent())!.trim();
   // Close the popover so it doesn't overlay later interactions.
-  await page.getByTestId('wallet-connected-btn').click().catch(() => undefined);
+  await page.getByTestId('wallet-connected-btn').click();
   return { paymentAddress, ordinalsAddress };
 }
 
 /**
- * Poll the NestJS backend until it has synced the freshly-seeded cat. The
- * backend polls cat21-ord every 60s, so a fresh seed can take up to a sync
- * interval to appear. Fail with the cat number and elapsed time, never a bare
- * timeout, so a slow-runner miss reads in the log instead of the trace.
+ * Wait until the NestJS backend has synced the freshly-seeded cat. The lane
+ * runs the backend with a short SYNC_INTERVAL_MS, so the cat appears within
+ * the per-wait bound of a sync tick.
  */
-async function waitForBackendCat(catNumber: number, timeoutMs = 120_000): Promise<void> {
-  const start = Date.now();
-  for (;;) {
-    const res = await fetch(`${BACKEND_URL}/api/cat/${catNumber}`).catch(() => null);
-    if (res && res.ok) return;
-    const elapsed = Math.round((Date.now() - start) / 1000);
-    if (Date.now() - start > timeoutMs) {
-      throw new Error(
-        `backend never synced cat ${catNumber}: /api/cat/${catNumber} not 200 after ${elapsed}s ` +
-        `(last status ${res ? res.status : 'no-response'}). Backend sync interval is 60s; a slow ` +
-        `runner should still catch it — raise the timeout if this is a false miss.`,
-      );
-    }
-    await new Promise((r) => setTimeout(r, 3_000));
-  }
+async function waitForBackendCat(catNumber: number): Promise<void> {
+  await expect.poll(
+    async () => (await fetch(`${BACKEND_URL}/api/cat/${catNumber}`)).status,
+    { message: `backend never served /api/cat/${catNumber}` },
+  ).toBe(200);
 }
 
 test.beforeAll(async () => {
@@ -223,13 +194,18 @@ test.beforeAll(async () => {
 
   let [worker] = context.serviceWorkers();
   if (!worker) {
-    worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
+    worker = await context.waitForEvent('serviceworker');
   }
   extensionId = worker.url().split('/')[2];
 
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
   await primer.close();
+  browserErrorGuard.assertClean();
+});
+
+test.afterEach(() => {
+  browserErrorGuard.assertClean();
 });
 
 test.afterAll(async () => {
@@ -274,26 +250,13 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
 
   // ─── 5. Drive the make-offer PAGE: lookup N, type P, type price ─
   await page.goto(`${FRONTEND_URL}${MAKE_OFFER_PATH}`, { waitUntil: 'domcontentloaded' });
-  // Re-approve get-addresses if the wallet re-prompts on this page load.
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: new Set(context.pages()),
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   const catInput = page.getByTestId('make-offer-cat-number-input');
-  await expect(catInput).toBeVisible({ timeout: 60_000 });
+  await expect(catInput).toBeVisible();
   await catInput.fill(String(listed.catNumber));
   await page.getByTestId('make-offer-lookup-cta').click();
   // Lookup resolves the target via backend -> ord -> electrs (all real).
-  await expect(page.getByTestId('make-offer-resolved')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('make-offer-resolved')).toBeVisible();
 
   await page.getByTestId('make-offer-seller-payment-input').fill(P);
   await page.getByTestId('make-offer-price-input').fill(String(priceSats));
@@ -303,41 +266,30 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   // because P !== O, the override warning MUST surface. This is not the
   // proof (the on-chain assertion is), but it pins that the page treats the
   // owner as owner and the typed field as the payment target.
-  await expect(page.getByTestId('make-offer-address-override-warning')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('make-offer-address-override-warning')).toBeVisible();
 
   // Summary + CTA enable once the buyer-funding simulation resolves.
-  await expect(page.getByTestId('make-offer-summary-section')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('make-offer-summary-section')).toBeVisible();
   const buildBtn = page.getByTestId('make-offer-cta');
-  await expect(buildBtn).toBeEnabled({ timeout: 60_000 });
+  await expect(buildBtn).toBeEnabled();
 
   // ─── 6. Build the offer → cat21-wallet buyer-signs in a popup ───
   const knownBeforeSign = new Set(context.pages());
   await buildBtn.click();
-  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-  const signPopup = await waitForApprovalPopup({
+  await approveCat21WalletSignPopup({
     context,
     knownPages: knownBeforeSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    screenshot: async (p) => { await shot(p, `${valueSats}-02-sign-popup`); await assertBuyerNeverSignsSellerInput0(p); },
   });
-  await shot(signPopup, `${valueSats}-02-sign-popup`);
-  await assertBuyerNeverSignsSellerInput0(signPopup);
-  await clickApprovalButton(signPopup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), signPopup, 30_000);
-  await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── 7. Read the PAGE-BUILT, buyer-signed PSBT ──────────────────
-  await expect(page.getByTestId('make-offer-success')).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId('make-offer-success')).toBeVisible();
   // The raw base64 lives in a collapsed <details> ("Prefer the raw offer
   // text?") — the primary output is the always-visible accept-link. Expand it
   // (the real user action) before reading the textarea.
   await page.getByText('Prefer the raw offer text?', { exact: false }).click();
   const artifact = page.getByTestId('make-offer-artifact-textarea');
-  await expect(artifact).toBeVisible({ timeout: 30_000 });
+  await expect(artifact).toBeVisible();
   const pageBuiltPsbt = (await artifact.inputValue()).trim();
   expect(pageBuiltPsbt.length).toBeGreaterThan(0);
   await shot(page, `${valueSats}-03-offer-built`);
@@ -358,7 +310,7 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
 
   // ─── 9. Confirm + on-chain verification ─────────────────────────
   mineBlocks(1);
-  await waitForTxConfirmed(settleTxid, 30_000);
+  await waitForTxConfirmed(settleTxid);
   const settleRaw = JSON.parse(
     rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', settleTxid, '2'),
   ) as { vout: Array<{ value: number; scriptPubKey: { address?: string } }> };
@@ -375,7 +327,6 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   expect(paidToO).toHaveLength(0);
   console.log(`[${tag}] cat -> buyer ${buyerOrdinals}; seller paid ${priceSats + valueSats} @ P=${P}; O=${O} paid nothing`);
 
-  browserErrorGuard.assertClean();
   await page.close();
 }
 
@@ -434,49 +385,32 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
 
   // ─── 4. Drive make-offer to a built, buyer-signed offer ─────────
   await page.goto(`${FRONTEND_URL}${MAKE_OFFER_PATH}`, { waitUntil: 'domcontentloaded' });
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button').click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   const catInput = page.getByTestId('make-offer-cat-number-input');
-  await expect(catInput).toBeVisible({ timeout: 60_000 });
+  await expect(catInput).toBeVisible();
   await catInput.fill(String(listed.catNumber));
   await page.getByTestId('make-offer-lookup-cta').click();
-  await expect(page.getByTestId('make-offer-resolved')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('make-offer-resolved')).toBeVisible();
   await page.getByTestId('make-offer-seller-payment-input').fill(P);
   await page.getByTestId('make-offer-price-input').fill(String(PRICE_SATS));
 
   // The guard steered funding to the clean coin, so the simulation resolves and
   // the CTA enables. (Under the mutation the dirty coin is picked instead, but
   // the build still succeeds — the proof is on-chain, below.)
-  await expect(page.getByTestId('make-offer-summary-section')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('make-offer-summary-section')).toBeVisible();
   const buildBtn = page.getByTestId('make-offer-cta');
-  await expect(buildBtn).toBeEnabled({ timeout: 60_000 });
+  await expect(buildBtn).toBeEnabled();
 
   const knownBeforeSign = new Set(context.pages());
   await buildBtn.click();
-  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-  const signPopup = await waitForApprovalPopup({
-    context, knownPages: knownBeforeSign, timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+  await approveCat21WalletSignPopup({
+    context,
+    knownPages: knownBeforeSign,
+    screenshot: async (p) => { await assertBuyerNeverSignsSellerInput0(p); },
   });
-  await assertBuyerNeverSignsSellerInput0(signPopup);
-  await clickApprovalButton(signPopup.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), signPopup, 30_000);
-  await signPopup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── 5. Read the page-built PSBT, seller settles on-chain ───────
-  await expect(page.getByTestId('make-offer-success')).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId('make-offer-success')).toBeVisible();
   await page.getByText('Prefer the raw offer text?', { exact: false }).click();
   const pageBuiltPsbt = (await page.getByTestId('make-offer-artifact-textarea').inputValue()).trim();
   const processed = JSON.parse(
@@ -487,7 +421,7 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
     ?? (JSON.parse(rpc('finalizepsbt', processed.psbt)) as { hex: string }).hex;
   const settleTxid = rpc('sendrawtransaction', settleHex).trim();
   mineBlocks(1);
-  await waitForTxConfirmed(settleTxid, 30_000);
+  await waitForTxConfirmed(settleTxid);
 
   // ─── 6. THE PROOF: the dirty coin was NOT spent ─────────────────
   // gettxout returns the txout for an unspent outpoint, empty for a spent one.
@@ -503,7 +437,6 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   expect(spentDirty, `settle tx spent the dirty ${asset} coin ${dirty.outpoint}`).toBe(false);
   console.log(`[${tag}] SURVIVED — guard steered funding to the clean coin`);
 
-  browserErrorGuard.assertClean();
   await page.close();
 }
 

@@ -16,11 +16,11 @@ import * as fs from 'node:fs';
 
 import {
   onboardCat21Wallet,
-  waitForApprovalPopup,
   seedListedCat,
   seedDirtyCoin,
   rpc,
   installContextErrorGuard,
+  approveCat21WalletConnectPopup,
 } from 'ordpool-sdk/e2e';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
@@ -43,8 +43,7 @@ import { measuredTextContrast } from './lib/measured-text-contrast';
  * Neither cell here completes a tx (both only VERIFY the notice), so on this
  * lane's fresh stack the wallet holds only dirty coins and both premises hold.
  *
- * CI-only (real cat21-wallet binary + full regtest stack); the regtest playwright
- * config refuses to run locally.
+ * Needs: real cat21-wallet binary + full regtest stack.
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
@@ -65,7 +64,7 @@ async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
     path: path.resolve(RESULTS_DIR, `transfer-offer-assetnotice-${name}.png`),
     fullPage: true,
-  }).catch(() => undefined);
+  });
 }
 
 /**
@@ -77,53 +76,39 @@ async function connectAndReadAddresses(page: Page): Promise<{ paymentAddress: st
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
   const connectedBtn = page.getByTestId('wallet-connected-btn');
   const cta = page.getByTestId('mint-cta');
-  await expect(connectedBtn.or(cta)).toBeVisible({ timeout: 30_000 });
+  await expect(connectedBtn.or(cta)).toBeVisible();
 
-  if (!(await connectedBtn.isVisible().catch(() => false))) {
+  if (!(await connectedBtn.isVisible())) {
     const knownBefore = new Set(context.pages());
     await page.getByTestId('wallet-connect-btn').first().click();
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
-    await expect(picker).toBeVisible({ timeout: 20_000 });
-    await picker.click({ timeout: 20_000 });
-    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-    const approval = await waitForApprovalPopup({
-      context, knownPages: knownBefore, timeoutMs: 20_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByTestId('get-addresses-approve-button').waitFor({ state: 'visible', timeout: 20_000 });
-        return true;
-      },
-    }).catch(() => null);
-    if (approval) {
-      await approval.getByTestId('get-addresses-approve-button').click();
-      await approval.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-    }
-    await expect(connectedBtn).toBeVisible({ timeout: 30_000 });
+    await expect(picker).toBeVisible();
+    await picker.click();
+    await approveCat21WalletConnectPopup(context, knownBefore);
+    await expect(connectedBtn).toBeVisible();
   }
 
   await connectedBtn.click();
   const payEl = page.getByTestId('wallet-payment-address-full');
-  await expect(payEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
+  await expect(payEl).toHaveText(/^bcrt1q/);
   const paymentAddress = (await payEl.textContent())!.trim();
   const ordEl = page.getByTestId('wallet-ordinals-address-full');
-  await expect(ordEl).toHaveText(/^bcrt1p/, { timeout: 15_000 });
+  await expect(ordEl).toHaveText(/^bcrt1p/);
   const ordinalsAddress = (await ordEl.textContent())!.trim();
-  await page.getByTestId('wallet-connected-btn').click().catch(() => undefined);
+  await page.getByTestId('wallet-connected-btn').click();
   return { paymentAddress, ordinalsAddress };
 }
 
-/** Poll the NestJS backend until it has indexed the cat the make-offer lookup needs. */
-async function waitForBackendCat(catNumber: number, timeoutMs = 120_000): Promise<void> {
-  const start = Date.now();
-  for (;;) {
-    const res = await fetch(`${BACKEND_URL}/api/cat/${catNumber}`).catch(() => null);
-    if (res && res.ok) return;
-    if (Date.now() - start > timeoutMs) {
-      const elapsed = Math.round((Date.now() - start) / 1000);
-      throw new Error(`backend never synced cat ${catNumber} after ${elapsed}s (last ${res ? res.status : 'no-response'})`);
-    }
-    await new Promise((r) => setTimeout(r, 3_000));
-  }
+/**
+ * Wait until the NestJS backend has synced the freshly-seeded cat. The lane
+ * runs the backend with a short SYNC_INTERVAL_MS, so the cat appears within
+ * the per-wait bound of a sync tick.
+ */
+async function waitForBackendCat(catNumber: number): Promise<void> {
+  await expect.poll(
+    async () => (await fetch(`${BACKEND_URL}/api/cat/${catNumber}`)).status,
+    { message: `backend never served /api/cat/${catNumber}` },
+  ).toBe(200);
 }
 
 test.beforeAll(async () => {
@@ -151,13 +136,18 @@ test.beforeAll(async () => {
 
   let [worker] = context.serviceWorkers();
   if (!worker) {
-    worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
+    worker = await context.waitForEvent('serviceworker');
   }
   extensionId = worker.url().split('/')[2];
 
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
   await primer.close();
+  browserErrorGuard.assertClean();
+});
+
+test.afterEach(() => {
+  browserErrorGuard.assertClean();
 });
 
 test.afterAll(async () => {
@@ -199,18 +189,9 @@ async function runTransferNoticeCell(): Promise<void> {
   transferUrl.searchParams.set('catTxid', listed.txid);
   transferUrl.searchParams.set('catVout', String(listed.vout));
   await page.goto(transferUrl.toString(), { waitUntil: 'domcontentloaded' });
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button').click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   const recipientInput = page.getByTestId('transfer-recipient-input');
-  await expect(recipientInput).toBeVisible({ timeout: 60_000 });
+  await expect(recipientInput).toBeVisible();
   await recipientInput.fill(recipient);
   const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('5');
@@ -225,13 +206,13 @@ async function runTransferNoticeCell(): Promise<void> {
   await expect(
     notice,
     `no transfer-asset-notice. Suspect: (1) a clean covering coin on the payment address (§7.8 accumulation — should be impossible on this dedicated fresh-stack lane; if seen, a cell before this one completed a tx); (2) topology mis-derived — resolveFundingTopology('derive', wallet) needs both paymentAddress + ordinalsAddress; (3) the seeded coins did not classify dirty`,
-  ).toBeVisible({ timeout: 90_000 });
+  ).toBeVisible();
   await expect(notice).toContainText('Inscription');
   const transferBtn = page.getByTestId('transfer-cta');
   await expect(
     transferBtn,
     'transfer-cta must be ENABLED on asset-notice (notice-and-proceed); a disabled CTA here is the old dead-end',
-  ).toBeEnabled({ timeout: 30_000 });
+  ).toBeEnabled();
 
   // The three fee states from the spread, asserted by STATE not by number.
   const states = await page.locator('[data-testid^="utxo-row-"]')
@@ -269,7 +250,6 @@ async function runTransferNoticeCell(): Promise<void> {
 
   await shot(page, 'transfer-notice-three-states');
 
-  browserErrorGuard.assertClean();
   await page.close();
 }
 
@@ -297,21 +277,12 @@ async function runMakeOfferNoticeCell(): Promise<void> {
   await waitForBackendCat(listed.catNumber);
 
   await page.goto(`${FRONTEND_URL}${MAKE_OFFER_PATH}`, { waitUntil: 'domcontentloaded' });
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button').click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   const catInput = page.getByTestId('make-offer-cat-number-input');
-  await expect(catInput).toBeVisible({ timeout: 60_000 });
+  await expect(catInput).toBeVisible();
   await catInput.fill(String(listed.catNumber));
   await page.getByTestId('make-offer-lookup-cta').click();
-  await expect(page.getByTestId('make-offer-resolved')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('make-offer-resolved')).toBeVisible();
   await page.getByTestId('make-offer-seller-payment-input').fill(P);
   await page.getByTestId('make-offer-price-input').fill(String(PRICE_SATS));
 
@@ -322,16 +293,15 @@ async function runMakeOfferNoticeCell(): Promise<void> {
   await expect(
     notice,
     `no make-offer-asset-notice. Suspect: (1) a clean covering coin on the buyer payment address (§7.8 accumulation — impossible on this fresh-stack lane unless a prior cell completed a tx); (2) topology mis-derived; (3) the coin did not classify dirty`,
-  ).toBeVisible({ timeout: 90_000 });
+  ).toBeVisible();
   await expect(notice).toContainText('Inscription');
   const buildBtn = page.getByTestId('make-offer-cta');
   await expect(
     buildBtn,
     'make-offer-cta must be ENABLED on asset-notice (notice-and-proceed); a disabled CTA here is the old dead-end',
-  ).toBeEnabled({ timeout: 30_000 });
+  ).toBeEnabled();
   await shot(page, 'make-offer-notice');
 
-  browserErrorGuard.assertClean();
   await page.close();
 }
 

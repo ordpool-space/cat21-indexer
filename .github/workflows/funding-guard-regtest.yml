@@ -23,8 +23,22 @@ on:
       - 'frontend/e2e/regtest/funding-guard-inscription-regtest.spec.ts'
       - 'frontend/e2e/regtest/lib/**'
       - 'frontend/playwright.regtest.config.ts'
-      - 'frontend/package.json'
-      - 'frontend/package-lock.json'
+      - 'frontend/*.json'
+      - 'frontend/src/**'
+      - 'backend/*.json'
+      - 'backend/src/**'
+      - 'backend/migrations/**'
+      - '.github/workflows/funding-guard-regtest.yml'
+  pull_request:
+    paths:
+      - 'frontend/e2e/regtest/funding-guard-inscription-regtest.spec.ts'
+      - 'frontend/e2e/regtest/lib/**'
+      - 'frontend/playwright.regtest.config.ts'
+      - 'frontend/*.json'
+      - 'frontend/src/**'
+      - 'backend/*.json'
+      - 'backend/src/**'
+      - 'backend/migrations/**'
       - '.github/workflows/funding-guard-regtest.yml'
 
 permissions:
@@ -124,12 +138,21 @@ jobs:
           done
 
       # ── SDK side — Xverse extension + seeded vault ─────────────────
+      # The SDK harness (bootstrap, extension staging, seed) comes from the
+      # same ordpool-sdk sha the frontend's package-lock.json pins.
+      - name: Read the pinned ordpool-sdk sha
+        id: sdk-pin
+        run: |
+          sha=$(jq -r '.packages["node_modules/ordpool-sdk"].resolved' frontend/package-lock.json | sed 's/.*#//')
+          echo "$sha" | grep -Eq '^[0-9a-f]{40}$' || { echo "no full ordpool-sdk sha in frontend/package-lock.json: $sha"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Checkout ordpool-sdk (for Xverse extension + seeded vault)
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/ordpool-sdk
           path: sdk
-          ref: main
+          ref: ${{ steps.sdk-pin.outputs.sha }}
 
       - name: Setup Node (sdk)
         uses: actions/setup-node@v4
@@ -204,6 +227,15 @@ jobs:
             -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
             -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
             src/app/app.config.ts
+          # environment.prod.ts is what the production build bundles: the cat
+          # API, the ord explorers and the price base. No production host may
+          # stay in a regtest bundle; the empty price base skips the BTC/USD read.
+          sed -i \
+            -e "s|mempoolApiUrl: 'https://api\.ordpool\.space'|mempoolApiUrl: ''|" \
+            -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
+            -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
+            -e "s|https://ord\.ordpool\.space|http://localhost:8081|g" \
+            src/environments/environment.prod.ts
           echo "--- patched cat21Config (ordApiUrl -> :8081, cat21OrdApiUrl -> :8080) ---"
           grep -nE "ordApiUrl|cat21OrdApiUrl|Network\." src/app/app.config.ts | head -6
 
@@ -264,6 +296,39 @@ jobs:
             sleep 1
           done
 
+      # The cat21-indexer backend on :9998, where the built frontend's api URL
+      # points. Every page that reads cat data (the home page, the header's
+      # status) talks to it; without it those reads fail in the browser.
+      - name: Install indexer backend deps + build
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Bring up cat21-indexer backend on :9998 (regtest)
+        working-directory: backend
+        env:
+          PORT: '9998'
+          HOST: 127.0.0.1
+          NODE_ENV: development
+          DATABASE_URL: mysql://cat21:cat21@127.0.0.1:3306/cat21
+          ORD_API_URL: http://localhost:8080
+          ELECTRS_API_URL: http://localhost:8999
+          BACKEND_NETWORK: regtest
+          SYNC_INTERVAL_MS: '2000'
+        run: |
+          nohup node dist/main.js > indexer-backend.log 2>&1 &
+          echo $! > indexer-backend.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:9998/api/health >/dev/null 2>&1; then
+              echo "indexer backend up"; break
+            fi
+            if [ "$i" = "60" ]; then
+              echo "indexer backend never came up"; tail -100 indexer-backend.log || true; exit 1
+            fi
+            sleep 1
+          done
+
       - name: Install Playwright in the frontend tree
         working-directory: frontend
         run: npx playwright install --with-deps chromium
@@ -293,6 +358,7 @@ jobs:
             build.log
             serve.log
             fees-stub.log
+            backend/indexer-backend.log
           retention-days: 14
           if-no-files-found: warn
 
@@ -316,6 +382,9 @@ jobs:
           docker compose \
             -f frontend/node_modules/ordpool-sdk/e2e/docker-compose.consumer-environment.yml \
             down -v || true
+          if [ -f backend/indexer-backend.pid ]; then
+            kill "$(cat backend/indexer-backend.pid)" 2>/dev/null || true
+          fi
           if [ -f fees-stub.pid ]; then
             kill "$(cat fees-stub.pid)" 2>/dev/null || true
           fi

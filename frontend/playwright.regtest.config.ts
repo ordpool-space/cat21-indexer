@@ -1,51 +1,56 @@
 import { defineConfig } from '@playwright/test';
 import * as path from 'node:path';
+import { E2E_TIMEOUT_ENV } from 'ordpool-sdk/e2e';
 
 /**
- * Playwright config for the cat21.space regtest mint round-trip suite.
+ * The per-wait bound (TESTING.md): every assertion, `expect.poll`, action,
+ * navigation and page event, and, through ORDPOOL_E2E_TIMEOUT_MS, every SDK
+ * polling helper (electrs, ord, bitcoind, a wallet popup search). A state that
+ * needs longer to arrive is a defect in the app or the harness, fixed there,
+ * never by raising this bound.
+ */
+const WAIT_TIMEOUT_MS = 30_000;
+process.env[E2E_TIMEOUT_ENV] = String(WAIT_TIMEOUT_MS);
+
+/**
+ * The per-test bound. A test is a sequence of waits, not one wait.
+ * Twice the longest green test: 181.1 s, "make-offer dirty-coin guard: a RUNE
+ * funding coin is not spent" in cat21-indexer run 38055629649 (180.5 s in run
+ * 38043788789).
+ */
+const TEST_TIMEOUT_MS = 365_000;
+
+/**
+ * Playwright config for the cat21.space regtest suite.
  *
- * CI-only. The workflow brings up the consumer-environment stack
- * (bitcoind + electrs + mariadb) plus ordpool-backend on :8999,
- * serves cat21-indexer/frontend, downloads + unpacks the Xverse
- * `.crx` via the SDK's playwright-bootstrap.sh, and runs the SDK's
- * globalSetup to seed an Xverse vault — then invokes this config.
+ * The workflow brings up the consumer-environment stack (bitcoind, electrs,
+ * mariadb, and per lane cat21-ord / ord-stock), the cat21-indexer backend,
+ * the SDK's fees-electrs-stub, serves the built frontend, and stages the
+ * wallet extension, then invokes this config.
  *
- * Headless mode is off because wallet extensions need a real
- * renderer; the workflow runs the playwright invocation under
- * xvfb to provide a display.
+ * Headless mode is off because wallet extensions need a real renderer; the
+ * workflow runs the playwright invocation under xvfb to provide a display.
  */
 export default defineConfig({
   testDir: path.resolve(__dirname, 'e2e/regtest'),
   testMatch: '**/*.spec.ts',
   fullyParallel: false,
   workers: 1,
-  // Zero retries: the specs share state via module-scope variables
-  // (sharedPaymentAddress, sharedMintTxid) set by the first test.
-  // Playwright's retry destroys the worker and re-spawns it, losing
-  // that module scope — subsequent tests then all fail with
-  // "first test must have set sharedPaymentAddress". One clean pass
-  // is the right primitive; transient browser flakes get investigated
-  // and fixed rather than papered over with a retry.
+  // Zero retries: the specs share on-chain state and module-scope variables
+  // set by earlier tests, and a cell that needs a retry is an open question
+  // the lane should report on its first run.
   retries: 0,
-  // The single budget for EVERY regtest-touching test: chain mine + electrs
-  // sync + wallet approval popup + mint/broadcast is ~3-6 min end-to-end, so
-  // 7 min gives ~1 min of headroom for CI flakiness. This ceiling applies to
-  // every test in the project; Playwright's `TestDetails` (the 2nd arg to
-  // `test(title, { ... }, body)`) accepts only `tag` and `annotation`, so a
-  // `{ timeout: N }` written there is silently dropped and never tightens
-  // anything. A group that genuinely needs a different ceiling sets it with
-  // `test.describe.configure({ timeout: N })`, which Playwright does honour.
-  timeout: 420_000,
+  timeout: TEST_TIMEOUT_MS,
   expect: {
-    timeout: 30_000,
+    timeout: WAIT_TIMEOUT_MS,
   },
   use: {
     headless: false,
     screenshot: 'on',
     video: 'retain-on-failure',
     trace: 'retain-on-failure',
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    actionTimeout: WAIT_TIMEOUT_MS,
+    navigationTimeout: WAIT_TIMEOUT_MS,
   },
   reporter: [
     [process.env.CI ? 'github' : 'list'],

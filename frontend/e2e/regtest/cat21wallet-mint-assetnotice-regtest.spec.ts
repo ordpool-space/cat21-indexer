@@ -15,11 +15,11 @@ import * as fs from 'node:fs';
 
 import {
   onboardCat21Wallet,
-  waitForApprovalPopup,
   seedDirtyCoin,
   DirtyCoinAsset,
   rpc,
   installContextErrorGuard,
+  approveCat21WalletConnectPopup,
 } from 'ordpool-sdk/e2e';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
@@ -58,8 +58,7 @@ import { measuredTextContrast } from './lib/measured-text-contrast';
  * assertions go RED in all four cells. That red is the proof the notice path is
  * load-bearing on the topology derivation, not decoration.
  *
- * CI-only (real cat21-wallet binary + full regtest stack); the regtest
- * playwright config refuses to run locally.
+ * Needs: real cat21-wallet binary + full regtest stack.
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
@@ -77,7 +76,7 @@ async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
     path: path.resolve(RESULTS_DIR, `mint-assetnotice-${name}.png`),
     fullPage: true,
-  }).catch(() => undefined);
+  });
 }
 
 /** Connect cat21-wallet via the mint page; return the payment address. */
@@ -85,35 +84,23 @@ async function connectAndReadPayment(page: Page): Promise<string> {
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
   const connectedBtn = page.getByTestId('wallet-connected-btn');
   const cta = page.getByTestId('mint-cta');
-  await expect(connectedBtn.or(cta)).toBeVisible({ timeout: 30_000 });
+  await expect(connectedBtn.or(cta)).toBeVisible();
 
-  if (!(await connectedBtn.isVisible().catch(() => false))) {
+  if (!(await connectedBtn.isVisible())) {
     const knownBefore = new Set(context.pages());
     await page.getByTestId('wallet-connect-btn').first().click();
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
-    await expect(picker).toBeVisible({ timeout: 20_000 });
-    await picker.click({ timeout: 20_000 });
-    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-    const approval = await waitForApprovalPopup({
-      context, knownPages: knownBefore, timeoutMs: 20_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByTestId('get-addresses-approve-button').waitFor({ state: 'visible', timeout: 20_000 });
-        return true;
-      },
-    }).catch(() => null);
-    if (approval) {
-      await approval.getByTestId('get-addresses-approve-button').click();
-      await approval.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-    }
-    await expect(connectedBtn).toBeVisible({ timeout: 30_000 });
+    await expect(picker).toBeVisible();
+    await picker.click();
+    await approveCat21WalletConnectPopup(context, knownBefore);
+    await expect(connectedBtn).toBeVisible();
   }
 
   await connectedBtn.click();
   const payEl = page.getByTestId('wallet-payment-address-full');
-  await expect(payEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
+  await expect(payEl).toHaveText(/^bcrt1q/);
   const paymentAddress = (await payEl.textContent())!.trim();
-  await page.getByTestId('wallet-connected-btn').click().catch(() => undefined);
+  await page.getByTestId('wallet-connected-btn').click();
   return paymentAddress;
 }
 
@@ -142,13 +129,18 @@ test.beforeAll(async () => {
 
   let [worker] = context.serviceWorkers();
   if (!worker) {
-    worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
+    worker = await context.waitForEvent('serviceworker');
   }
   extensionId = worker.url().split('/')[2];
 
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
   await primer.close();
+  browserErrorGuard.assertClean();
+});
+
+test.afterEach(() => {
+  browserErrorGuard.assertClean();
 });
 
 test.afterAll(async () => {
@@ -181,52 +173,21 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   // assertion deterministic.
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
 
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button').click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
-
   const manualInput = page.getByTestId('fees-picker-manual-input');
-  await expect(manualInput).toBeVisible({ timeout: 60_000 });
+  await expect(manualInput).toBeVisible();
   await manualInput.fill(String(RATE));
   await manualInput.press('Tab');
 
-  // Wait until the recommendation actually reflects THIS cell's freshly-seeded
-  // coin, not a prior cell's already-scanned one. The four cells share one
-  // wallet, so a larger earlier coin can be the recommendation until the new
-  // (smaller) coin finishes scanning in the orchestrator. Nudge the fee each
-  // iteration to force a fresh recommendation; the decreasing per-cell sizes make
-  // this cell's coin the best-fit once it is a scanned candidate. Waiting on the
-  // recommended OUTPOINT (not a timeout) is what makes the naming assertion below
-  // deterministic — the seed's assetId is only on the seed's own coin.
-  const debug = page.getByTestId('mint-debug-funding');
-  await debug.waitFor({ state: 'attached', timeout: 30_000 });
-  let recOutpoint = '';
-  for (let i = 0; i < 60; i++) {
-    recOutpoint = (await debug.getAttribute('data-recommended-outpoint').catch(() => '')) ?? '';
-    if (recOutpoint === dirty.outpoint) break;
-    await manualInput.fill(String(RATE + (i % 2))); // nudge to recompute
-    await manualInput.press('Tab');
-    await debug.evaluate(() => new Promise((r) => setTimeout(r, 1000)));
-  }
-  const dbg = await debug.evaluate((el) => ({
-    status: el.getAttribute('data-status'),
-    hasSelected: el.getAttribute('data-has-selected'),
-    recommendedOutpoint: el.getAttribute('data-recommended-outpoint'),
-    payEqOrd: el.getAttribute('data-pay-eq-ord'),
-  })).catch(() => null);
-  console.log(`[${tag}] debug-funding: ${JSON.stringify(dbg)} (want recommended=${dirty.outpoint})`);
-  expect(
-    recOutpoint,
+  // Wait until the recommendation reflects THIS cell's freshly-seeded coin,
+  // not a prior cell's already-scanned one. The four cells share one wallet, so
+  // a larger earlier coin is the recommendation until the new (smaller) coin's
+  // scan settles; the decreasing per-cell sizes then make this cell's coin the
+  // best fit. Waiting on the recommended OUTPOINT is what makes the naming
+  // assertion below deterministic: the seed's assetId is only on its own coin.
+  await expect(
+    page.getByTestId('mint-debug-funding'),
     `the recommendation never settled on THIS cell's seeded ${asset} coin ${dirty.outpoint}`,
-  ).toBe(dirty.outpoint);
-  await manualInput.fill(String(RATE)); // settle back to the clean rate
-  await manualInput.press('Tab');
+  ).toHaveAttribute('data-recommended-outpoint', dirty.outpoint);
 
   // ─── THE LOAD-BEARING ASSERTIONS ─────────────────────────────────
   // The notice renders (separate-address wallet, dirty-only pool -> asset-notice).
@@ -234,7 +195,7 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   await expect(
     notice,
     `asset-notice failed: no mint-asset-notice for the ${asset} case (topology mis-derived, or the pool did not classify dirty)`,
-  ).toBeVisible({ timeout: 90_000 });
+  ).toBeVisible();
 
   // It NAMES the specific asset the FIXTURE seeded. The recommended coin IS the
   // seed (asserted above), so its assets are the seed's. dirty.assetId is the
@@ -243,14 +204,14 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   await expect(
     notice,
     `asset-notice for ${asset} did not name the seeded asset ${dirty.assetId}`,
-  ).toContainText(dirty.assetId, { timeout: 15_000 });
+  ).toContainText(dirty.assetId);
 
   // Proceed is allowed: the CTA is ENABLED (this is the separate-address branch).
   const mintBtn = page.getByTestId('mint-btn');
   await expect(
     mintBtn,
     `asset-notice for ${asset}: CTA must stay enabled on a separate-address wallet`,
-  ).toBeEnabled({ timeout: 30_000 });
+  ).toBeEnabled();
 
   // Screenshot with the notice and the enabled CTA both in frame — the maintainer
   // review point: enabled is not permission to bury the notice below the fold.
@@ -269,9 +230,9 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
     // The picker opens by default for an asset-bucket selection, so the badge +
     // override control are rendered; expand it defensively.
     const pickerToggle = page.getByText('Choose a different funding source', { exact: false });
-    if (await pickerToggle.isVisible().catch(() => false)) {
+    if (await pickerToggle.isVisible()) {
       const anyRow = page.locator('[data-testid^="utxo-row-"]').first();
-      if (!(await anyRow.isVisible().catch(() => false))) await pickerToggle.click().catch(() => undefined);
+      if (!(await anyRow.isVisible())) await pickerToggle.click();
     }
     const overrideRatio = await measuredTextContrast(page, '.utxo-pick-override');
     expect(
@@ -294,7 +255,6 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   // asset NAMED + CTA ENABLED); the CTA being enabled proves proceed is allowed.
   // The actual spend-on-proceed is corroborated once, in isolation, by the
   // mint-dirtycoin lane's mint round-trip — not re-run per cell here.
-  browserErrorGuard.assertClean();
   await page.close();
 }
 

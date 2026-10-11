@@ -15,7 +15,6 @@ import * as fs from 'node:fs';
 
 import {
   onboardCat21Wallet,
-  waitForApprovalPopup,
   seedListedCat,
   seedDirtyCoin,
   DirtyCoinAsset,
@@ -24,7 +23,8 @@ import {
   waitForTxConfirmed,
   rpc,
   installContextErrorGuard,
-  clickApprovalButton,
+  approveCat21WalletConnectPopup,
+  approveCat21WalletSignPopup,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -60,8 +60,7 @@ import {
  * to the incidental rare sat every seedInscribedCoin coin carries (classification
  * not consulted under the mutation).
  *
- * CI-only (real cat21-wallet binary + full regtest stack); the regtest
- * playwright config refuses to run locally.
+ * Needs: real cat21-wallet binary + full regtest stack.
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
@@ -84,7 +83,7 @@ async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
     path: path.resolve(RESULTS_DIR, `transfer-dirtycoin-${name}.png`),
     fullPage: true,
-  }).catch(() => undefined);
+  });
 }
 
 /** Connect cat21-wallet via the mint page; return payment (bcrt1q) + ordinals (bcrt1p). */
@@ -92,38 +91,26 @@ async function connectAndReadAddresses(page: Page): Promise<{ paymentAddress: st
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
   const connectedBtn = page.getByTestId('wallet-connected-btn');
   const cta = page.getByTestId('mint-cta');
-  await expect(connectedBtn.or(cta)).toBeVisible({ timeout: 30_000 });
+  await expect(connectedBtn.or(cta)).toBeVisible();
 
-  if (!(await connectedBtn.isVisible().catch(() => false))) {
+  if (!(await connectedBtn.isVisible())) {
     const knownBefore = new Set(context.pages());
     await page.getByTestId('wallet-connect-btn').first().click();
     const picker = page.getByTestId('wallet-pick-cat21wallet').first();
-    await expect(picker).toBeVisible({ timeout: 20_000 });
-    await picker.click({ timeout: 20_000 });
-    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-    const approval = await waitForApprovalPopup({
-      context, knownPages: knownBefore, timeoutMs: 20_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByTestId('get-addresses-approve-button').waitFor({ state: 'visible', timeout: 20_000 });
-        return true;
-      },
-    }).catch(() => null);
-    if (approval) {
-      await approval.getByTestId('get-addresses-approve-button').click();
-      await approval.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-    }
-    await expect(connectedBtn).toBeVisible({ timeout: 30_000 });
+    await expect(picker).toBeVisible();
+    await picker.click();
+    await approveCat21WalletConnectPopup(context, knownBefore);
+    await expect(connectedBtn).toBeVisible();
   }
 
   await connectedBtn.click();
   const payEl = page.getByTestId('wallet-payment-address-full');
-  await expect(payEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
+  await expect(payEl).toHaveText(/^bcrt1q/);
   const paymentAddress = (await payEl.textContent())!.trim();
   const ordEl = page.getByTestId('wallet-ordinals-address-full');
-  await expect(ordEl).toHaveText(/^bcrt1p/, { timeout: 15_000 });
+  await expect(ordEl).toHaveText(/^bcrt1p/);
   const ordinalsAddress = (await ordEl.textContent())!.trim();
-  await page.getByTestId('wallet-connected-btn').click().catch(() => undefined);
+  await page.getByTestId('wallet-connected-btn').click();
   return { paymentAddress, ordinalsAddress };
 }
 
@@ -151,13 +138,18 @@ test.beforeAll(async () => {
 
   let [worker] = context.serviceWorkers();
   if (!worker) {
-    worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
+    worker = await context.waitForEvent('serviceworker');
   }
   extensionId = worker.url().split('/')[2];
 
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
   await primer.close();
+  browserErrorGuard.assertClean();
+});
+
+test.afterEach(() => {
+  browserErrorGuard.assertClean();
 });
 
 test.afterAll(async () => {
@@ -214,18 +206,9 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): P
   transferUrl.searchParams.set('catTxid', listed.txid);
   transferUrl.searchParams.set('catVout', String(listed.vout));
   await page.goto(transferUrl.toString(), { waitUntil: 'domcontentloaded' });
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context, knownPages: new Set(context.pages()), timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button').click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   const recipientInput = page.getByTestId('transfer-recipient-input');
-  await expect(recipientInput).toBeVisible({ timeout: 60_000 });
+  await expect(recipientInput).toBeVisible();
   await recipientInput.fill(recipient);
   const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('5');
@@ -235,38 +218,23 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): P
   // coin, so the transfer is buildable. (Under the mutation the dirty coin funds
   // it instead, but the transfer still proceeds — the proof is on-chain, below.)
   const transferBtn = page.getByTestId('transfer-cta');
-  await expect(transferBtn).toBeEnabled({ timeout: 90_000 });
+  await expect(transferBtn).toBeEnabled();
   await shot(page, `${asset}-01-ready`);
 
   // ─── 5. Transfer → cat21-wallet signs → broadcast ───────────────
-  let knownBeforeSign = new Set(context.pages());
+  const knownBeforeSign = new Set(context.pages());
   await transferBtn.click();
-  for (let i = 0; i < 2; i++) {
-    // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-    const sign = await waitForApprovalPopup({
-      context, knownPages: knownBeforeSign, timeoutMs: i === 0 ? 120_000 : 5_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-          .waitFor({ state: 'visible', timeout: 60_000 });
-        return true;
-      },
-    }).catch(() => null);
-    if (!sign) break;
-    await clickApprovalButton(sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), sign, 30_000);
-    await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
-    knownBeforeSign = new Set(context.pages());
-  }
+  await approveCat21WalletSignPopup({ context, knownPages: knownBeforeSign });
 
   const successCard = page.getByTestId('transfer-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await expect(successCard).toBeVisible();
   const successHref = await successCard.locator('a').first().getAttribute('href');
   const transferTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
   console.log(`[${tag}] transfer txid=${transferTxid}`);
 
   // ─── 6. Confirm + THE PROOF: the dirty coin was NOT spent ───────
   mineBlocks(1);
-  await waitForTxConfirmed(transferTxid, 30_000);
+  await waitForTxConfirmed(transferTxid);
   const txout = rpc('gettxout', dirty.txid, String(dirty.vout)).trim();
   expect(txout.length, `dirty ${asset} coin ${dirty.outpoint} was SPENT — the transfer funding guard did not steer away from it`).toBeGreaterThan(0);
   const transferRaw = JSON.parse(
@@ -276,7 +244,6 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): P
   expect(spentDirty, `transfer tx spent the dirty ${asset} coin ${dirty.outpoint}`).toBe(false);
   console.log(`[${tag}] SURVIVED — transfer fee funded from the clean coin`);
 
-  browserErrorGuard.assertClean();
   await page.close();
 }
 

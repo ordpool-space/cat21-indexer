@@ -1,17 +1,15 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080, the transfer
- *         holdings picker only), cat21-indexer backend (:9998, syncing from the :8999 stub, not from
- *         cat21-ord), cat21-wallet (.crx)
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080: the transfer
+ *         holdings picker, the cat detail page, the bid check), cat21-indexer backend (:9998, synced
+ *         from cat21-ord), cat21-wallet (.crx)
  * Faked:  fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest), all of it written in the stub, not captured:
  *         /api/v1/fees/recommended (static DEFAULT_FEES; HIGH_FEES_PRESET posted to /admin/fees is
- *         recommendedFeesFixture with an invented spread); ord /output for the frontend's ord URLs, the
- *         backend and this spec (constant cats:[0] body, or a cat number registered via /admin/output);
+ *         recommendedFeesFixture with an invented spread); ord /output for the frontend's ord URLs;
  *         every other /api/* path is proxied to the real electrs
  *         context route on every /output/<outpoint> -> cleanOutputFixture (ordpool-sdk/core)
  *         page route on /output/<outpoint> for one outpoint -> catOutputFixture (ordpool-sdk/core)
  *         page route on POST /api/tx -> 400 (broadcast-failure test)
- *         page routes /api/cat/N, /api/status, ord /cat/N -> hand-written bodies (installCatDetailMocks)
  * Proves: mint round-trip with nLockTime=21 and sequence 0xfffffffd; "Use anyway" spends a cat-flagged
  *         coin; manual fee overrides land on-chain; sign cancel and broadcast failure surface as errors;
  *         /cat/N, trade and transfer deep links; offer, transfer, picker-transfer and bid-marketplace
@@ -32,9 +30,14 @@ import {
   waitForOrdSync,
   onboardCat21Wallet,
   installContextErrorGuard,
-  clickApprovalButton,
   approveCat21WalletConnectPopup,
   waitForUtxoMatching,
+  approveCat21WalletSignPopup,
+  approvalGate,
+  clickApprovalAndRequireClose,
+  seedListedCat,
+  getOrdInscription,
+  catInscriptionId,
 } from 'ordpool-sdk/e2e';
 import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
@@ -85,35 +88,13 @@ const CAT_OUTPUT_BODY = { ...catOutputFixture().ord, ...catOutputFixture().cat21
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
+/** The cat21-indexer backend: cats, listings, bids. */
+const INDEXER_URL = process.env.CAT21_INDEXER_URL ?? 'http://localhost:9998';
 const MINT_PATH = '/dashboard/mint';
-
-/**
- * Note on `.catch(() => undefined | null)` usage below:
- *
- * E2E_BEST_PRACTICES.md rule 8 bans SILENT ASSERTION FAILURES like
- * `.textContent().catch(() => '')` on a stable test-id — that shape
- * would return the sentinel string and hide a stale-testid regression.
- *
- * The catches in this spec are structurally different:
- *
- *   1. **Optional wallet-approval popups.** Some wallet approvals only
- *      fire on cold starts, or after a page reload, or per-wallet.
- *      `waitForApprovalPopup(...).catch(() => null)` + `if (popup)` is
- *      the intended shape — "if the wallet asked to reapprove, click
- *      through; otherwise proceed". Not an assertion, not silent.
- *
- *   2. **Failure-path diagnostics.** When a test's happy path throws,
- *      the `catch (err)` block collects `getByTestId(...).textContent()
- *      .catch(() => null)` / `.getAttribute(...).catch(() => null)`
- *      to log debug state BEFORE `throw err`. Masking these secondary
- *      accessors with `catch` prevents them from replacing the
- *      original failure with a rendering-race noise-error.
- *
- *   3. **Cleanup in `finally`.** `page.close().catch(() => undefined)`
- *      / `fetch('/admin/fees/reset').catch(() => undefined)` at the
- *      end of a test can't be allowed to blow up and hide the actual
- *      assertion outcome.
- */
+/** The SDK's fees-electrs-stub, whose fee presets (/admin/fees) the manual-override tests set. */
+const FEES_STUB_URL = process.env.FEES_STUB_URL ?? 'http://localhost:8999';
+/** The real cat21-ord the transfer holdings picker reads. */
+const CAT21_ORD_URL = process.env.REGTEST_ORD_URL ?? 'http://localhost:8080';
 
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
 const EXT_PATH = process.env.CAT21WALLET_EXT_PATH ?? path.join(SDK_E2E_DIR, 'extensions/cat21wallet');
@@ -179,7 +160,7 @@ async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
     path: path.resolve(RESULTS_DIR, `cat21wallet-mint-regtest-${name}.png`),
     fullPage: true,
-  }).catch(() => undefined);
+  });
 }
 
 /**
@@ -190,7 +171,7 @@ async function shot(p: Page, name: string): Promise<void> {
  */
 async function navigateViaHeaderToMint(page: Page): Promise<void> {
   await page.goto(FRONTEND_URL, { waitUntil: 'domcontentloaded' });
-  await page.getByTestId('wallet-connected-btn').waitFor({ state: 'visible', timeout: 30_000 });
+  await page.getByTestId('wallet-connected-btn').waitFor({ state: 'visible' });
   await page.getByTestId('nav-dashboard').click();
   await page.waitForURL('**/dashboard');
   await page.getByTestId('dashboard-card-mint').click();
@@ -211,7 +192,7 @@ async function navigateViaHeaderToMint(page: Page): Promise<void> {
 async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddress: string }> {
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
   const cta = page.getByTestId('mint-cta');
-  await expect(cta).toBeVisible({ timeout: 30_000 });
+  await expect(cta).toBeVisible();
 
   // Snapshot existing pages BEFORE the connect click. The Xverse spec
   // hit this race three times before the fix — CAT-21 wallet's approval
@@ -223,8 +204,8 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
   // by testid (matrix-driven rows carry `wallet-pick-<type>`), immune to
   // label wording.
   const cat21Picker = page.getByTestId('wallet-pick-cat21wallet').first();
-  await expect(cat21Picker).toBeVisible({ timeout: 20_000 });
-  await cat21Picker.click({ timeout: 20_000 });
+  await expect(cat21Picker).toBeVisible();
+  await cat21Picker.click();
 
   await approveCat21WalletConnectPopup(context, knownPagesBeforeConnect);
   // The popup is never closed from here: cat21-wallet's
@@ -232,7 +213,7 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
   // addresses back, and a manual close cuts that dispatch (run 27502018547
   // trace.zip showed click->close = 44 ms). The hidden connect CTA is the
   // signal that the addresses arrived.
-  await expect(cta).toBeHidden({ timeout: 30_000 });
+  await expect(cta).toBeHidden();
 
   // Path-1 proof: payment address is REGTEST bcrt1q. Extract from the
   // wallet-connect popover in the header, NOT from mint-no-utxos. On
@@ -250,7 +231,7 @@ async function connectCat21WalletViaMintPage(page: Page): Promise<{ paymentAddre
   // paymentAddr must start with bcrt1q.
   await page.getByTestId('wallet-connected-btn').click();
   const paymentAddrEl = page.getByTestId('wallet-payment-address-full');
-  await expect(paymentAddrEl).toHaveText(/^bcrt1q/, { timeout: 15_000 });
+  await expect(paymentAddrEl).toHaveText(/^bcrt1q/);
   const paymentAddr = (await paymentAddrEl.textContent())!.trim();
   return { paymentAddress: paymentAddr };
 }
@@ -289,24 +270,14 @@ test.beforeAll(async () => {
     });
   });
 
-  // Auto-fail any test whose page emits an uncaught JS exception or
-  // console.error. Hooks every page the context spawns via context.on
-  // ('page'), so tests don't repeat the wiring at each newPage() site.
-  // Ignores narrow, must-be-audited noise: browser-side network errors
-  // to the mocked electrs endpoints during pre-serve wait windows.
-  browserErrorGuard = installContextErrorGuard(context, {
-    ignore: [
-      // The frontend loads before the electrs stub is fully ready in
-      // some race windows; the transient fetch errors are recovered
-      // by the SDK's retry helpers and don't reflect a real bug.
-      /ERR_CONNECTION_REFUSED/,
-      /Failed to load resource/,
-    ],
-  });
+  // Fails a test on any uncaught exception, console.error or failed request on
+  // a page of ours. A test that provokes one declares it with
+  // expectBrowserError.
+  browserErrorGuard = installContextErrorGuard(context);
 
   let [worker] = context.serviceWorkers();
   if (!worker) {
-    worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
+    worker = await context.waitForEvent('serviceworker');
   }
   extensionId = worker.url().split('/')[2];
 
@@ -324,14 +295,11 @@ test.beforeAll(async () => {
   saveShared({ paymentAddress });
   await shot(connectPage, '00b-wallet-connected');
   await connectPage.close();
-});
-
-test.beforeEach(() => {
-  browserErrorGuard?.resetPerTest();
+  browserErrorGuard.assertClean();
 });
 
 test.afterEach(() => {
-  browserErrorGuard?.assertClean();
+  browserErrorGuard.assertClean();
 });
 
 test.afterAll(async () => {
@@ -366,52 +334,29 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
   await waitForUtxoAt(paymentAddr, FUND_AMOUNT_SATS);
 
   // Reload so the orchestrator picks up the new UTXO.
-  const knownBeforeReload = new Set(context.pages());
   await page.reload({ waitUntil: 'domcontentloaded' });
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: knownBeforeReload,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
   await shot(page, '05-after-fund-reload');
 
   // Wait for found-funds, set fee, click Mint.
   const foundFunds = page.getByTestId('mint-found-funds');
-  await expect(foundFunds).toBeVisible({ timeout: 90_000 });
+  await expect(foundFunds).toBeVisible();
   const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
   const mintBtn = page.getByTestId('mint-btn');
-  await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(mintBtn).toBeEnabled();
   await shot(page, '06-ready-to-mint');
 
   const knownBeforeSign = new Set(context.pages());
   await mintBtn.click();
-  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-  const approvalSign = await waitForApprovalPopup({
+  await approveCat21WalletSignPopup({
     context,
     knownPages: knownBeforeSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    screenshot: async (p) => { await shot(p, '07-sign-approval'); },
   });
-  await shot(approvalSign, '07-sign-approval');
-  await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
-  await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   const successCard = page.getByTestId('mint-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await expect(successCard).toBeVisible();
   await shot(page, '08-success');
   const successHref = await successCard.locator('a').first().getAttribute('href');
   const txidMatch = successHref!.match(/\/tx\/([0-9a-f]{64})/);
@@ -423,7 +368,7 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
   saveShared({ mintTxid: broadcastTxid });
 
   mineBlocks(1);
-  const esploraTx = await waitForTxConfirmed(broadcastTxid, 30_000);
+  const esploraTx = await waitForTxConfirmed(broadcastTxid);
   expect(esploraTx.locktime).toBe(21);
   expect(esploraTx.vout.length).toBeGreaterThanOrEqual(1);
   expect(esploraTx.vout[0].value).toBe(546);
@@ -454,7 +399,7 @@ async function cat21walletMintAtRate(opts: {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   if (opts.mockFeesAsHigh) {
-    const res = await fetch('http://localhost:8999/admin/fees', {
+    const res = await fetch(`${FEES_STUB_URL}/admin/fees`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(HIGH_FEES_PRESET),
@@ -469,58 +414,32 @@ async function cat21walletMintAtRate(opts: {
 
     const page = await context.newPage();
     await navigateViaHeaderToMint(page);
-    const known = new Set(context.pages());
-    // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-    const reapprove = await waitForApprovalPopup({
-      context,
-      knownPages: known,
-      timeoutMs: 6_000,
-      isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-    }).catch(() => null);
-    if (reapprove) {
-      await reapprove.getByTestId('get-addresses-approve-button')
-        .click({ timeout: 10_000 }).catch(() => undefined);
-      await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-    }
 
     if (opts.mockFeesAsHigh) {
       const buttons = page.locator('[data-testid^="fees-picker-tier-"]');
-      await expect(buttons).toHaveCount(4, { timeout: 30_000 });
-      await expect(buttons.nth(0)).toContainText('100', { timeout: 10_000 });
+      await expect(buttons).toHaveCount(4);
+      await expect(buttons.nth(0)).toContainText('100');
     }
 
     const manualInput = page.getByTestId('fees-picker-manual-input');
     await manualInput.fill(String(opts.rate));
     await manualInput.press('Tab');
     const foundFunds = page.getByTestId('mint-found-funds');
-    await expect(foundFunds).toBeVisible({ timeout: 90_000 });
+    await expect(foundFunds).toBeVisible();
     const mintBtn = page.getByTestId('mint-btn');
-    await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+    await expect(mintBtn).toBeEnabled();
 
     const knownSign = new Set(context.pages());
     await mintBtn.click();
-    // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-    const sign = await waitForApprovalPopup({
-      context,
-      knownPages: knownSign,
-      timeoutMs: 120_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-          .waitFor({ state: 'visible', timeout: 120_000 });
-        return true;
-      },
-    });
-    await clickApprovalButton(sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), sign, 30_000);
-    await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+    await approveCat21WalletSignPopup({ context, knownPages: knownSign });
 
     const successCard = page.getByTestId('mint-success');
-    await expect(successCard).toBeVisible({ timeout: 90_000 });
+    await expect(successCard).toBeVisible();
     const successHref = await successCard.locator('a').first().getAttribute('href');
     const broadcastTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
 
     mineBlocks(1);
-    const tx = await waitForTxConfirmed(broadcastTxid, 30_000);
+    const tx = await waitForTxConfirmed(broadcastTxid);
     expect(tx.locktime).toBe(21);
     expect(tx.vout[0].value).toBe(546);
     for (const vin of tx.vin) {
@@ -530,12 +449,11 @@ async function cat21walletMintAtRate(opts: {
     const rate = tx.fee / vsize;
     console.log(`[${opts.scenarioLabel}] fee=${tx.fee} vsize=${vsize} rate=${rate.toFixed(3)} (target ${opts.rate})`);
 
-    await page.close().catch(() => undefined);
+    await page.close();
     return { broadcastTxid, fee: tx.fee, vsize, rate };
   } finally {
     if (opts.mockFeesAsHigh) {
-      await fetch('http://localhost:8999/admin/fees/reset', { method: 'POST' })
-        .catch(() => undefined);
+      await fetch(`${FEES_STUB_URL}/admin/fees/reset`, { method: 'POST' });
     }
   }
 }
@@ -550,7 +468,6 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
     sharedPaymentAddress,
     (u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid,
     `the ${SMALL_FUND_SATS}-sat funding coin from ${fundTxid}`,
-    15_000,
   );
   const catOutpoint = `${small.txid}:${small.vout}`;
 
@@ -582,23 +499,10 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
     });
   });
   await navigateViaHeaderToMint(page);
-  const known = new Set(context.pages());
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: known,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   // Expand picker if not auto-open.
   const pickerSummary = page.getByTestId('mint-expert-summary').first();
-  await expect(pickerSummary).toBeVisible({ timeout: 60_000 });
+  await expect(pickerSummary).toBeVisible();
   if ((await page.locator('details[data-testid="mint-expert"][open]').count()) === 0) {
     await pickerSummary.click();
   }
@@ -608,37 +512,24 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
   // that implicitly (it only resolved on an assets row); the identity id does
   // not, so the bucket proof must be its own assertion or it is silently lost.
   const assetRow = page.locator('[data-testid^="utxo-row-"]').filter({ hasText: catOutpoint }).first();
-  await expect(assetRow).toBeVisible({ timeout: 45_000 });
-  await expect(assetRow).toHaveAttribute('data-bucket', 'assets', { timeout: 45_000 });
+  await expect(assetRow).toBeVisible();
+  await expect(assetRow).toHaveAttribute('data-bucket', 'assets');
   const overrideBtn = assetRow.locator('.utxo-pick-override');
   await expect(overrideBtn).toBeVisible();
   await overrideBtn.click();
 
   const mintBtn = page.getByTestId('mint-btn');
-  await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(mintBtn).toBeEnabled();
   const knownSign = new Set(context.pages());
   await mintBtn.click();
-  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-  const sign = await waitForApprovalPopup({
-    context,
-    knownPages: knownSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
-  });
-  await clickApprovalButton(sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), sign, 30_000);
-  await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+  await approveCat21WalletSignPopup({ context, knownPages: knownSign });
 
   const successCard = page.getByTestId('mint-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await expect(successCard).toBeVisible();
   const successHref = await successCard.locator('a').first().getAttribute('href');
   const broadcastTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
   mineBlocks(1);
-  const tx = await waitForTxConfirmed(broadcastTxid, 30_000);
+  const tx = await waitForTxConfirmed(broadcastTxid);
   expect(tx.locktime).toBe(21);
   expect(tx.vout[0].value).toBe(546);
   for (const vin of tx.vin) {
@@ -674,52 +565,31 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
 
   const page = await context.newPage();
   await navigateViaHeaderToMint(page);
-  const known = new Set(context.pages());
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: known,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
   const mintBtn = page.getByTestId('mint-btn');
-  await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
+  await expect(mintBtn).toBeEnabled();
 
   const knownSign = new Set(context.pages());
   await mintBtn.click();
-  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
   const sign = await waitForApprovalPopup({
     context,
     knownPages: knownSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    isApproval: approvalGate({
+      url: /^chrome-extension:\/\//,
+      control: (p) => p.getByRole('button', { name: /^(deny|cancel|reject)$/i }).first(),
+    }),
   });
-  // Catch any "page closed" race during the Deny click — the
-  // popup may self-close from the click before Playwright's
-  // click action completes. Ordpool run 27509961259 hit this.
-  await sign.getByRole('button', { name: /^(deny|cancel|reject)$/i }).first()
-    .click({ timeout: 10_000 }).catch(() => undefined);
-  await sign.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  // The wallet closes its popup on Deny, which is the proof the click landed.
+  await clickApprovalAndRequireClose(sign.getByRole('button', { name: /^(deny|cancel|reject)$/i }).first(), sign, {
+    label: 'Cat21 Wallet sign popup (deny)',
+  });
 
-  // Absence-of-event assertion: there is no positive signal for "no
-  // success will EVER appear" — the orchestrator's late success would
-  // fire async. Bounded 2s pause is a documented last-resort per
-  // ~/Work/ordpool/E2E_BEST_PRACTICES.md §8.
-  await page.waitForTimeout(2_000);
+  // The rejected sign settles the mint as an error, which is the state that
+  // says no success is coming.
+  await expect(page.getByTestId('mint-error')).toBeVisible();
   await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });
 
@@ -729,6 +599,10 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();
+  browserErrorGuard.expectBrowserError(
+    /Failed to load resource: the server responded with a status of 400/,
+    'the spec fulfils POST /api/tx with 400 to prove the broadcast error path',
+  );
   await page.route('**/api/tx', async (route) => {
     if (route.request().method() === 'POST') {
       await route.fulfill({
@@ -742,45 +616,19 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
     await route.continue();
   });
   await navigateViaHeaderToMint(page);
-  const known = new Set(context.pages());
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: known,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
   const mintBtn = page.getByTestId('mint-btn');
-  await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
+  await expect(mintBtn).toBeEnabled();
 
   const knownSign = new Set(context.pages());
   await mintBtn.click();
-  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-  const sign = await waitForApprovalPopup({
-    context,
-    knownPages: knownSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
-  });
-  await clickApprovalButton(sign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), sign, 30_000);
-  await sign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
+  await approveCat21WalletSignPopup({ context, knownPages: knownSign });
 
   const errorAlert = page.getByTestId('mint-error');
-  await expect(errorAlert).toBeVisible({ timeout: 60_000 });
+  await expect(errorAlert).toBeVisible();
   await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });
 
@@ -793,16 +641,10 @@ test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake succes
 // above (`context` persists across tests; the SDK's WalletService
 // restores connectedWallet from localStorage on every page load).
 //
-// The cat-detail flow depends on the cat21-indexer backend AND
-// cat21-ord — neither runs in the regtest e2e stack. We `page.route`
-// their responses with a synthesised cat #42 that the connected
-// wallet "owns". This tests the UI plumbing (button states, modal,
-// permalink, banners, prefills) without needing full infrastructure;
-// the underlying orchestrator + PSBT logic is covered by the SDK's
-// own regtest suite.
+// The cat is real: seedListedCat mints it to the wallet's ordinals
+// address, cat21-ord indexes it and the backend syncs it, so the page
+// reads it from the same services production does.
 // ============================================================
-
-const CAT_NUMBER_FOR_UI_TEST = 42;
 
 let sellerOrdinalsAddress: string | undefined;
 
@@ -817,14 +659,14 @@ async function ensureSellerOrdinalsAddress(): Promise<string> {
   const page = await context.newPage();
   await page.goto(FRONTEND_URL, { waitUntil: 'domcontentloaded' });
   const walletBtn = page.getByTestId('wallet-connected-btn');
-  await expect(walletBtn).toBeVisible({ timeout: 30_000 });
+  await expect(walletBtn).toBeVisible();
   await walletBtn.click();
   // The popover renders a hidden span with the full address (the visible
   // <code> is truncated for humans; the testid split from
   // E2E_BEST_PRACTICES.md rule 12 lands the untruncated value on a
   // visually-hidden sibling for E2E consumption).
   const ordinalsCode = page.getByTestId('wallet-ordinals-address-full');
-  await expect(ordinalsCode).toHaveText(/^(bcrt1|bc1)/, { timeout: 10_000 });
+  await expect(ordinalsCode).toHaveText(/^(bcrt1|bc1)/);
   const addr = (await ordinalsCode.textContent())?.trim();
   if (!addr) throw new Error('could not extract connected wallet ordinals address from popover');
   sellerOrdinalsAddress = addr;
@@ -833,101 +675,29 @@ async function ensureSellerOrdinalsAddress(): Promise<string> {
   return addr;
 }
 
-/** Fake CatDto that satisfies the frontend's rendering requirements. */
-function mockCatDto(catNumber: number): unknown {
-  return {
-    id: '00000000-0000-0000-0000-000000000042',
-    catNumber,
-    txHash: '0'.repeat(64),
-    blockHash: '0'.repeat(64),
-    blockHeight: 800000,
-    mintedAt: '2024-01-01T00:00:00.000Z',
-    mintedBy: null,
-    fee: 1000,
-    weight: 400,
-    size: 200,
-    feeRate: 10,
-    sat: 1000000000,
-    value: 546,
-    category: 'sub1k',
-    genesis: false,
-    catColors: ['#FF9900'],
-    gender: 'female',
-    designIndex: 0,
-    designPose: 'standing',
-    designExpression: 'grumpy',
-    designPattern: 'plain',
-    designFacing: 'left',
-    laserEyes: 'none',
-    background: 'plain',
-    backgroundColors: ['#000000'],
-    crown: 'none',
-    glasses: 'none',
-    glassesColors: [],
-    rarityBits: 5.0,
-    rarityRank: 1,
-    rarityCategoryTotal: 100,
-  };
-}
+let ownedCatNumber: number | undefined;
 
 /**
- * Route interceptors for the cat detail flow. Matched on PATH only
- * (HOST-AGNOSTIC) so the mock fires whichever host the build baked
- * into these calls — the cat-detail flow reads getCat / getStatus via
- * the OpenAPI client (`environment.api`) and the owner via
- * `environment.ordExplorer`. The workflow seds environment.prod.ts to
- * local hosts (backend2 → :9998, ordExplorer → the real cat21-ord on
- * :8080), and path-only matching intercepts the cat-api calls
- * regardless of host, so nothing escapes to production:
- *   - GET /api/cat/:N   → synthesised cat #N owned by `owner`
- *   - GET /api/status   → totalCats large enough that /cat/N is "synced"
- *   - GET /cat/:N        → { address: owner }  (ord owner lookup)
- * Everything else is left to hit its normal target (which in e2e is
- * either the fees-stub on :8999 or an unbound localhost port that
- * naturally fails — the tests don't depend on those calls).
+ * A real cat owned by the connected wallet, seeded once for the detail-flow
+ * tests: minted to the wallet's ordinals address, indexed by cat21-ord and
+ * synced by the backend (the lane runs it with a short SYNC_INTERVAL_MS).
  */
-async function installCatDetailMocks(page: Page, catNumber: number, ownerAddress: string): Promise<void> {
-  await page.route(new RegExp(`/api/cat/${catNumber}(\\?|$)`), (route) => {
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify(mockCatDto(catNumber)),
-    });
-  });
-  await page.route(/\/api\/status(\?|$)/, (route) => {
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({
-        totalCats: 1000,
-        lastSyncedCatNumber: 1000,
-        lastSyncTime: '2024-01-01T00:00:00.000Z',
-      }),
-    });
-  });
-  // ord's owner endpoint is a bare `/cat/<N>` on the ORD host. Anchor to that
-  // host (prod ord.cat21.space, or localhost:8999 when the build seds it) —
-  // NOT a bare host-agnostic `/cat/<N>`, because the frontend's own SPA route
-  // is also `<frontend-host>/cat/<N>`, so a host-agnostic pattern intercepts
-  // the page navigation itself and the cat page never renders. (This still
-  // excludes the indexer's `/api/cat/<N>`, owned by the first route.)
-  await page.route(new RegExp(`(ord\\.cat21\\.space|localhost:8999|localhost:8080)/cat/${catNumber}(\\?|$)`), (route) => {
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({ address: ownerAddress }),
-    });
-  });
+async function ensureOwnedCat(): Promise<number> {
+  if (ownedCatNumber !== undefined) return ownedCatNumber;
+  const owner = await ensureSellerOrdinalsAddress();
+  const seeded = await seedListedCat({ ordinalsAddress: owner });
+  await expect.poll(
+    async () => (await fetch(`${INDEXER_URL}/api/cat/${seeded.catNumber}`)).status,
+    { message: `backend never served /api/cat/${seeded.catNumber}` },
+  ).toBe(200);
+  console.log(`[detail-flow] owned cat #${seeded.catNumber} at ${seeded.txid}:${seeded.vout}`);
+  ownedCatNumber = seeded.catNumber;
+  return ownedCatNumber;
 }
 
 test('/cat/N: three action buttons + Sell modal generates the shareable permalink', async () => {
-  const owner = await ensureSellerOrdinalsAddress();
-  const N = CAT_NUMBER_FOR_UI_TEST;
+  const N = await ensureOwnedCat();
   const page = await context.newPage();
-  await installCatDetailMocks(page, N, owner);
 
   await page.goto(`${FRONTEND_URL}/cat/${N}`, { waitUntil: 'domcontentloaded' });
   await shot(page, 'detail-01-loaded');
@@ -937,11 +707,11 @@ test('/cat/N: three action buttons + Sell modal generates the shareable permalin
   const sellBtn = page.getByTestId('cat-action-sell');
   const buyBtn = page.getByTestId('cat-action-buy');
   const sendBtn = page.getByTestId('cat-action-send');
-  await expect(sellBtn).toBeVisible({ timeout: 30_000 });
+  await expect(sellBtn).toBeVisible();
   await expect(buyBtn).toBeVisible();
   await expect(sendBtn).toBeVisible();
 
-  await expect(sellBtn).toBeEnabled({ timeout: 15_000 });
+  await expect(sellBtn).toBeEnabled();
   await expect(buyBtn).toBeDisabled();
   await expect(sendBtn).toBeEnabled();
   await expect(buyBtn).toHaveAttribute('title', /already own this cat/i);
@@ -949,11 +719,14 @@ test('/cat/N: three action buttons + Sell modal generates the shareable permalin
   // Sell modal round-trip.
   await sellBtn.click();
   const askInput = page.getByTestId('sell-modal-ask-input');
-  await expect(askInput).toBeVisible({ timeout: 10_000 });
+  await expect(askInput).toBeVisible();
+  // The modal prefills the ask (cat value + mint fee) through a binding that
+  // renders after the input is visible; typing before it lands appends to it.
+  await expect(askInput).toHaveValue(/^\d+$/);
   await askInput.fill('21000');
 
   const permalink = page.getByTestId('sell-modal-permalink');
-  await expect(permalink).toBeVisible({ timeout: 5_000 });
+  await expect(permalink).toBeVisible();
   const url = await permalink.inputValue();
   expect(url).toContain(`/cat/${N}?ask=21000`);
   console.log(`[detail-flow] generated permalink = ${url}`);
@@ -961,28 +734,26 @@ test('/cat/N: three action buttons + Sell modal generates the shareable permalin
   // Copy button flips to "Copied!" after clicking.
   const copyBtn = page.getByTestId('sell-modal-copy-permalink');
   await copyBtn.click();
-  await expect(copyBtn).toContainText(/copied/i, { timeout: 3_000 });
+  await expect(copyBtn).toContainText(/copied/i);
 
   await shot(page, 'detail-02-modal-permalink');
   await page.close();
 });
 
 test('/cat/N?ask=X: owner-variant ask banner is visible on the seller\'s own link', async () => {
-  const owner = await ensureSellerOrdinalsAddress();
-  const N = CAT_NUMBER_FOR_UI_TEST;
+  const N = await ensureOwnedCat();
   const page = await context.newPage();
-  await installCatDetailMocks(page, N, owner);
 
   await page.goto(`${FRONTEND_URL}/cat/${N}?ask=21000`, { waitUntil: 'domcontentloaded' });
   const banner = page.getByTestId('ask-banner');
-  await expect(banner).toBeVisible({ timeout: 30_000 });
+  await expect(banner).toBeVisible();
   await expect(banner).toContainText(/your ask for this cat is 21000 sats/i);
   await shot(page, 'detail-03-ask-banner-owner');
   await page.close();
 });
 
 test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask" banner surfaces prefill intent', async () => {
-  const N = CAT_NUMBER_FOR_UI_TEST;
+  const N = await ensureOwnedCat();
   const page = await context.newPage();
 
   await page.goto(
@@ -990,31 +761,29 @@ test('/dashboard/trade/make?catNumber=X&askPrice=Y&fromAsk=1: "responding to ask
     { waitUntil: 'domcontentloaded' },
   );
 
-  // The prefill effect kicks off a cat-number lookup that will fail
-  // against the unbound ord+esplora stubs in this e2e — that's fine.
-  // The banner itself is driven purely off the URL query param and
-  // is what we're pinning here.
+  // The banner is driven purely off the URL query param and is what
+  // this test pins; the prefill's cat-number lookup runs against the
+  // real backend, cat21-ord and electrs.
   const banner = page.getByTestId('responding-to-ask-banner');
-  await expect(banner).toBeVisible({ timeout: 30_000 });
+  await expect(banner).toBeVisible();
   await expect(banner).toContainText(/responding to a seller's ask/i);
   await shot(page, 'detail-04-make-offer-prefill-banner');
   await page.close();
 });
 
 test('/dashboard/transfer?catNumber=X: page loads and the connected-wallet heading is visible', async () => {
-  const N = CAT_NUMBER_FOR_UI_TEST;
+  const N = await ensureOwnedCat();
   const page = await context.newPage();
 
   await page.goto(`${FRONTEND_URL}/dashboard/transfer?catNumber=${N}`, {
     waitUntil: 'domcontentloaded',
   });
 
-  // The transfer page's heading is stable across wallet states.
-  // The prefill's actual cat-selection effect needs `myHoldings` to
-  // resolve from ord (unreachable here); the presence assertion
-  // proves the page didn't crash on the new `input()` binding.
+  // The transfer page's heading is stable across wallet states; the
+  // presence assertion proves the page renders with the catNumber
+  // input bound.
   const heading = page.getByRole('heading', { name: /transfer/i }).first();
-  await expect(heading).toBeVisible({ timeout: 30_000 });
+  await expect(heading).toBeVisible();
   await shot(page, 'detail-05-transfer-prefill-loaded');
   await page.close();
 });
@@ -1174,61 +943,35 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
   acceptUrl.searchParams.set('catVout', '0');
 
   const page = await context.newPage();
-  const knownBeforeNavigate = new Set(context.pages());
   await page.goto(acceptUrl.toString(), { waitUntil: 'domcontentloaded' });
-
-  // Handle any get-addresses reapproval popup the wallet may pop up
-  // when the page loads (mirrors the pattern from the mint test).
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: knownBeforeNavigate,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
   await shot(page, 'offer-01-accept-loaded');
 
   // The URL committed the cat outpoint; the accept-offer page shows
   // the "pre-selected from the buyer's link" hint.
   const catFromUrlHint = page.getByTestId('accept-offer-cat-from-url');
-  await expect(catFromUrlHint).toBeVisible({ timeout: 30_000 });
+  await expect(catFromUrlHint).toBeVisible();
   await expect(catFromUrlHint).toContainText(sharedMintTxid);
 
   // Accept button becomes enabled once the orchestrator's validator
   // resolves against the parsed offer + wallet.paymentAddress +
   // urlCatOutpoint. Wait for that ready state.
   const acceptBtn = page.getByTestId('accept-offer-sign-cta');
-  await expect(acceptBtn).toBeVisible({ timeout: 30_000 });
-  await expect(acceptBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(acceptBtn).toBeVisible();
+  await expect(acceptBtn).toBeEnabled();
   await shot(page, 'offer-02-accept-ready');
 
   // ─── Click Accept → cat21-wallet approval popup → sign ───
   const knownBeforeSign = new Set(context.pages());
   await acceptBtn.click();
-  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-  const approvalSign = await waitForApprovalPopup({
+  await approveCat21WalletSignPopup({
     context,
     knownPages: knownBeforeSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    screenshot: async (p) => { await shot(p, 'offer-03-sign-approval'); },
   });
-  await shot(approvalSign, 'offer-03-sign-approval');
-  await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
-  await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── Success surfaces + broadcast txid available ───
   const successCard = page.getByTestId('accept-offer-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await expect(successCard).toBeVisible();
   await shot(page, 'offer-04-success');
   const successLink = successCard.locator('a').first();
   const successHref = await successLink.getAttribute('href');
@@ -1239,7 +982,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 
   // ─── On-chain verification ───
   mineBlocks(1);
-  const settleTx = await waitForTxConfirmed(settleTxid, 30_000);
+  const settleTx = await waitForTxConfirmed(settleTxid);
   // Regression guard for the SDK's builder invariant, NOT a protocol
   // requirement. `cat21-offer.helper.ts` throws if `lockTime !== 21`
   // at build time — this asserts the same holds after broadcast so
@@ -1287,6 +1030,20 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 // working through ord.
 // ============================================================
 
+/**
+ * The transfer page's debug marker and error text, for a failure log. Reads
+ * without waiting (evaluateAll, allTextContents), so an absent element yields
+ * an empty list instead of a second error that would replace the first.
+ */
+async function transferDebugState(page: Page): Promise<string> {
+  const debugState = await page.getByTestId('transfer-debug-state').evaluateAll((els) =>
+    els.map((el) => Object.fromEntries(
+      Array.from(el.attributes).filter((a) => a.name.startsWith('data-')).map((a) => [a.name, a.value]),
+    )));
+  const transferError = await page.getByTestId('transfer-error').allTextContents();
+  return JSON.stringify({ debugState, transferError });
+}
+
 test('full transfer round-trip: fresh mint → transfer via URL → cat moves on-chain', async () => {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
@@ -1329,22 +1086,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
       console.log(`[browser-${msg.type()}] ${text}`);
     }
   });
-  const knownBeforeNavigate = new Set(context.pages());
   await page.goto(transferUrl.toString(), { waitUntil: 'domcontentloaded' });
-
-  // The wallet may pop up a get-addresses reapproval on a fresh page.
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: knownBeforeNavigate,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
 
   // The Cat21TransferOrchestrator is providedIn: 'root' and its
   // fundingUtxos$ pipeline uses shareReplay({ refCount: true }). It
@@ -1353,26 +1095,13 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   // ingest — the just-minted change output may not be indexed at the
   // exact moment the orchestrator fetches. Reload so the fetch runs
   // once more, this time with a real chance electrs has caught up.
-  // Same pattern as the mint round-trip test uses at line 213.
-  const knownBeforeReload = new Set(context.pages());
+  // Same pattern as the mint round-trip test.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapproveAfterReload = await waitForApprovalPopup({
-    context,
-    knownPages: knownBeforeReload,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapproveAfterReload) {
-    await reapproveAfterReload.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapproveAfterReload.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
   await shot(page, 'transfer-01-loaded');
 
   // ─── Type the recipient + set a fee rate ───
   const recipientInput = page.getByTestId('transfer-recipient-input');
-  await expect(recipientInput).toBeVisible({ timeout: 30_000 });
+  await expect(recipientInput).toBeVisible();
   await recipientInput.fill(recipientAddress);
   // The recipient invalid-hint must NOT be visible for regtest bech32m —
   // proves the injected bitcoinNetwork wired through to the address
@@ -1385,80 +1114,32 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 
   // ─── Wait for the Transfer button to enable + click ───
   const transferBtn = page.getByTestId('transfer-cta');
-  await expect(transferBtn).toBeVisible({ timeout: 30_000 });
+  await expect(transferBtn).toBeVisible();
 
-  // If the button doesn't enable in 60s, dump the debug-state marker
-  // so we can attribute WHICH signal is failing (state / catUtxo /
-  // recipient / fee / simulation). See transfer.html data-testid=
-  // "transfer-debug-state".
+  // A disabled button names WHICH signal holds it (state / catUtxo /
+  // recipient / fee / simulation) through transfer.html's
+  // data-testid="transfer-debug-state" marker, logged before the rethrow.
   try {
-    await expect(transferBtn).toBeEnabled({ timeout: 60_000 });
+    await expect(transferBtn).toBeEnabled();
   } catch (err) {
-    const debugState = page.getByTestId('transfer-debug-state');
-    const attrs: Record<string, string | null> = {};
-    for (const name of [
-      'data-state', 'data-has-cat', 'data-has-recipient', 'data-fee',
-      'data-sim-ready', 'data-sim-insufficient',
-      'data-wallet-ord-address', 'data-wallet-pay-address', 'data-wallet-type',
-    ]) {
-      attrs[name] = await debugState.getAttribute(name).catch(() => null);
-    }
-    // eslint-disable-next-line no-console
-    console.log('[transfer-flow] button-disabled debug state =', JSON.stringify(attrs));
+    console.log('[transfer-flow] button-disabled state =', await transferDebugState(page));
     throw err;
   }
   await shot(page, 'transfer-02-ready');
 
-  // cat21-wallet signs the transfer's cat + funding inputs inside a
-  // SINGLE approval popup (signAtIndex-array RPC shape, ordpool-sdk
-  // commit 65b1b00). The loop remains defensive so a future wallet
-  // change to per-index popups still works — the second iteration
-  // times out cleanly if no additional popup arrives.
-  let knownBeforeSign = new Set(context.pages());
+  // cat21-wallet signs the transfer's cat + funding inputs inside ONE
+  // approval popup (signAtIndex-array RPC shape, ordpool-sdk 65b1b00).
+  const knownBeforeSign = new Set(context.pages());
   await transferBtn.click();
-  for (let i = 0; i < 2; i++) {
-    // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-    const approvalSign = await waitForApprovalPopup({
-      context,
-      knownPages: knownBeforeSign,
-      // First popup: 120s cushion for wallet unlock + PSBT parse. Any
-      // second popup would fire immediately after the first closes;
-      // a short 5s window catches it without adding dead time when
-      // (as with today's cat21-wallet) the flow is single-popup.
-      timeoutMs: i === 0 ? 120_000 : 5_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-          .waitFor({ state: 'visible', timeout: 60_000 });
-        return true;
-      },
-    }).catch(() => null);
-    if (!approvalSign) break; // no more popups — the sign flow chained into broadcast
-    await shot(approvalSign, `transfer-03-sign-approval-${i + 1}`);
-    await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
-    await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
-    knownBeforeSign = new Set(context.pages()); // arm the next iteration to see any NEW popup
-  }
+  await approveCat21WalletSignPopup({ context, knownPages: knownBeforeSign });
 
   // ─── Success card + broadcast txid ───
   const successCard = page.getByTestId('transfer-success');
   try {
-    await expect(successCard).toBeVisible({ timeout: 90_000 });
+    await expect(successCard).toBeVisible();
   } catch (err) {
-    // Surface any transfer-error text + debug-state attrs before rethrowing,
-    // so the CI log attributes the failure without needing to open the
-    // trace zip.
     await shot(page, 'transfer-04-post-sign-failure');
-    const errText = await page.getByTestId('transfer-error').textContent().catch(() => null);
-    // eslint-disable-next-line no-console
-    console.log('[transfer-flow] post-sign transfer-error =', errText);
-    const debugState = page.getByTestId('transfer-debug-state');
-    const attrs: Record<string, string | null> = {};
-    for (const name of ['data-state', 'data-sim-ready', 'data-sim-insufficient']) {
-      attrs[name] = await debugState.getAttribute(name).catch(() => null);
-    }
-    // eslint-disable-next-line no-console
-    console.log('[transfer-flow] post-sign debug-state =', JSON.stringify(attrs));
+    console.log('[transfer-flow] post-sign state =', await transferDebugState(page));
     throw err;
   }
   await shot(page, 'transfer-04-success');
@@ -1470,7 +1151,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 
   // ─── On-chain verification ───
   mineBlocks(1);
-  const transferTx = await waitForTxConfirmed(transferTxid, 30_000);
+  const transferTx = await waitForTxConfirmed(transferTxid);
   // Regression guard for cat21-wallet's HARD RULE #1 + the SDK's
   // `cat21-transfer.helper.ts` builder invariant (throws if
   // `lockTime !== 21`). Not a protocol requirement — a third-party
@@ -1536,40 +1217,27 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
       console.log(`[browser-${msg.type()}] ${text}`);
     }
   });
-  const knownBeforeNavigate = new Set(context.pages());
   await page.goto(`${FRONTEND_URL}/dashboard/transfer`, { waitUntil: 'domcontentloaded' });
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: knownBeforeNavigate,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
   await shot(page, 'picker-transfer-01-loaded');
 
   // ─── The REAL picker: cat21-ord listed the wallet's cats ───
   const picker = page.getByTestId('transfer-cat-picker');
-  await expect(picker).toBeVisible({ timeout: 60_000 });
+  await expect(picker).toBeVisible();
   // The freshly minted cat appears as an option keyed by its
   // inscription id — value fetched from cat21-ord, not from any URL.
-  await expect(picker.locator(`option[value="${freshInscriptionId}"]`)).toHaveCount(1, { timeout: 60_000 });
+  await expect(picker.locator(`option[value="${freshInscriptionId}"]`)).toHaveCount(1);
   await picker.selectOption(freshInscriptionId);
 
   // Satpoint expansion proof: the detail line shows the cat's CURRENT
   // outpoint as resolved via cat21-ord's /inscription satpoint.
   const detail = page.getByTestId('transfer-cat-detail');
-  await expect(detail).toBeVisible({ timeout: 30_000 });
+  await expect(detail).toBeVisible();
   await expect(detail).toContainText(`${freshTxid}:0`);
   await shot(page, 'picker-transfer-02-picked');
 
   // ─── Recipient + fee ───
   const recipientInput = page.getByTestId('transfer-recipient-input');
-  await expect(recipientInput).toBeVisible({ timeout: 30_000 });
+  await expect(recipientInput).toBeVisible();
   await recipientInput.fill(recipientAddress);
   await expect(page.getByTestId('transfer-recipient-invalid')).toHaveCount(0);
   const manualInput = page.getByTestId('fees-picker-manual-input');
@@ -1577,42 +1245,24 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
   await manualInput.press('Tab');
 
   const transferBtn = page.getByTestId('transfer-cta');
-  await expect(transferBtn).toBeVisible({ timeout: 30_000 });
-  await expect(transferBtn).toBeEnabled({ timeout: 60_000 });
+  await expect(transferBtn).toBeVisible();
+  await expect(transferBtn).toBeEnabled();
   await shot(page, 'picker-transfer-03-ready');
 
   // ─── Sign in the wallet popup(s) ───
-  let knownBeforeSign = new Set(context.pages());
+  const knownBeforeSign = new Set(context.pages());
   await transferBtn.click();
-  for (let i = 0; i < 2; i++) {
-    // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-    const approvalSign = await waitForApprovalPopup({
-      context,
-      knownPages: knownBeforeSign,
-      timeoutMs: i === 0 ? 120_000 : 5_000,
-      isApproval: async (p) => {
-        if (!p.url().startsWith('chrome-extension://')) return false;
-        await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-          .waitFor({ state: 'visible', timeout: 60_000 });
-        return true;
-      },
-    }).catch(() => null);
-    if (!approvalSign) break;
-    await shot(approvalSign, `picker-transfer-04-sign-${i + 1}`);
-    await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
-    await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
-    knownBeforeSign = new Set(context.pages());
-  }
+  await approveCat21WalletSignPopup({ context, knownPages: knownBeforeSign });
 
   // ─── Success + on-chain verification ───
   const successCard = page.getByTestId('transfer-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await expect(successCard).toBeVisible();
   const successHref = await successCard.locator('a').first().getAttribute('href');
   const transferTxid = successHref!.match(/\/tx\/([0-9a-f]{64})/)![1];
   console.log(`[picker-transfer] transfer tx = ${transferTxid}`);
 
   mineBlocks(1);
-  const transferTx = await waitForTxConfirmed(transferTxid, 30_000);
+  const transferTx = await waitForTxConfirmed(transferTxid);
   // Regression guard: SDK builder invariant (cat21-transfer.helper.ts
   // throws if lockTime !== 21). Not a protocol requirement on a
   // transfer — the cat moves by sat-tracking regardless.
@@ -1628,7 +1278,7 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
   // The index agrees: cat21-ord now reports the cat at the recipient.
   const newTip = mineBlocks(1);
   await waitForOrdSync(newTip);
-  const ordView = await fetch(`http://localhost:8080/inscription/${freshInscriptionId}`, {
+  const ordView = await fetch(`${CAT21_ORD_URL}/inscription/${freshInscriptionId}`, {
     headers: { Accept: 'application/json' },
   }).then(r => r.json()) as { address?: string; satpoint?: string };
   expect(ordView.address).toBe(recipientAddress);
@@ -1683,28 +1333,12 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   const sellerCatValue = Math.round(catOut.value * 1e8);
   expect(sellerCatValue).toBe(546);
 
-  // ─── Step 2b: Register the REAL cat number for THIS mint outpoint on
-  //             the ord stub, so this test's /output read AND the
-  //             backend's getCatsAtOutput both see a DISTINCT cat number
-  //             instead of the stub's constant [0] fallback. Without it
-  //             the cat-integrity check is circular: test and backend
-  //             read the same constant, so a wrong-outpoint / bad-parse
-  //             getCatsAtOutput regression still "agrees". 4242 is an
-  //             arbitrary non-zero regtest sentinel; vout 0 = the fresh
-  //             cat output. ───
-  const REGISTERED_CAT_NUMBER = 4242;
-  const ordApiUrl = process.env.ORD_API_URL ?? 'http://localhost:8999';
-  const registerRes = await fetch(`${ordApiUrl}/admin/output`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      outpoint: `${freshMintTxid}:0`,
-      cats: [REGISTERED_CAT_NUMBER],
-      value: 546,
-    }),
-  });
-  expect(registerRes.ok, `stub /admin/output register failed: ${registerRes.status}`).toBe(true);
-  console.log(`[bid-mkt] registered cat #${REGISTERED_CAT_NUMBER} at ${freshMintTxid}:0 on the ord stub`);
+  // ─── Step 2b: cat21-ord indexes the fresh cat. The backend's bid
+  //             validator reads the same index at POST, so the cat number
+  //             here is the one it checks the bid's bundle against. ───
+  await waitForOrdSync(Number(rpc('getblockcount').trim()));
+  const freshCatNumber = (await getOrdInscription(catInscriptionId(freshMintTxid))).number;
+  console.log(`[bid-mkt] cat21-ord indexed cat #${freshCatNumber} at ${freshMintTxid}:0`);
 
   // ─── Step 3: Synthesize buyer via bitcoin-cli's ordpool-e2e wallet
   //             (separate P2WPKH/P2TR addresses = separate roles). ───
@@ -1779,39 +1413,25 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   console.log(`[bid-mkt] buyer-signed PSBT length = ${buyerSignedBase64.length}`);
 
   // ─── Step 6: The bid DTO wants (a) the cats bundle at the outpoint,
-  //             (b) the headline cat number. Fetch both from local ord. ───
-  //
-  // On regtest CI, the SDK's consumer-environment doesn't ship a real
-  // ord instance — the workflow serves a `/output/*` stub via
-  // `fees-electrs-stub.mjs`. Step 2b registered the real cat number for
-  // THIS outpoint via /admin/output, so the stub answers with it here
-  // (unregistered outpoints keep the [0] fallback). The backend's ord
-  // client is pointed at the same stub via ORD_API_URL and reads the
-  // same override, so both this test and the backend's validator agree
-  // on the bundle — now on a DISTINCT number, not a shared constant.
-  // For local dev / a future full-ord CI variant, ORD_API_URL just
-  // needs to point at a real ord — the test flow is identical.
-  const ordOutputRes = await fetch(`${ordApiUrl}/output/${freshMintTxid}:0`, {
+  //             (b) the headline cat number. cat21-ord's /output lists the
+  //             cats on the outpoint as inscription ids; the bundle carries
+  //             their numbers. /output and /inscription are two reads of the
+  //             index, so a getCatsAtOutput regression to a wrong outpoint or
+  //             a bad parse makes them disagree here and at the backend. ───
+  const ordOutputRes = await fetch(`${CAT21_ORD_URL}/output/${freshMintTxid}:0`, {
     headers: { Accept: 'application/json' },
   });
-  expect(ordOutputRes.ok, `ord /output must respond OK, got ${ordOutputRes.status}`).toBe(true);
-  const ordOutput = await ordOutputRes.json() as { cats: number[] };
-  expect(Array.isArray(ordOutput.cats)).toBe(true);
-  // The stub returns the cat we registered for THIS outpoint. If
-  // getCatsAtOutput (here OR the backend validator at POST) regressed to
-  // a wrong outpoint / bad parse, the stub falls back to [0] and this
-  // equality — plus the backend's cats-bundle check — fails.
-  expect(ordOutput.cats).toEqual([REGISTERED_CAT_NUMBER]);
-  const cats = [...new Set(ordOutput.cats)].sort((a, b) => a - b);
-  const headlineCatNumber = cats[0];
-  expect(headlineCatNumber).toBe(REGISTERED_CAT_NUMBER);
+  expect(ordOutputRes.ok, `cat21-ord /output must respond OK, got ${ordOutputRes.status}`).toBe(true);
+  const ordOutput = await ordOutputRes.json() as { cats: string[] };
+  expect(ordOutput.cats).toEqual([catInscriptionId(freshMintTxid)]);
+  const cats = [freshCatNumber];
+  const headlineCatNumber = freshCatNumber;
   console.log(`[bid-mkt] cats on UTXO = [${cats.join(',')}], headline = #${headlineCatNumber}`);
 
   // ─── Step 7: POST /api/v1/bids ───
   //
-  // Backend is at http://localhost:3333/api/v1/bids in dev / regtest.
-  // Same URL that cat21.space's Angular env points at.
-  const bidsUrl = process.env.CAT21_INDEXER_URL ?? 'http://localhost:3333';
+  // The same backend cat21.space's Angular env points at.
+  const bidsUrl = INDEXER_URL;
   const bidBody = {
     network: 'regtest',
     catTxid: freshMintTxid,
@@ -1857,56 +1477,32 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   acceptUrl.searchParams.set('catVout', '0');
 
   const page = await context.newPage();
-  const knownBeforeNavigate = new Set(context.pages());
   await page.goto(acceptUrl.toString(), { waitUntil: 'domcontentloaded' });
-
-  // local: optional popup; the SDK approveCat21WalletConnectPopup requires one and the pinned SDK has no optional variant
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: knownBeforeNavigate,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByTestId('get-addresses-approve-button')
-      .click({ timeout: 10_000 }).catch(() => undefined);
-    await reapprove.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
-  }
   await shot(page, 'bid-mkt-01-accept-loaded');
 
   // The URL committed the cat outpoint; accept-offer page shows the
   // "pre-selected from the buyer's link" hint.
   const catFromUrlHint = page.getByTestId('accept-offer-cat-from-url');
-  await expect(catFromUrlHint).toBeVisible({ timeout: 30_000 });
+  await expect(catFromUrlHint).toBeVisible();
   await expect(catFromUrlHint).toContainText(freshMintTxid);
 
   const acceptBtn = page.getByTestId('accept-offer-sign-cta');
-  await expect(acceptBtn).toBeVisible({ timeout: 30_000 });
-  await expect(acceptBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(acceptBtn).toBeVisible();
+  await expect(acceptBtn).toBeEnabled();
   await shot(page, 'bid-mkt-02-accept-ready');
 
   // ─── Step 10: Click Accept → cat21-wallet sign popup → sign. ───
   const knownBeforeSign = new Set(context.pages());
   await acceptBtn.click();
-  // local: approveCat21WalletSignPopup caps the wait at 90s and returns no page to assert on or wait for close
-  const approvalSign = await waitForApprovalPopup({
+  await approveCat21WalletSignPopup({
     context,
     knownPages: knownBeforeSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    screenshot: async (p) => { await shot(p, 'bid-mkt-03-sign-approval'); },
   });
-  await shot(approvalSign, 'bid-mkt-03-sign-approval');
-  await clickApprovalButton(approvalSign.getByRole('button', { name: /^(confirm|sign|approve)$/i }).first(), approvalSign, 30_000);
-  await approvalSign.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
 
   // ─── Step 11: Success surfaces. Extract the broadcast txid. ───
   const successCard = page.getByTestId('accept-offer-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await expect(successCard).toBeVisible();
   await shot(page, 'bid-mkt-04-success');
   const successLink = successCard.locator('a').first();
   const successHref = await successLink.getAttribute('href');
@@ -1917,7 +1513,7 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
 
   // ─── Step 12: On-chain verification. Mine + read + assert. ───
   mineBlocks(1);
-  const settleTx = await waitForTxConfirmed(settleTxid, 30_000);
+  const settleTx = await waitForTxConfirmed(settleTxid);
   // Regression guard for the SDK's builder invariant (same as the
   // offer round-trip above): `cat21-offer.helper.ts` throws if
   // `lockTime !== 21` at build time. Not a protocol requirement — a

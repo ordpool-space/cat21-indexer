@@ -1,6 +1,7 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, Xverse 2.3.2 (.crx, seeded user-data-dir)
+ * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-indexer backend (:9998, syncing
+ *         from the :8999 stub), Xverse 2.3.2 (.crx, seeded user-data-dir)
  * Faked:  fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest), written in the stub, not captured:
  *         /api/v1/fees/recommended (static DEFAULT_FEES) and ord /output for both ord URLs; every other
  *         /api/* path is proxied to the real electrs
@@ -8,7 +9,7 @@
  *         page route on /output/<outpoint> for one outpoint -> catOutputFixture (ordpool-sdk/core)
  *         page route on /api/v1/fees/recommended -> recommendedFeesFixture with an invented spread
  *         page route on POST /api/tx -> 400 (broadcast-failure test)
- *         cat21ApiUrl points at :9998, where no server listens in this lane
+ *         Xverse's vendor backends -> installXverseOfflineRoutes (ordpool-sdk/e2e, captured)
  * Proves: mint round-trip through Xverse with nLockTime=21; a cat-flagged coin shows the asset
  *         warning and can still be spent; fee tiers drive the manual input; manual fee overrides land
  *         on-chain; sign cancel and broadcast failure surface as errors
@@ -26,9 +27,12 @@ import {
   mineBlocks,
   waitForTxConfirmed,
   waitForApprovalPopup,
-  isVisibleWithin,
+  approvalGate,
+  clickApprovalAndRequireClose,
+  waitForStyleClickable,
+  installContextErrorGuard,
+  installXverseOfflineRoutes,
 } from 'ordpool-sdk/e2e';
-import { installBrowserErrorGuard } from './console-guard';
 import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
 // Canonical clean `/output` body (indexed, carries nothing), merged across the
@@ -63,14 +67,14 @@ const CAT_OUTPUT_BODY = { ...catOutputFixture().ord, ...catOutputFixture().cat21
  *     path-for-path /api/* proxy to electrs
  *   - cat21-indexer/frontend is served at FRONTEND_URL with the regtest
  *     cat21Config: mempoolApiUrl and both ord URLs -> :8999,
- *     cat21ApiUrl -> :9998, where no server listens in this lane
+ *     cat21ApiUrl -> :9998, the cat21-indexer backend the lane boots
  *   - the Xverse `.crx` is unpacked at XVERSE_EXT_PATH
  *   - a seeded user-data-dir is at XVERSE_SEED_USER_DATA_DIR (the
  *     SDK's globalSetup produced it during the workflow's earlier
  *     "seed Xverse" step)
  *
- * The spec is CI-only — the Xverse binary stays off contributor
- * laptops. The regtest playwright config refuses to run locally.
+ * Needs the Xverse binary and its seeded user-data-dir, staged by the
+ * workflow.
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
@@ -90,6 +94,7 @@ const RESULTS_DIR = path.resolve(__dirname, '../../test-results');
 
 let context: BrowserContext;
 let extensionId: string;
+let browserErrorGuard: ReturnType<typeof installContextErrorGuard>;
 // Hoisted state shared across `test()` blocks. The persistent context
 // remembers the connected wallet in localStorage, so test 2 can spin
 // up a fresh page and auto-reconnect to the same payment address.
@@ -99,7 +104,7 @@ async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({
     path: path.resolve(RESULTS_DIR, `cat21-mint-regtest-${name}.png`),
     fullPage: true,
-  }).catch(() => undefined);
+  });
 }
 
 /**
@@ -111,7 +116,7 @@ async function shot(p: Page, name: string): Promise<void> {
  */
 async function navigateViaHeaderToMint(page: Page): Promise<void> {
   await page.goto(FRONTEND_URL, { waitUntil: 'domcontentloaded' });
-  await page.getByTestId('wallet-connected-btn').waitFor({ state: 'visible', timeout: 30_000 });
+  await page.getByTestId('wallet-connected-btn').waitFor({ state: 'visible' });
   await page.getByTestId('nav-dashboard').click();
   await page.waitForURL('**/dashboard');
   await page.getByTestId('dashboard-card-mint').click();
@@ -156,6 +161,10 @@ test.beforeAll(async () => {
     ],
     viewport: { width: 1280, height: 900 },
   });
+  await installXverseOfflineRoutes(context);
+  // Fails a test on any uncaught exception, console.error or failed request on
+  // a page of ours. A test that provokes one declares it with expectBrowserError.
+  browserErrorGuard = installContextErrorGuard(context);
 
   // Default every BROWSER-side ord `/output/<outpoint>` scan to a clean body.
   // The SDK's safe-auto funding recommendation force-scans the funding UTXO
@@ -177,9 +186,14 @@ test.beforeAll(async () => {
 
   let [worker] = context.serviceWorkers();
   if (!worker) {
-    worker = await context.waitForEvent('serviceworker', { timeout: 30_000 });
+    worker = await context.waitForEvent('serviceworker');
   }
   extensionId = worker.url().split('/')[2];
+  browserErrorGuard.assertClean();
+});
+
+test.afterEach(() => {
+  browserErrorGuard.assertClean();
 });
 
 test.afterAll(async () => {
@@ -194,31 +208,20 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   await primer.waitForFunction(() => {
     const t = (document.body.innerText || '').toLowerCase();
     return t.includes('unlock') || t.includes('account 1');
-  }, undefined, { timeout: 30_000, polling: 250 });
+  }, undefined, { polling: 250 });
   if (/unlock/i.test(await primer.locator('body').innerText())) {
     await primer.locator('input[type="password"]').first().fill(TEST_PASSWORD);
     await primer.getByRole('button', { name: /^unlock$/i }).first().click();
     await primer.waitForFunction(() => {
       const t = (document.body.innerText || '').toLowerCase();
       return t.includes('account 1') || t.includes('not now') || t.includes('zest') || t.includes('send');
-    }, undefined, { timeout: 30_000, polling: 250 });
-  }
-  const notNow = primer.getByText('Not now', { exact: true }).first();
-  // isVisibleWithin, not isVisible({ timeout }): Playwright ignores the timeout
-  // on isVisible (it is @deprecated-and-ignored), so the check would run before
-  // an optional "Not now" dialog had rendered and the dismissal would no-op.
-  if (await isVisibleWithin(notNow, 1_500)) {
-    await notNow.click({ force: true }).catch(() => undefined);
+    }, undefined, { polling: 250 });
   }
   await shot(primer, '01-unlocked');
   await primer.close();
 
   // ─── 2. Open /dashboard/mint, click Connect, approve in Xverse ─
   const page = await context.newPage();
-  // Rule §11: any unfiltered browser console.error / pageerror during
-  // the mint arc fails the test. Assertion runs at test end after
-  // positive assertions land.
-  const errorGuard = installBrowserErrorGuard(page);
   await page.goto(`${FRONTEND_URL}${MINT_PATH}`, { waitUntil: 'domcontentloaded' });
   await shot(page, '02-page-loaded');
 
@@ -226,16 +229,15 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // when no wallet is connected. The card embeds <app-wallet-connect>
   // which renders a "Connect" button that opens an ngb-modal picker.
   const cta = page.getByTestId('mint-cta');
-  await expect(cta).toBeVisible({ timeout: 30_000 });
+  await expect(cta).toBeVisible();
 
   // CRITICAL ordering: snapshot existing pages BEFORE we kick off the
   // connect flow. Clicking Xverse in the modal triggers sats-connect,
   // which spawns the Xverse approval tab; if we snapshot AFTER the
   // click the new tab can already be in `context.pages()` by the time
   // we read it, and `waitForApprovalPopup` (which filters out pages
-  // in the "known" set) will never see anything new and hit the
-  // 60s timeout. Three runs in a row failed with that pattern
-  // (27482094562, 27490459274, 27493343785) before this fix.
+  // in the "known" set) will never see anything new and run out at
+  // the per-wait bound.
   const knownPagesBeforeConnect = new Set(context.pages());
 
   // The wallet-connect trigger inside the CTA (an icon + "Connect"). Pinned by
@@ -245,26 +247,17 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // The modal lists supported wallets — click Xverse. Pick by testid
   // (matrix-driven rows carry `wallet-pick-<type>`), immune to label wording.
   await page.getByTestId('wallet-pick-xverse').first()
-    .click({ timeout: 20_000 });
+    .click();
   await shot(page, '03-picker-clicked');
 
+  const connectButton = (p: Page) => p.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i }).first();
   const approvalConnect = await waitForApprovalPopup({
     context,
     knownPages: knownPagesBeforeConnect,
-    timeoutMs: 60_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.waitForFunction(() => {
-        const t = (document.body.innerText || '').toLowerCase();
-        return ['connect', 'approve', 'confirm', 'allow'].some((s) => t.includes(s));
-      }, undefined, { timeout: 60_000, polling: 500 });
-      return true;
-    },
+    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: connectButton }),
   });
   await shot(approvalConnect, '04-connect-approval');
-  await approvalConnect.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
-    .first().click();
-  await approvalConnect.close().catch(() => undefined);
+  await clickApprovalAndRequireClose(connectButton(approvalConnect), approvalConnect, { label: 'Xverse connect popup' });
 
   // ─── 3. Read the payment address from the empty-state ─────────
   // Before funding, the wallet has no viable UTXOs. cat21.space
@@ -272,9 +265,9 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // `<code>{{ connectedWallet()!.paymentAddress }}</code>` we can
   // pluck the bcrt1q address from verbatim.
   const noUtxos = page.getByTestId('mint-no-utxos');
-  await expect(noUtxos).toBeVisible({ timeout: 60_000 });
+  await expect(noUtxos).toBeVisible();
   const paymentCode = noUtxos.locator('code').first();
-  await expect(paymentCode).toHaveText(/^bcrt1q/, { timeout: 30_000 });
+  await expect(paymentCode).toHaveText(/^bcrt1q/);
   const paymentAddress = (await paymentCode.textContent())!.trim();
   console.log(`[cat21-mint-page] payment=${paymentAddress}`);
   const wallet = { paymentAddress };
@@ -296,28 +289,8 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // The orchestrator fires getUtxos once on connect; funding after
   // doesn't trigger a re-fetch. A page reload forces a fresh
   // utxos$ pipeline. The SDK persists the last-connected wallet in
-  // localStorage and auto-reconnects on init; if Xverse pops a
-  // permission-renewal popup we approve it, otherwise move on.
-  const knownPagesBeforeReload = new Set(context.pages());
+  // localStorage and restores it on init without asking the wallet.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: knownPagesBeforeReload,
-    timeoutMs: 8_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.waitForFunction(() => {
-        const t = (document.body.innerText || '').toLowerCase();
-        return ['connect', 'approve', 'confirm', 'allow'].some((s) => t.includes(s));
-      }, undefined, { timeout: 8_000, polling: 250 });
-      return true;
-    },
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
-      .first().click();
-    await reapprove.close().catch(() => undefined);
-  }
   await shot(page, '04b-reloaded');
 
   // ─── 5. Wait for the "found funds" banner + Mint button ────────
@@ -326,11 +299,11 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // (data-testid="mint-found-funds") render. The mint button gates
   // on `canMint()`; once funded + auto-picked, it enables.
   const foundFunds = page.getByTestId('mint-found-funds');
-  await expect(foundFunds).toBeVisible({ timeout: 90_000 });
+  await expect(foundFunds).toBeVisible();
   await shot(page, '05-found-funds');
 
   const mintBtn = page.getByTestId('mint-btn');
-  await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(mintBtn).toBeEnabled();
 
   // ─── 5b. Sub-floor input is silently ignored ──────────────────
   // The picker's `onManualInputChange` short-circuits values below
@@ -344,7 +317,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const minerFeeVal2 = page.locator(
     '[data-testid="mint-summary-section"] .mint-summary-row',
   ).filter({ hasText: /Miner fee/ }).locator('.val');
-  await expect(minerFeeVal2).toBeVisible({ timeout: 10_000 });
+  await expect(minerFeeVal2).toBeVisible();
   const baseFeeStr = (await minerFeeVal2.textContent())!.trim();
   const baseFee = Number(baseFeeStr.replace(/[^\d]/g, ''));
   expect(baseFee).toBeGreaterThan(0);
@@ -352,14 +325,14 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const manualFeeInput = page.getByTestId('fees-picker-manual-input');
   await manualFeeInput.fill('0');
   await manualFeeInput.press('Tab');
-  await expect(mintBtn).toBeEnabled({ timeout: 5_000 });
+  await expect(mintBtn).toBeEnabled();
   expect(
     Number((await minerFeeVal2.textContent())!.replace(/[^\d]/g, '')),
   ).toBe(baseFee);
 
   await manualFeeInput.fill('0.05');
   await manualFeeInput.press('Tab');
-  await expect(mintBtn).toBeEnabled({ timeout: 5_000 });
+  await expect(mintBtn).toBeEnabled();
   expect(
     Number((await minerFeeVal2.textContent())!.replace(/[^\d]/g, '')),
   ).toBe(baseFee);
@@ -367,7 +340,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // Reset to a clean known value for the rest of the round-trip.
   await manualFeeInput.fill('1');
   await manualFeeInput.press('Tab');
-  await expect(mintBtn).toBeEnabled({ timeout: 10_000 });
+  await expect(mintBtn).toBeEnabled();
 
   // ─── 6. Click Mint, approve sign popup ─────────────────────────
   const knownPagesBeforeSign = new Set(context.pages());
@@ -376,44 +349,19 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const approvalSign = await waitForApprovalPopup({
     context,
     knownPages: knownPagesBeforeSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByText(/review transaction/i).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
   });
   await shot(approvalSign, '06-sign-approval');
+  // Xverse renders Confirm before its handlers attach and shows it faded until then.
+  const approvalSignConfirm = approvalSign.getByRole('button', { name: /^confirm$/i }).first();
+  await expect(approvalSignConfirm).toBeEnabled();
+  await waitForStyleClickable(approvalSignConfirm, { label: 'Xverse confirm' });
+  await clickApprovalAndRequireClose(approvalSignConfirm, approvalSign, { label: 'Xverse sign popup' });
 
-  await approvalSign.waitForFunction(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    return buttons.some((b) => {
-      if (!/^confirm$/i.test(b.textContent?.trim() ?? '')) return false;
-      if (b.hasAttribute('disabled')) return false;
-      const style = getComputedStyle(b);
-      return style.pointerEvents !== 'none' && style.visibility !== 'hidden';
-    });
-  }, undefined, { timeout: 30_000, polling: 250 });
-  await expect(approvalSign.getByRole('button', { name: /^confirm$/i }).first()).toBeEnabled({ timeout: 30_000 });
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (approvalSign.isClosed()) break;
-    await approvalSign.getByRole('button', { name: /^confirm$/i }).first()
-      .click({ force: true })
-      .catch(() => undefined);
-    const closed = new Promise<void>((res) => approvalSign.once('close', () => res()));
-    await Promise.race([
-      closed,
-      expect(approvalSign.getByRole('button', { name: /^confirm$/i }).first())
-        .toBeHidden({ timeout: 30_000 }),
-    ]).catch(() => undefined);
-    if (approvalSign.isClosed()) break;
-  }
 
   // ─── 7. Wait for success card + extract broadcast txid ────────
   const successCard = page.getByTestId('mint-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await expect(successCard).toBeVisible();
   // Rule §6: complement the positive success card with a DOM-state
   // proof that the mint button dropped out of the `minting`/`ready`
   // phase. On cat21.space the template gates mint-btn on `@if
@@ -437,7 +385,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // so we stop at locktime=21 + confirmed block. The deeper parser
   // assertions live in the ordpool sister spec.
   mineBlocks(1);
-  const esploraTx = await waitForTxConfirmed(broadcastTxid, 30_000);
+  const esploraTx = await waitForTxConfirmed(broadcastTxid);
   console.log(`[cat21-mint-page] locktime=${esploraTx.locktime}  block_hash=${esploraTx.status.block_hash}`);
   expect(esploraTx.locktime).toBe(21);
   // RBF prevention — CAT-21 inputs MUST have sequence ≥ 0xfffffffe.
@@ -455,10 +403,6 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   // sat of the first output.
   expect(esploraTx.vout.length).toBeGreaterThanOrEqual(1);
   expect(esploraTx.vout[0].value).toBe(546);
-
-  // Rule §11: after the full mint arc is proven, fail if any
-  // unfiltered browser console.error / pageerror surfaced.
-  errorGuard.assertNone();
 });
 
 /**
@@ -503,7 +447,6 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
     paymentAddress,
     (u) => u.value === SMALL_FUND_SATS && u.txid === fundTxid,
     `the ${SMALL_FUND_SATS}-sat funding coin from ${fundTxid}`,
-    15_000,
   );
   const catOutpoint = `${small.txid}:${small.vout}`;
   console.log(`[asset-scanner] cat-bearing outpoint = ${catOutpoint}`);
@@ -538,24 +481,10 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   await navigateViaHeaderToMint(page);
   await shot(page, 'as-01-page-loaded');
 
-  // Auto-reconnect from localStorage. Approve a permission-renewal
-  // popup if Xverse pops one; otherwise move on.
-  const known = new Set(context.pages());
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: known,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
-      .first().click().catch(() => undefined);
-    await reapprove.close().catch(() => undefined);
-  }
 
   // Expand the funding-source picker.
   const pickerSummary = page.getByTestId('mint-expert-summary').first();
-  await expect(pickerSummary).toBeVisible({ timeout: 60_000 });
+  await expect(pickerSummary).toBeVisible();
   // If pickerOpenByDefault() returned true the details is already open;
   // clicking would collapse it. Toggle only if needed.
   const expanded = await page.locator('details[data-testid="mint-expert"][open]').count();
@@ -569,8 +498,8 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   // at once, kept separate so the async scan transition has its own retry and the
   // bucket proof is explicit rather than a side effect of the selector resolving.
   const assetRow = page.locator('[data-testid^="utxo-row-"]').filter({ hasText: catOutpoint }).first();
-  await expect(assetRow).toBeVisible({ timeout: 45_000 });
-  await expect(assetRow).toHaveAttribute('data-bucket', 'assets', { timeout: 45_000 });
+  await expect(assetRow).toBeVisible();
+  await expect(assetRow).toHaveAttribute('data-bucket', 'assets');
   await shot(page, 'as-03-asset-row-visible');
 
   // Bucket badge text + class.
@@ -587,7 +516,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   // `data-testid="asset-found-warning"` summary alert.
   await overrideBtn.click();
   const warning = page.getByTestId('asset-found-warning');
-  await expect(warning).toBeVisible({ timeout: 10_000 });
+  await expect(warning).toBeVisible();
   await shot(page, 'as-04-warning-after-select');
 
   // ─── "Use anyway" → full mint round-trip — the cat is burned ──
@@ -600,50 +529,28 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   //      what I'm doing, mint anyway" actually reaches the chain
   //      and the previous cat sat is symbolically burned.
   const burnMintBtn = page.getByTestId('mint-btn');
-  await expect(burnMintBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(burnMintBtn).toBeEnabled();
   const knownBeforeBurnSign = new Set(context.pages());
   await burnMintBtn.click();
   const burnSign = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeBurnSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByText(/review transaction/i).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
   });
-  await burnSign.waitForFunction(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    return buttons.some((b) => {
-      if (!/^confirm$/i.test(b.textContent?.trim() ?? '')) return false;
-      if (b.hasAttribute('disabled')) return false;
-      const style = getComputedStyle(b);
-      return style.pointerEvents !== 'none' && style.visibility !== 'hidden';
-    });
-  }, undefined, { timeout: 30_000, polling: 250 });
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (burnSign.isClosed()) break;
-    await burnSign.getByRole('button', { name: /^confirm$/i }).first()
-      .click({ force: true })
-      .catch(() => undefined);
-    const closed = new Promise<void>((res) => burnSign.once('close', () => res()));
-    await Promise.race([
-      closed,
-      expect(burnSign.getByRole('button', { name: /^confirm$/i }).first())
-        .toBeHidden({ timeout: 30_000 }),
-    ]).catch(() => undefined);
-    if (burnSign.isClosed()) break;
-  }
+  // Xverse renders Confirm before its handlers attach and shows it faded until then.
+  const burnSignConfirm = burnSign.getByRole('button', { name: /^confirm$/i }).first();
+  await expect(burnSignConfirm).toBeEnabled();
+  await waitForStyleClickable(burnSignConfirm, { label: 'Xverse confirm' });
+  await clickApprovalAndRequireClose(burnSignConfirm, burnSign, { label: 'Xverse sign popup' });
+
   const burnSuccessCard = page.getByTestId('mint-success');
-  await expect(burnSuccessCard).toBeVisible({ timeout: 90_000 });
+  await expect(burnSuccessCard).toBeVisible();
   const burnHref = await burnSuccessCard.locator('a').first().getAttribute('href');
   const burnTxidMatch = burnHref!.match(/\/tx\/([0-9a-f]{64})/);
   expect(burnTxidMatch).not.toBeNull();
   const burnTxid = burnTxidMatch![1];
   mineBlocks(1);
-  const burnTx = await waitForTxConfirmed(burnTxid, 30_000);
+  const burnTx = await waitForTxConfirmed(burnTxid);
   expect(burnTx.locktime).toBe(21);
   expect(burnTx.vout[0].value).toBe(546);
   for (const vin of burnTx.vin) {
@@ -688,23 +595,11 @@ test('fee picker: tier clicks update the manual input + active state', async () 
   await navigateViaHeaderToMint(page);
   await shot(page, 'fp-01-loaded');
 
-  const known = new Set(context.pages());
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: known,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
-      .first().click().catch(() => undefined);
-    await reapprove.close().catch(() => undefined);
-  }
 
   // Wait for the picker to come out of its disabled-while-loading state.
   const buttons = page.locator('[data-testid^="fees-picker-tier-"]');
-  await expect(buttons).toHaveCount(4, { timeout: 30_000 });
-  await expect(buttons.first()).toBeEnabled({ timeout: 30_000 });
+  await expect(buttons).toHaveCount(4);
+  await expect(buttons.first()).toBeEnabled();
   await shot(page, 'fp-02-picker-ready');
 
   // Tier order on screen: 0=Fastest(5), 1=Half hour(3), 2=Hour(1), 3=Economy(1)
@@ -719,19 +614,19 @@ test('fee picker: tier clicks update the manual input + active state', async () 
 
   // Click Fastest → input "5" + active class on the Fastest button.
   await buttons.nth(0).click();
-  await expect(manualInput).toHaveValue('5', { timeout: 5_000 });
+  await expect(manualInput).toHaveValue('5');
   await expect(buttons.nth(0)).toHaveClass(/tier-btn-active/);
   await shot(page, 'fp-03-fastest-clicked');
 
   // Click Half hour → input "3" + active class moves.
   await buttons.nth(1).click();
-  await expect(manualInput).toHaveValue('3', { timeout: 5_000 });
+  await expect(manualInput).toHaveValue('3');
   await expect(buttons.nth(1)).toHaveClass(/tier-btn-active/);
   await expect(buttons.nth(0)).not.toHaveClass(/tier-btn-active/);
 
   // Click Hour → input "1" + active class moves.
   await buttons.nth(2).click();
-  await expect(manualInput).toHaveValue('1', { timeout: 5_000 });
+  await expect(manualInput).toHaveValue('1');
   await expect(buttons.nth(2)).toHaveClass(/tier-btn-active/);
 
   // ─── Manual-input propagates to the orchestrator simulation ───
@@ -744,7 +639,7 @@ test('fee picker: tier clicks update the manual input + active state', async () 
   const minerFeeVal = page.locator(
     '[data-testid="mint-summary-section"] .mint-summary-row',
   ).filter({ hasText: /Miner fee/ }).locator('.val');
-  await expect(minerFeeVal).toBeVisible({ timeout: 10_000 });
+  await expect(minerFeeVal).toBeVisible();
   const feeAt1Text = (await minerFeeVal.textContent())!.trim();
   const feeAt1 = Number(feeAt1Text.replace(/[^\d]/g, ''));
   expect(Number.isFinite(feeAt1)).toBe(true);
@@ -766,7 +661,7 @@ test('fee picker: tier clicks update the manual input + active state', async () 
   await expect.poll(async () => {
     const t = (await minerFeeVal.textContent())!.trim();
     return Number(t.replace(/[^\d]/g, ''));
-  }, { timeout: 5_000, message: 'miner fee never updated after typing rate=7' })
+  }, { message: 'miner fee never updated after typing rate=7' })
     .toBeGreaterThan(feeAt1 * 3);
 
   const feeAt7Text = (await minerFeeVal.textContent())!.trim();
@@ -780,7 +675,7 @@ test('fee picker: tier clicks update the manual input + active state', async () 
   await expect.poll(async () => {
     const t = (await minerFeeVal.textContent())!.trim();
     return Number(t.replace(/[^\d]/g, ''));
-  }, { timeout: 5_000 }).toBeLessThan(feeAt7);
+  }).toBeLessThan(feeAt7);
 });
 
 /**
@@ -846,28 +741,16 @@ async function mintAtRateAndVerify(opts: {
 
   // ─── Open page, auto-reconnect ───────────────────────────────
   await navigateViaHeaderToMint(page);
-  const known = new Set(context.pages());
-  const reapprove = await waitForApprovalPopup({
-    context,
-    knownPages: known,
-    timeoutMs: 6_000,
-    isApproval: async (p) => p.url().startsWith('chrome-extension://'),
-  }).catch(() => null);
-  if (reapprove) {
-    await reapprove.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i })
-      .first().click().catch(() => undefined);
-    await reapprove.close().catch(() => undefined);
-  }
   await shot(page, `mr-${opts.scenarioLabel}-01-loaded`);
 
   // ─── Wait for picker, sanity-pin that the tiles reflect the
   // expected scenario context (verifies the mock landed, where
   // applicable). ──────────────────────────────────────────────
   const tiles = page.locator('[data-testid^="fees-picker-tier-"]');
-  await expect(tiles).toHaveCount(4, { timeout: 30_000 });
-  await expect(tiles.first()).toBeEnabled({ timeout: 30_000 });
+  await expect(tiles).toHaveCount(4);
+  await expect(tiles.first()).toBeEnabled();
   if (opts.mockFeesAsHigh) {
-    await expect(tiles.nth(0)).toContainText('100', { timeout: 10_000 });
+    await expect(tiles.nth(0)).toContainText('100');
   }
 
   // ─── Override with the user's typed rate ─────────────────────
@@ -878,9 +761,9 @@ async function mintAtRateAndVerify(opts: {
 
   // ─── Wait for found-funds + Mint button ──────────────────────
   const foundFunds = page.getByTestId('mint-found-funds');
-  await expect(foundFunds).toBeVisible({ timeout: 90_000 });
+  await expect(foundFunds).toBeVisible();
   const mintBtn = page.getByTestId('mint-btn');
-  await expect(mintBtn).toBeEnabled({ timeout: 30_000 });
+  await expect(mintBtn).toBeEnabled();
   await shot(page, `mr-${opts.scenarioLabel}-03-ready`);
 
   // ─── Click Mint, approve sign popup ──────────────────────────
@@ -889,42 +772,19 @@ async function mintAtRateAndVerify(opts: {
   const approvalSign = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeSign,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByText(/review transaction/i).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
   });
   await shot(approvalSign, `mr-${opts.scenarioLabel}-04-sign-popup`);
+  // Xverse renders Confirm before its handlers attach and shows it faded until then.
+  const approvalSignConfirm = approvalSign.getByRole('button', { name: /^confirm$/i }).first();
+  await expect(approvalSignConfirm).toBeEnabled();
+  await waitForStyleClickable(approvalSignConfirm, { label: 'Xverse confirm' });
+  await clickApprovalAndRequireClose(approvalSignConfirm, approvalSign, { label: 'Xverse sign popup' });
 
-  await approvalSign.waitForFunction(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    return buttons.some((b) => {
-      if (!/^confirm$/i.test(b.textContent?.trim() ?? '')) return false;
-      if (b.hasAttribute('disabled')) return false;
-      const style = getComputedStyle(b);
-      return style.pointerEvents !== 'none' && style.visibility !== 'hidden';
-    });
-  }, undefined, { timeout: 30_000, polling: 250 });
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (approvalSign.isClosed()) break;
-    await approvalSign.getByRole('button', { name: /^confirm$/i }).first()
-      .click({ force: true })
-      .catch(() => undefined);
-    const closed = new Promise<void>((res) => approvalSign.once('close', () => res()));
-    await Promise.race([
-      closed,
-      expect(approvalSign.getByRole('button', { name: /^confirm$/i }).first())
-        .toBeHidden({ timeout: 30_000 }),
-    ]).catch(() => undefined);
-    if (approvalSign.isClosed()) break;
-  }
 
   // ─── Wait for success card + broadcast txid ──────────────────
   const successCard = page.getByTestId('mint-success');
-  await expect(successCard).toBeVisible({ timeout: 90_000 });
+  await expect(successCard).toBeVisible();
   await shot(page, `mr-${opts.scenarioLabel}-05-success`);
   const successHref = await successCard.locator('a').first().getAttribute('href');
   const txidMatch = successHref!.match(/\/tx\/([0-9a-f]{64})/);
@@ -933,7 +793,7 @@ async function mintAtRateAndVerify(opts: {
 
   // ─── Mine confirmation block, read on-chain tx ───────────────
   mineBlocks(1);
-  const tx = await waitForTxConfirmed(broadcastTxid, 30_000);
+  const tx = await waitForTxConfirmed(broadcastTxid);
   expect(tx.locktime).toBe(21);
   // RBF + output integrity on every mint round-trip — see test 1
   // for the safety rationale.
@@ -949,7 +809,7 @@ async function mintAtRateAndVerify(opts: {
   const rate = tx.fee / vsize;
   console.log(`[${opts.scenarioLabel}] fee=${tx.fee} sat, vsize=${vsize} vB, rate=${rate.toFixed(3)} sat/vB (target ${opts.rate})`);
 
-  await page.close().catch(() => undefined);
+  await page.close();
   return { broadcastTxid, fee: tx.fee, vsize, rate };
 }
 
@@ -986,7 +846,7 @@ test('sign-popup cancel keeps state coherent', async () => {
   const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
-  await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
+  await expect(mintBtn).toBeEnabled();
   await shot(page, 'cancel-01-ready');
 
   const knownBeforeCancel = new Set(context.pages());
@@ -994,24 +854,20 @@ test('sign-popup cancel keeps state coherent', async () => {
   const cancelPopup = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeCancel,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByText(/review transaction/i).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
   });
   await shot(cancelPopup, 'cancel-02-popup');
-  await cancelPopup.getByRole('button', { name: /^cancel$/i }).first()
-    .click({ force: true });
-  await cancelPopup.waitForEvent('close', { timeout: 30_000 }).catch(() => undefined);
+  browserErrorGuard.expectBrowserError(
+    /\[Connect\] Error during sign transaction request cancel/,
+    'the spec clicks Cancel in the Xverse sign popup and sats-connect logs the rejected request',
+  );
+  const cancelButton = cancelPopup.getByRole('button', { name: /^cancel$/i }).first();
+  await waitForStyleClickable(cancelButton, { label: 'Xverse cancel' });
+  await clickApprovalAndRequireClose(cancelButton, cancelPopup, { label: 'Xverse sign popup (cancel)' });
 
-  // Absence-of-event assertion: there is no positive signal for "no
-  // success will EVER appear" — the orchestrator's late success would
-  // fire async. Bounded 2s pause is a documented last-resort per
-  // ~/Work/ordpool/E2E_BEST_PRACTICES.md §8.
-  await page.waitForTimeout(2_000);
+  // The rejected sign settles the mint as an error, which is the state that
+  // says no success is coming.
+  await expect(page.getByTestId('mint-error')).toBeVisible();
   await shot(page, 'cancel-03-after-close');
   await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });
@@ -1032,6 +888,10 @@ test('broadcast failure surfaces as an error, not a fake success', async () => {
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();
+  browserErrorGuard.expectBrowserError(
+    /Failed to load resource: the server responded with a status of 400/,
+    'the spec fulfils POST /api/tx with 400 to prove the broadcast error path',
+  );
   await page.route('**/api/tx', async (route) => {
     if (route.request().method() === 'POST') {
       await route.fulfill({
@@ -1050,46 +910,24 @@ test('broadcast failure surfaces as an error, not a fake success', async () => {
   const manualInput = page.getByTestId('fees-picker-manual-input');
   await manualInput.fill('1');
   await manualInput.press('Tab');
-  await expect(mintBtn).toBeEnabled({ timeout: 60_000 });
+  await expect(mintBtn).toBeEnabled();
 
   const knownBeforeBcast = new Set(context.pages());
   await mintBtn.click();
   const bcastSign = await waitForApprovalPopup({
     context,
     knownPages: knownBeforeBcast,
-    timeoutMs: 120_000,
-    isApproval: async (p) => {
-      if (!p.url().startsWith('chrome-extension://')) return false;
-      await p.getByText(/review transaction/i).first()
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      return true;
-    },
+    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
   });
-  await bcastSign.waitForFunction(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    return buttons.some((b) => {
-      if (!/^confirm$/i.test(b.textContent?.trim() ?? '')) return false;
-      if (b.hasAttribute('disabled')) return false;
-      const style = getComputedStyle(b);
-      return style.pointerEvents !== 'none' && style.visibility !== 'hidden';
-    });
-  }, undefined, { timeout: 30_000, polling: 250 });
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (bcastSign.isClosed()) break;
-    await bcastSign.getByRole('button', { name: /^confirm$/i }).first()
-      .click({ force: true })
-      .catch(() => undefined);
-    const closed = new Promise<void>((res) => bcastSign.once('close', () => res()));
-    await Promise.race([
-      closed,
-      expect(bcastSign.getByRole('button', { name: /^confirm$/i }).first())
-        .toBeHidden({ timeout: 30_000 }),
-    ]).catch(() => undefined);
-    if (bcastSign.isClosed()) break;
-  }
+  // Xverse renders Confirm before its handlers attach and shows it faded until then.
+  const bcastSignConfirm = bcastSign.getByRole('button', { name: /^confirm$/i }).first();
+  await expect(bcastSignConfirm).toBeEnabled();
+  await waitForStyleClickable(bcastSignConfirm, { label: 'Xverse confirm' });
+  await clickApprovalAndRequireClose(bcastSignConfirm, bcastSign, { label: 'Xverse sign popup' });
+
 
   const errorAlert = page.getByTestId('mint-error');
-  await expect(errorAlert).toBeVisible({ timeout: 60_000 });
+  await expect(errorAlert).toBeVisible();
   await shot(page, 'bcast-fail-01-error-alert');
   await expect(page.getByTestId('mint-success')).toHaveCount(0);
 });
