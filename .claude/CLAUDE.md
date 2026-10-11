@@ -119,7 +119,7 @@ Why: a "cleanup" swapping panels for `var(--bs-tertiary-bg)` reintroduces the ne
 - Separate-address wallet + no clean coin covers: `asset-notice` (notice names the asset, CTA enabled, proceed). One-address wallet: `expert-required` (CTA disabled + coin picker). Clean coin covers: silent auto-pick.
 - The component adopts the recommendation for BOTH `auto` and `asset-notice` (adopting only `auto` makes the notice never render). Topology is `'derive'`d from the wallet, never a hardcoded wallet list.
 - What cat21.space's own picker must offer (a DELIBERATE duplicate of HQ's clause, not a copy to dedupe: HQ answers "what every surface must do", this answers "what cat21.space must do", so a future divergence is a decision, not drift): the coin picker stays REACHABLE at all times, including the clean-covers happy path where the user is just not pushed through it. It NAMES the assets exactly (inscription, rune, cat number, rare sat, each linked), marks the RECOMMENDED coin, and lets the user override.
-Ref: workspace HQ HARD RULE "Never let a user spend an asset to the miners by accident"; SDK `funding-safety.ts`. Lanes: `cat21wallet-mint-assetnotice-regtest.spec.ts`, `cat21wallet-transfer-offer-assetnotice-regtest.spec.ts`, `funding-guard-inscription-regtest.spec.ts`.
+Ref: workspace HQ HARD RULE "Never let a user spend an asset to the miners by accident"; SDK `funding-safety.ts`. Lanes: `cat21wallet-mint-assetnotice-regtest.e2e.spec.ts`, `cat21wallet-transfer-offer-assetnotice-regtest.e2e.spec.ts`, `funding-guard-inscription-regtest.e2e.spec.ts`.
 
 ## RULE: The funding-coin fee column is mandatory on every picker surface
 
@@ -161,8 +161,8 @@ Why: unguarded, a re-emission flips `state:'loading-utxos'` and tears the picker
 ## RULE: The seam / mock-vs-real-ord test rules are family-wide
 
 - Assert the dirty-only PREMISE at setup with the remedy in the failure text (a fixed-seed wallet accumulates across local runs; §7.8).
-- A mocked `/output` lane never exercises the real scan, so keep at least one real-ord lane (`funding-guard-inscription-regtest.spec.ts`, "No mock") as the classifier's only proof. Do not retire it (§7.7e).
-- `cat21-mint-regtest.spec.ts` + `cat21wallet-mint-regtest.spec.ts` fund via `sendtoaddress` but install a context-level `**/output/*` -> `CLEAN_OUTPUT_BODY` mock, so §7.7e does not bite them. Do NOT "fix" them with `fundCommonSats`.
+- A mocked `/output` lane never exercises the real scan, so keep at least one real-ord lane (`funding-guard-inscription-regtest.e2e.spec.ts`, "No mock") as the classifier's only proof. Do not retire it (§7.7e).
+- `cat21-mint-regtest.e2e.spec.ts` + `cat21wallet-mint-regtest.e2e.spec.ts` fund via `sendtoaddress` but install a context-level `**/output/*` -> `CLEAN_OUTPUT_BODY` mock, so §7.7e does not bite them. Do NOT "fix" them with `fundCommonSats`.
 - Route clicks on re-rendering controls through `clickUntilEffect` (`ordpool-sdk/e2e`); a `{ clicks }` count proves a retry happened, never that it was needed (§7.7c).
 Ref: `E2E_BEST_PRACTICES.md` §7.7/§7.7c/§7.7e/§7.8. No spec sets a timeout of its own: wait on a state (`expect(locator).toBeVisible()`) under the runner's 30 s per-wait bound, and race a popup that may not come against the state that means it is not coming (`raceApprovalPopup`). `isVisible({ timeout })` ignores its timeout.
 

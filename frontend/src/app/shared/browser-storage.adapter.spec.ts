@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   BrowserStorageAdapter, jsdom localStorage
+ * Faked:  Storage.prototype getItem / setItem / removeItem -> jest.spyOn (a throwing storage, and the SSR no-touch check)
+ * Proves: reads and writes go to localStorage in the browser, survive a throwing storage, and never touch it on the server
+ */
 import { jest } from '@jest/globals';
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';

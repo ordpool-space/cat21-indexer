@@ -1,3 +1,11 @@
+/**
+ * @test-kind unit
+ * Real:   Mint component and its template
+ * Faked:  Cat21MintOrchestrator -> hand-built stub of the SDK class (provided via useValue)
+ *         UtxoContentScanner -> ScannerStub (testing/scanner.fixtures)
+ *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
+ * Proves: the mint page renders each orchestrator state (no wallet, loading, utxo error vs mint error, funding states, success) and wires its controls
+ */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';

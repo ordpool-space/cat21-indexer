@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   WatchOnlyConnectService
+ * Faked:  WalletService.connectXpub -> jest.fn() (hand-written)
+ * Proves: only a script-type-ambiguous derive error counts as ambiguous; connect forwards the trimmed key, the script type when given, and the shared probe
+ */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';

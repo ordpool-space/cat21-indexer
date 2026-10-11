@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   NoStoreOnErrorFilter
+ * Faked:  HttpAdapterHost -> { setHeader, reply: jest.fn() } (hand-written adapter surface)
+ * Proves: every HttpException, a ThrottlerException and an unknown error get Cache-Control: no-store before the reply
+ */
 import { ArgumentsHost, BadRequestException, HttpException } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { ThrottlerException } from '@nestjs/throttler';

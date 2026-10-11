@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   CacheService
+ * Faked:  getMemoryInfo -> jest.spyOn returning hand-written memory figures (the resize tests)
+ * Proves: the cat cache pins, promotes, indexes by tx hash, pages, bumps on sync, invalidates and resizes under memory pressure
+ */
 import { CacheService } from './cache.service';
 import { CatDto } from '../../cats/dto/cat.dto';
 

@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   Cat21SessionGuard, buildCat21SessionMessage (ordpool-sdk/cat21-session)
+ * Faked:  ordpool-sdk/cat21-validation -> jest.mock of verifyBip322Signature without the actual module
+ * Proves: the guard rejects a malformed, expired or over-dated session and a failed BIP-322 verification, accepts a valid one and stashes its address; the param decorator returns it
+ */
 import { UnauthorizedException, type ExecutionContext } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 

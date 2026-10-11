@@ -1,3 +1,12 @@
+/**
+ * @test-kind unit
+ * Real:   AcceptOffer component and its template
+ * Faked:  Cat21AcceptOfferOrchestrator -> hand-built stub of the SDK class (provided via useValue)
+ *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
+ *         CatUtxoLookupService -> jest.fn() (hand-written; a sibling module)
+ *         ActivatedRoute -> hand-written query params
+ * Proves: validator rejections surface in the UI, the URL prefills offer and cat outpoint, the wallet drives the picker, and the form actions reach the orchestrator
+ */
 import { jest, describe, it, expect } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';

@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   CatsController, sharp (image rendering)
+ * Faked:  CatsService -> jest.fn() methods returning GENESIS_DTO (cats/__fixtures__/genesis-cat, cat #0's mainnet data)
+ *         FastifyReply -> { header, send: jest.fn() } (hand-written)
+ * Proves: every cats route maps service answers to responses (404 and 500 included), renders SVG, WebP and social cards, sets Cache-Control and clamps pagination
+ */
 import { InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import * as sharp from 'sharp';
 import { CatsController } from './cats.controller';

@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   PsbtExportBridgeService
+ * Faked:  NgbModal.open -> jest.fn() returning a hand-written modal ref
+ * Proves: the export modal opens seeded with the unsigned PSBT and its action label, resolves with the pasted signed PSBT, errors on Cancel and is dismissed on teardown
+ */
 import { jest } from '@jest/globals';
 import { TestBed } from '@angular/core/testing';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';

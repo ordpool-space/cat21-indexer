@@ -1,3 +1,11 @@
+/**
+ * @test-kind unit
+ * Real:   ListingsService
+ * Faked:  Drizzle db -> chainable jest.fn() query builder (hand-written)
+ *         OrdClientService -> jest.fn() (hand-written)
+ *         Date.now -> jest.spyOn to a fixed second
+ * Proves: create checks the session address, network, headline cat and on-chain outpoint before it upserts; reads, paging bounds and the ownership-scoped deletes
+ */
 import { BadRequestException } from '@nestjs/common';
 
 import { ListingsService } from './listings.service';

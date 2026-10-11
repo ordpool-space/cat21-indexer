@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { interval, map, Observable, shareReplay, startWith, switchMap } from 'rxjs';
+import { forkJoin, interval, map, Observable, of, shareReplay, startWith, switchMap } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 
@@ -182,10 +182,14 @@ export class OrdApiService {
 
   /**
    * Return the sorted-ascending, deduped list of cat numbers riding
-   * on a given UTXO. Wraps `getOutput` and normalises the ord
-   * response's `cats` array (which we type as `string[]` for the
-   * make-offer flow, but the values are numeric — ord returns cat
-   * numbers as JSON numbers).
+   * on a given UTXO.
+   *
+   * cat21-ord's `/output` lists the cats as inscription ids
+   * (`<txid>i<n>`); each one is resolved through `/inscription/<id>`,
+   * whose `number` is the cat number (cat21-ord indexes nothing but
+   * cats, so its inscription number IS the cat number). A numeric entry
+   * passes through as it is. The backend's `OrdClientService` reads the
+   * same answer the same way.
    *
    * Load-bearing for the v3 listings + bids flow: the seller signs
    * against this exact array, and the backend re-verifies against
@@ -193,17 +197,23 @@ export class OrdApiService {
    * with `cats-bundle-drift`.
    *
    * Returns `[]` for a UTXO with no cats (e.g. a plain BTC output
-   * queried by mistake). Any HTTP error propagates — callers wrap
+   * queried by mistake). Any HTTP error propagates; callers wrap
    * with `catchError` if they want a null fallback.
    */
   getCatsAtOutput(txid: string, vout: number): Observable<number[]> {
     return this.getOutput(`${txid}:${vout}`).pipe(
-      map((out) => {
+      switchMap((out) => {
         const raw = (out?.cats ?? []) as unknown[];
-        const nums = raw
-          .map((c) => (typeof c === 'number' ? c : Number(c)))
-          .filter((c) => Number.isInteger(c) && c >= 0);
-        return Array.from(new Set(nums)).sort((a, b) => a - b);
+        const numbers = raw.map((c): Observable<number | null> => {
+          if (typeof c === 'number') return of(c);
+          if (typeof c === 'string') return this.getInscription(c).pipe(map((insc) => insc.number));
+          return of(null);
+        });
+        return numbers.length === 0 ? of([]) : forkJoin(numbers);
+      }),
+      map((nums) => {
+        const valid = nums.filter((c): c is number => c !== null && Number.isInteger(c) && c >= 0);
+        return Array.from(new Set(valid)).sort((a, b) => a - b);
       }),
     );
   }

@@ -1,8 +1,15 @@
+/**
+ * @test-kind unit
+ * Real:   Cat21ListingService
+ * Faked:  the backend's /api/v1/listings routes -> HttpTestingController (GET /api/v1/listings/cat/:n body captured from the backend, see the inline note)
+ *         WalletService, Cat21SessionService -> hand-written stubs
+ * Proves: a listing is published with the session headers, deleted by the seller, and read per cat with null for an unlisted one
+ */
 import { describe, expect, it, jest } from '@jest/globals';
 import { provideHttpClient, HttpErrorResponse } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, of } from 'rxjs';
 
 import {
   Cat21Listing,
@@ -80,13 +87,7 @@ describe('Cat21ListingService.publishListing', () => {
 
   it('errors wallet-not-connected when no wallet is present', async () => {
     const { service } = await setup();
-    let caught: CreateListingError | null = null;
-    service.publishListing(publishArgs()).subscribe({
-      next: () => {},
-      error: (e: CreateListingError) => { caught = e; },
-    });
-    await new Promise((r) => setTimeout(r, 0));
-    expect((caught as CreateListingError | null)?.code).toBe('wallet-not-connected');
+    await expect(firstValueFrom(service.publishListing(publishArgs()))).rejects.toMatchObject({ code: 'wallet-not-connected' });
   });
 
   it('POSTs the listing DTO with session-token headers', async () => {
@@ -170,13 +171,7 @@ describe('Cat21ListingService.deleteListingForCat', () => {
 
   it('errors wallet-not-connected on delete when no wallet is present', async () => {
     const { service } = await setup();
-    let caught: CreateListingError | null = null;
-    service.deleteListingForCat(42).subscribe({
-      next: () => {},
-      error: (e: CreateListingError) => { caught = e; },
-    });
-    await new Promise((r) => setTimeout(r, 0));
-    expect((caught as CreateListingError | null)?.code).toBe('wallet-not-connected');
+    await expect(firstValueFrom(service.deleteListingForCat(42))).rejects.toMatchObject({ code: 'wallet-not-connected' });
   });
 });
 
@@ -184,7 +179,7 @@ describe('Cat21ListingService.getListingForCat', () => {
 
   // Body shape captured from the backend: GET /api/v1/listings/cat/:n answers
   // an unlisted cat with 200 and the JSON body `null`
-  // (listings.controller.integration.spec.ts pins it over HTTP).
+  // (listings.controller.http.spec.ts pins it over HTTP).
   it('returns null for an unlisted cat (200, JSON null body)', async () => {
     const { service, httpMock } = await setup();
     let result: PersistedCat21Listing | null | undefined;

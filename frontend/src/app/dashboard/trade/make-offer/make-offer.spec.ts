@@ -1,3 +1,12 @@
+/**
+ * @test-kind unit
+ * Real:   MakeOffer component and its template
+ * Faked:  Cat21CreateOfferOrchestrator -> hand-built stub of the SDK class (provided via useValue)
+ *         UtxoContentScanner -> ScannerStub (testing/scanner.fixtures)
+ *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
+ *         CatUtxoLookupService, OrdApiService, Cat21BidsService -> hand-written stubs (sibling modules)
+ * Proves: the seller payment address comes from the URL or the user, never from the on-chain owner, and a moved cat marks the offer stale
+ */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';

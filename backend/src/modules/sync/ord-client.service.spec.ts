@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   OrdClientService, parseSatpoint
+ * Faked:  global fetch -> jest.spyOn answering cat21-ord /cat, /status, /output and /inscription bodies (shapes written in the spec; the regtest lane proves them against a real cat21-ord)
+ * Proves: cat, latest number, cats-at-output and current location parse cat21-ord's answers and treat errors as unknown
+ */
 import { OrdClientService } from './ord-client.service';
 
 const BASE_URL = 'https://ord.test';

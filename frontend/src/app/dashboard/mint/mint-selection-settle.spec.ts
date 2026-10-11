@@ -1,3 +1,11 @@
+/**
+ * @test-kind unit
+ * Real:   Mint component and the SDK Cat21MintOrchestrator it constructs
+ * Faked:  Cat21Service -> { getUtxos, postTransaction: jest.fn() } (hand-written)
+ *         UtxoContentScanner -> ScannerStub (testing/scanner.fixtures)
+ *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
+ * Proves: a funding refresh to the same outpoint does not re-emit the selection, so the recompute loop settles
+ */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';

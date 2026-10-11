@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   CatsService, CacheService
+ * Faked:  Drizzle db -> chainable jest.fn() query builder returning GENESIS_ROW (cats/__fixtures__/genesis-cat)
+ *         SyncService.getSyncHealth -> hand-written object
+ * Proves: health, status, single-cat, paginated, SVG, facet and sample reads map rows to DTOs and go through the cache
+ */
 import { CacheService } from '../shared/cache/cache.service';
 import { CatsService } from './cats.service';
 import { GENESIS_ROW, GENESIS_DTO } from './__fixtures__/genesis-cat';

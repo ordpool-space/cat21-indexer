@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   Orderbook component, its template and the router
+ * Faked:  the backend's GET /api/v1/listings/:ipp/:page -> HttpTestingController (body shape: the backend's PaginatedListingsDto)
+ * Proves: the feed asks for the right page (defaults on missing or malformed params), computes the page count, builds the Buy query, renders the error alert with a working Retry, and pages forward
+ */
 import { describe, expect, it, jest } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -153,5 +159,76 @@ describe('Orderbook — buyQueryParams per row', () => {
     // but got sold in between, the buyer sees "stale" instead of
     // building a doomed PSBT.
     expect(params['fromAsk']).toBe('1');
+  });
+});
+
+/**
+ * The orderbook's own template, rendered. The backend answer is the IO
+ * boundary (`HttpTestingController`); everything above it is the real
+ * component, its template and the router.
+ */
+async function setupRendered() {
+  await TestBed.configureTestingModule({
+    imports: [Orderbook],
+    providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(Orderbook);
+  fixture.detectChanges();
+  // rxResourceFixed settles its signals a few microtasks after the answer.
+  const render = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    fixture.detectChanges();
+  };
+  const byTestId = (id: string) => fixture.nativeElement.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+  return { fixture, render, byTestId, httpMock: TestBed.inject(HttpTestingController), router: TestBed.inject(Router) };
+}
+
+describe('Orderbook — rendered states', () => {
+
+  it('a failed feed load renders the error alert, and Retry asks for the same page again', async () => {
+    const { render, byTestId, httpMock } = await setupRendered();
+    httpMock
+      .expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/25/1'))
+      .flush({ statusCode: 500, message: 'boom' }, { status: 500, statusText: 'Internal Server Error' });
+    await render();
+
+    const alert = byTestId('orderbook-error');
+    expect(alert?.textContent).toContain("Couldn't load the orderbook.");
+
+    (alert!.querySelector('a[role="button"]') as HTMLAnchorElement).click();
+    await render();
+    httpMock
+      .expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/25/1'))
+      .flush({ total: 0, currentPage: 1, itemsPerPage: 25, items: [] });
+    await render();
+    expect(byTestId('orderbook-empty')?.textContent).toContain('No active listings right now.');
+    httpMock.verify();
+  });
+
+  it('a multi-page feed renders Prev disabled and Next enabled, and Next opens page 2', async () => {
+    const { fixture, render, byTestId, httpMock, router } = await setupRendered();
+    httpMock
+      .expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/25/1'))
+      .flush({ total: 60, currentPage: 1, itemsPerPage: 25, items: [listing()] });
+    await render();
+
+    const prev = byTestId('orderbook-pagination-prev') as HTMLButtonElement;
+    const next = byTestId('orderbook-pagination-next') as HTMLButtonElement;
+    expect(prev.disabled).toBe(true);
+    expect(next.disabled).toBe(false);
+
+    const navSpy = jest.spyOn(router, 'navigate').mockResolvedValue(true as never);
+    next.click();
+    expect(navSpy).toHaveBeenCalledWith(['/orderbook', 25, 2]);
+
+    // The route binds page 2 into the input; the feed then asks for page 2.
+    fixture.componentRef.setInput('currentPage', 2);
+    await render();
+    httpMock
+      .expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/25/2'))
+      .flush({ total: 60, currentPage: 2, itemsPerPage: 25, items: [listing({ id: 'uuid-2', catNumber: 7 })] });
+    await render();
+    expect(byTestId('orderbook-row-cat')?.textContent?.trim()).toBe('Cat #7');
+    httpMock.verify();
   });
 });

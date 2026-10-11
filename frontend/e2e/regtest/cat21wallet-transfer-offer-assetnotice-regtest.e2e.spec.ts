@@ -10,7 +10,7 @@
  *         over-pay and unavailable fee states; browser errors on our pages fail each cell
  */
 /* eslint-disable no-console */
-import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
@@ -21,6 +21,9 @@ import {
   rpc,
   installContextErrorGuard,
   approveCat21WalletConnectPopup,
+  launchWalletContext,
+  installLeatherOfflineRoutes,
+  installCat21WalletOrdRoutes,
 } from 'ordpool-sdk/e2e';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
@@ -122,16 +125,11 @@ test.beforeAll(async () => {
 
   // NO `/output` mock — the funding scan must hit the real ords the workflow
   // wired in (stock :8081 for inscriptions, cat21-ord :8080 for cats).
-  context = await chromium.launchPersistentContext('', {
-    headless: false,
-    args: [
-      `--disable-extensions-except=${EXT_PATH}`,
-      `--load-extension=${EXT_PATH}`,
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-    ],
-    viewport: { width: 1280, height: 900 },
-  });
+  context = await launchWalletContext({ wallet: 'cat21wallet', extensionPath: EXT_PATH });
+  // The wallet's vendor backends are answered locally or aborted, and its
+  // cat21-ord reads go to the regtest cat21-ord.
+  await installLeatherOfflineRoutes(context);
+  await installCat21WalletOrdRoutes(context);
   browserErrorGuard = installContextErrorGuard(context);
 
   let [worker] = context.serviceWorkers();

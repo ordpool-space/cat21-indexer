@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   BidsController in a real Nest + Fastify app with the real ValidationPipe, ThrottlerModule and NoStoreOnErrorFilter
+ * Faked:  BidsService -> jest.fn() methods (hand-written; a sibling module of the controller)
+ * Proves: every error path of the bids routes (validation 400, service throw, throttler 429, 500) answers Cache-Control: no-store
+ */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -9,13 +15,13 @@ import { BidsController } from './bids.controller';
 import { BidsService } from './bids.service';
 
 /**
- * Mirror of `listings.controller.integration.spec.ts` — proves the
+ * Mirror of `listings.controller.http.spec.ts` — proves the
  * NoStoreOnErrorFilter fires on every error path the bids controller
  * exposes (validation, service throw, throttler, 500). Uses a fresh
  * app per test because ThrottlerModule holds per-IP counters in
  * memory that would otherwise leak state between `it` blocks.
  */
-describe('BidsController — error responses carry Cache-Control: no-store (integration)', () => {
+describe('BidsController — error responses carry Cache-Control: no-store over HTTP', () => {
 
   let app: INestApplication & NestFastifyApplication;
   let mockCreate: jest.Mock;

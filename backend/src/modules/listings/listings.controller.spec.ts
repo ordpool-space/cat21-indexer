@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   ListingsController
+ * Faked:  ListingsService -> jest.fn() methods (hand-written; a sibling module of the controller)
+ *         FastifyReply -> { header: jest.fn() } (hand-written)
+ * Proves: the per-cat read, the orderbook page and the seller delete delegate to the service with the right arguments and set the route's headers
+ */
 import type { FastifyReply } from 'fastify';
 
 import { ListingsController } from './listings.controller';
@@ -7,7 +14,7 @@ import type { ListingsService } from './listings.service';
  * Unit coverage for the controller's own logic: Cache-Control headers on the
  * single-listing hit vs "not listed" (null, no-store, per the cache-poisoning HARD RULE),
  * pagination delegation, and the ownership-scoped delete wiring. The create
- * flow + NoStoreOnErrorFilter live in the service + integration specs.
+ * flow + NoStoreOnErrorFilter live in the service and HTTP specs.
  */
 describe('ListingsController (unit)', () => {
   function make(overrides: Partial<Record<keyof ListingsService, jest.Mock>> = {}) {

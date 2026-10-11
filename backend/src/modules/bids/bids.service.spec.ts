@@ -1,3 +1,12 @@
+/**
+ * @test-kind unit
+ * Real:   BidsService
+ * Faked:  ordpool-sdk/cat21-validation -> jest.mock without the actual module (validateCat21BuyOfferPsbt)
+ *         @scure/btc-signer, @scure/base -> jest.mock (hand-written; third-party libraries)
+ *         Drizzle db -> chainable jest.fn() query builder (hand-written)
+ *         OrdClientService.getCatsAtOutput, ElectrsClientService -> jest.fn() (hand-written)
+ * Proves: create runs the cheap pre-checks first, decodes the PSBT shape, consults the SDK validator and ord, and upserts; the reads and deletes filter by outpoint and buyer
+ */
 import { BadRequestException } from '@nestjs/common';
 
 import { BidsService } from './bids.service';

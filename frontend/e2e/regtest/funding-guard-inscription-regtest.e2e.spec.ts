@@ -9,18 +9,18 @@
  *         and the asset notice names its inscription id
  */
 /* eslint-disable no-console */
-import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
 import {
   seedInscribedCoin,
-  waitForApprovalPopup,
-  approvalGate,
-  clickApprovalAndRequireClose,
   installContextErrorGuard,
   installXverseOfflineRoutes,
   rpc,
+  launchWalletContext,
+  unlockXverse,
+  approveXverseConnect,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -67,7 +67,6 @@ import {
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
 const MINT_PATH = '/dashboard/mint';
-const TEST_PASSWORD = 'TestPassword123!';
 
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
 const EXT_PATH = process.env.XVERSE_EXT_PATH ?? path.join(SDK_E2E_DIR, 'extensions/xverse');
@@ -110,15 +109,10 @@ test.beforeAll(async () => {
   // NO `/output` mock — the whole point of this spec is that the scan hits the
   // real local ords (stock :8081 for inscriptions, cat21-ord :8080 for cats)
   // that the workflow wired into the frontend config.
-  context = await chromium.launchPersistentContext(workingDir, {
-    headless: false,
-    args: [
-      `--disable-extensions-except=${EXT_PATH}`,
-      `--load-extension=${EXT_PATH}`,
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-    ],
-    viewport: { width: 1280, height: 900 },
+  context = await launchWalletContext({
+    wallet: 'xverse',
+    extensionPath: EXT_PATH,
+    userDataDir: workingDir,
   });
   await installXverseOfflineRoutes(context);
   // Fails a test on any uncaught exception, console.error or failed request on
@@ -143,21 +137,7 @@ test.afterAll(async () => {
 
 test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no mock)', async () => {
   // ─── 1. Unlock the Xverse vault ─────────────────────────────────
-  const primer = await context.newPage();
-  await primer.setViewportSize({ width: 400, height: 800 });
-  await primer.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'domcontentloaded' });
-  await primer.waitForFunction(() => {
-    const t = (document.body.innerText || '').toLowerCase();
-    return t.includes('unlock') || t.includes('account 1');
-  }, undefined, { polling: 250 });
-  if (/unlock/i.test(await primer.locator('body').innerText())) {
-    await primer.locator('input[type="password"]').first().fill(TEST_PASSWORD);
-    await primer.getByRole('button', { name: /^unlock$/i }).first().click();
-    await primer.waitForFunction(() => {
-      const t = (document.body.innerText || '').toLowerCase();
-      return t.includes('account 1') || t.includes('not now') || t.includes('send');
-    }, undefined, { polling: 250 });
-  }
+  const primer = await unlockXverse(context, extensionId);
   await primer.close();
 
   // ─── 2. Connect Xverse, read the payment address (before funding) ─
@@ -166,17 +146,10 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
   const cta = page.getByTestId('mint-cta');
   await expect(cta).toBeVisible();
 
-  const knownPagesBeforeConnect = new Set(context.pages());
-  await page.getByTestId('wallet-connect-btn').first().click();
-  await page.getByTestId('wallet-pick-xverse').first().click();
-
-  const connectButton = (p: Page) => p.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i }).first();
-  const approvalConnect = await waitForApprovalPopup({
-    context,
-    knownPages: knownPagesBeforeConnect,
-    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: connectButton }),
+  await approveXverseConnect(context, async () => {
+    await page.getByTestId('wallet-connect-btn').first().click();
+    await page.getByTestId('wallet-pick-xverse').first().click();
   });
-  await clickApprovalAndRequireClose(connectButton(approvalConnect), approvalConnect, { label: 'Xverse connect popup' });
 
   // Payment address from the empty-state (no funds yet → mint-no-utxos).
   const noUtxos = page.getByTestId('mint-no-utxos');

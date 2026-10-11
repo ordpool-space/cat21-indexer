@@ -1,3 +1,12 @@
+/**
+ * @test-kind unit
+ * Real:   Mint component and the SDK Cat21MintOrchestrator it constructs
+ * Faked:  Cat21Service.getUtxos -> jest.fn() returning [] (counted)
+ *         UtxoContentScanner -> ScannerStub (testing/scanner.fixtures)
+ *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
+ *         orchestrator.setWallet -> jest.spyOn on the real method (counts calls, calls through)
+ * Proves: a wallet re-emission calls setWallet again but fetches UTXOs once
+ */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';

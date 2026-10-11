@@ -10,7 +10,7 @@
  *         funding guard leaves an inscription, cat, rune or rare-sat coin unspent
  */
 /* eslint-disable no-console */
-import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
@@ -26,6 +26,9 @@ import {
   installContextErrorGuard,
   approveCat21WalletConnectPopup,
   approveCat21WalletSignPopup,
+  launchWalletContext,
+  installLeatherOfflineRoutes,
+  installCat21WalletOrdRoutes,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -33,7 +36,7 @@ import {
  *
  * The buy-offer PSBT is the one money-path artifact cat21.space produces that
  * no spec proved the PAGE builds. The existing offer round-trip (in
- * `cat21wallet-mint-regtest.spec.ts`) drives the ACCEPT page but builds the
+ * `cat21wallet-mint-regtest.e2e.spec.ts`) drives the ACCEPT page but builds the
  * PSBT itself via `buildCat21BuyOfferPsbt` — so it proves the accept page
  * counter-signs a valid PSBT, never that the make-offer page constructs one.
  * This spec closes that: the BUYER (cat21-wallet) fills the make-offer form
@@ -180,16 +183,11 @@ test.beforeAll(async () => {
 
   // NO `/output` mock — the whole point is that the make-offer cat lookup +
   // the buyer-funding asset scan hit the REAL ords the workflow wires in.
-  context = await chromium.launchPersistentContext('', {
-    headless: false,
-    args: [
-      `--disable-extensions-except=${EXT_PATH}`,
-      `--load-extension=${EXT_PATH}`,
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-    ],
-    viewport: { width: 1280, height: 900 },
-  });
+  context = await launchWalletContext({ wallet: 'cat21wallet', extensionPath: EXT_PATH });
+  // The wallet's vendor backends are answered locally or aborted, and its
+  // cat21-ord reads go to the regtest cat21-ord.
+  await installLeatherOfflineRoutes(context);
+  await installCat21WalletOrdRoutes(context);
   browserErrorGuard = installContextErrorGuard(context);
 
   let [worker] = context.serviceWorkers();

@@ -33,7 +33,7 @@ const TEST_TIMEOUT_MS = 365_000;
  */
 export default defineConfig({
   testDir: path.resolve(__dirname, 'e2e/regtest'),
-  testMatch: '**/*.spec.ts',
+  testMatch: '**/*.e2e.spec.ts',
   fullyParallel: false,
   workers: 1,
   // Zero retries: the specs share on-chain state and module-scope variables

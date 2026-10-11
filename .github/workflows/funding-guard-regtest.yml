@@ -20,7 +20,7 @@ on:
     - cron: '57 3 * * *'   # nightly (offset from the other regtest runs)
   push:
     paths:
-      - 'frontend/e2e/regtest/funding-guard-inscription-regtest.spec.ts'
+      - 'frontend/e2e/regtest/funding-guard-inscription-regtest.e2e.spec.ts'
       - 'frontend/e2e/regtest/lib/**'
       - 'frontend/playwright.regtest.config.ts'
       - 'frontend/*.json'
@@ -31,7 +31,7 @@ on:
       - '.github/workflows/funding-guard-regtest.yml'
   pull_request:
     paths:
-      - 'frontend/e2e/regtest/funding-guard-inscription-regtest.spec.ts'
+      - 'frontend/e2e/regtest/funding-guard-inscription-regtest.e2e.spec.ts'
       - 'frontend/e2e/regtest/lib/**'
       - 'frontend/playwright.regtest.config.ts'
       - 'frontend/*.json'
@@ -74,6 +74,13 @@ jobs:
         working-directory: frontend
         run: npm ci --legacy-peer-deps
 
+      # ordpool-electrs, cat21-ord and cat21-wallet build from the shas this SDK
+      # commit pins (e2e/build-pins.env), read from the installed package so they
+      # match package-lock.json. The SDK bootstrap fails under CI on a checkout
+      # at another revision.
+      - name: Read the SDK's build pins
+        run: grep -E '^[A-Z0-9_]+=' frontend/node_modules/ordpool-sdk/e2e/build-pins.env >> "$GITHUB_ENV"
+
       - name: Make SDK consumer-environment scripts executable
         run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
 
@@ -82,7 +89,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/ordpool-electrs
-          ref: ordpool
+          ref: ${{ env.ORDPOOL_ELECTRS_SHA }}
           path: ordpool-electrs
 
       # cat21-ord source for BOTH ord containers the scan queries for real:
@@ -94,7 +101,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/cat21-ord
-          ref: index-cat21
+          ref: ${{ env.CAT21_ORD_SHA }}
           path: cat21-ord
 
       - name: Set up Docker Buildx
@@ -198,6 +205,7 @@ jobs:
       - name: Run SDK's Xverse onboarding (produces seeded user-data-dir)
         working-directory: sdk
         env:
+          ORDPOOL_E2E_NET_LOG_DIR: ${{ github.workspace }}/net-log
           XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/xverse-seed/user-data-dir
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
@@ -336,6 +344,7 @@ jobs:
       - name: Run the funding-safety guard spec (real ord, no mock)
         working-directory: frontend
         env:
+          ORDPOOL_E2E_NET_LOG_DIR: ${{ github.workspace }}/net-log
           XVERSE_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/xverse
           XVERSE_SEED_USER_DATA_DIR: ${{ github.workspace }}/xverse-seed/user-data-dir
           FRONTEND_URL: http://localhost:4221
@@ -344,8 +353,14 @@ jobs:
           REGTEST_ORD_STOCK_CONTAINER: ordpool-e2e-consumer-ord-stock
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
-            npx playwright test e2e/regtest/funding-guard-inscription-regtest.spec.ts \
+            npx playwright test e2e/regtest/funding-guard-inscription-regtest.e2e.spec.ts \
             --config=playwright.regtest.config.ts
+
+      # Every wallet browser launches through launchWalletContext, which writes
+      # Chrome's net log here; the check fails when any request left the machine.
+      - name: Check the net log (nothing left the machine)
+        if: success() || failure()
+        run: node frontend/node_modules/ordpool-sdk/scripts/check-net-log.mjs net-log
 
       - name: Upload Playwright artifacts
         if: always()
@@ -355,6 +370,7 @@ jobs:
           path: |
             frontend/test-results
             frontend/playwright-report-regtest
+            net-log
             build.log
             serve.log
             fees-stub.log

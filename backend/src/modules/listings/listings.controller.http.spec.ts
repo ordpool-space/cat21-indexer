@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   ListingsController in a real Nest + Fastify app with the real ValidationPipe, ThrottlerModule, Cat21SessionGuard and NoStoreOnErrorFilter
+ * Faked:  ListingsService -> jest.fn() methods (hand-written; a sibling module of the controller)
+ * Proves: every error path of the listings routes answers Cache-Control: no-store, and GET /api/v1/listings/cat/:n answers 200 with null for an unlisted cat
+ */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -30,7 +36,7 @@ import { ListingsService } from './listings.service';
  * Every one of the above must have `Cache-Control: no-store` per the
  * backend HARD RULE. This test proves it end-to-end.
  */
-describe('ListingsController — error responses carry Cache-Control: no-store (integration)', () => {
+describe('ListingsController — error responses carry Cache-Control: no-store over HTTP', () => {
 
   let app: INestApplication & NestFastifyApplication;
   let mockCreate: jest.Mock;
@@ -40,7 +46,7 @@ describe('ListingsController — error responses carry Cache-Control: no-store (
   // 127.0.0.1 client, so a shared app.beforeAll would leak throttle
   // state (test N+1 sees test N's 6 requests still counting against
   // the limit). ~200ms boot overhead per test; acceptable for
-  // integration coverage.
+  // coverage over HTTP.
   beforeEach(async () => {
     mockCreate = jest.fn();
     const module = await Test.createTestingModule({
@@ -144,7 +150,7 @@ describe('ListingsController — error responses carry Cache-Control: no-store (
   });
 });
 
-describe('GET /api/v1/listings/cat/:catNumber over HTTP (integration)', () => {
+describe('GET /api/v1/listings/cat/:catNumber over HTTP', () => {
   let app: INestApplication & NestFastifyApplication;
   let findByCatNumber: jest.Mock;
 

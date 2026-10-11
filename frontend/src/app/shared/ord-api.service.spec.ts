@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   OrdApiService
+ * Faked:  cat21-ord and the full ord -> HttpTestingController (bodies written in the spec after ord's JSON API)
+ * Proves: each ord read hits the right URL and maps the answer, cats-at-output included
+ */
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -53,13 +59,32 @@ describe('OrdApiService', () => {
     expect(b).toEqual([]);
   });
 
-  it('getCatsAtOutput normalizes cats (numeric + numeric strings), drops junk, dedupes, sorts ascending', () => {
+  it('getCatsAtOutput resolves the inscription ids cat21-ord lists to cat numbers, deduped and sorted', () => {
+    // cat21-ord's /output answer lists cats as inscription ids (`<txid>i<n>`),
+    // as the regtest bid round-trip in cat21wallet-mint-regtest.e2e.spec.ts
+    // asserts against a real cat21-ord; /inscription/<id> carries the number.
+    const idA = `${'a'.repeat(64)}i0`;
+    const idB = `${'b'.repeat(64)}i0`;
     let cats: number[] | undefined;
     service.getCatsAtOutput('deadbeef', 0).subscribe((c) => (cats = c));
-    const req = http.expectOne(`${environment.ordExplorer}/output/deadbeef:0`);
-    req.flush({ cats: [42, '7', 42, -1, '3.5', 9] });
-    // 42, '7'->7, 42, -1 dropped(<0), '3.5' dropped(non-int), 9 -> dedupe+sort
-    expect(cats).toEqual([7, 9, 42]);
+    http.expectOne(`${environment.ordExplorer}/output/deadbeef:0`).flush({ cats: [idA, idB, idA] });
+    const lookups = http.match((r) => r.url.startsWith(`${environment.ordExplorer}/inscription/`));
+    expect(lookups.map((r) => r.request.url)).toEqual([
+      `${environment.ordExplorer}/inscription/${idA}`,
+      `${environment.ordExplorer}/inscription/${idB}`,
+      `${environment.ordExplorer}/inscription/${idA}`,
+    ]);
+    lookups[0].flush({ id: idA, number: 42 });
+    lookups[1].flush({ id: idB, number: 7 });
+    lookups[2].flush({ id: idA, number: 42 });
+    expect(cats).toEqual([7, 42]);
+  });
+
+  it('getCatsAtOutput passes numeric entries through and drops negative or fractional ones', () => {
+    let cats: number[] | undefined;
+    service.getCatsAtOutput('deadbeef', 2).subscribe((c) => (cats = c));
+    http.expectOne(`${environment.ordExplorer}/output/deadbeef:2`).flush({ cats: [42, -1, 3.5, 9, 42] });
+    expect(cats).toEqual([9, 42]);
   });
 
   it('getCatsAtOutput returns [] for an output with no cats', () => {

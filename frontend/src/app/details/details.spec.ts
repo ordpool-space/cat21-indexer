@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   Details component
+ * Faked:  WalletService -> WalletServiceStub (testing/wallet.fixtures)
+ *         ApiService, OrdApiService, CatUtxoLookupService, Cat21ListingService, Cat21BidsService -> jest.fn() stubs (hand-written; sibling modules)
+ * Proves: the sell permalink, buy query params, button states, ask parsing, outpoint intent-lock and the orderbook publish flow
+ */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';

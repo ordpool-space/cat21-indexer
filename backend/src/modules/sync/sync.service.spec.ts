@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   SyncService, deriveCategory
+ * Faked:  OrdClientService, CatsService, CacheService, Drizzle db -> hand-written jest.fn() doubles
+ *         SyncService.sync, backfillDominantColorCategory, recomputeRarityForAllCategories, logger.warn -> jest.spyOn on the SUT (the @Interval wrapper and the init chain only)
+ * Proves: categories are disjoint bands; sync inserts new cats with traits, records health, and the init backfill chain survives a failing step
+ */
 import { deriveCategory, SyncService } from './sync.service';
 
 describe('deriveCategory', () => {

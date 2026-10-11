@@ -20,7 +20,7 @@ on:
     - cron: '52 3 * * *'   # nightly at 03:44 UTC (offset from the other regtest runs)
   push:
     paths:
-      - 'frontend/e2e/regtest/cat21wallet-mint-assetnotice-regtest.spec.ts'
+      - 'frontend/e2e/regtest/cat21wallet-mint-assetnotice-regtest.e2e.spec.ts'
       - 'frontend/e2e/regtest/lib/**'
       - 'frontend/playwright.regtest.config.ts'
       - 'frontend/*.json'
@@ -31,7 +31,7 @@ on:
       - '.github/workflows/mint-assetnotice-regtest.yml'
   pull_request:
     paths:
-      - 'frontend/e2e/regtest/cat21wallet-mint-assetnotice-regtest.spec.ts'
+      - 'frontend/e2e/regtest/cat21wallet-mint-assetnotice-regtest.e2e.spec.ts'
       - 'frontend/e2e/regtest/lib/**'
       - 'frontend/playwright.regtest.config.ts'
       - 'frontend/*.json'
@@ -78,6 +78,13 @@ jobs:
         working-directory: frontend
         run: npm ci --legacy-peer-deps
 
+      # ordpool-electrs, cat21-ord and cat21-wallet build from the shas this SDK
+      # commit pins (e2e/build-pins.env), read from the installed package so they
+      # match package-lock.json. The SDK bootstrap fails under CI on a checkout
+      # at another revision.
+      - name: Read the SDK's build pins
+        run: grep -E '^[A-Z0-9_]+=' frontend/node_modules/ordpool-sdk/e2e/build-pins.env >> "$GITHUB_ENV"
+
       - name: Make SDK consumer-environment scripts executable
         run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
 
@@ -85,7 +92,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/ordpool-electrs
-          ref: ordpool
+          ref: ${{ env.ORDPOOL_ELECTRS_SHA }}
           path: ordpool-electrs
 
       # cat21-ord — the REAL cat index the funding scan (cat check) and seedDirtyCoin's cat class read.
@@ -94,7 +101,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/cat21-ord
-          ref: index-cat21
+          ref: ${{ env.CAT21_ORD_SHA }}
           path: cat21-ord
 
       - name: Set up Docker Buildx
@@ -209,7 +216,7 @@ jobs:
         with:
           repository: ordpool-space/cat21-wallet
           path: cat21-wallet-src
-          ref: main
+          ref: ${{ env.CAT21_WALLET_SHA }}
 
       - name: Setup pnpm for cat21-wallet build
         uses: pnpm/action-setup@v4
@@ -371,14 +378,21 @@ jobs:
       - name: Run the make-offer regtest spec
         working-directory: frontend
         env:
+          ORDPOOL_E2E_NET_LOG_DIR: ${{ github.workspace }}/net-log
           CAT21WALLET_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/cat21wallet
           FRONTEND_URL: http://localhost:4221
           BACKEND_URL: http://localhost:9998
           ORD_API_URL: http://localhost:8080
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
-            npx playwright test e2e/regtest/cat21wallet-mint-assetnotice-regtest.spec.ts \
+            npx playwright test e2e/regtest/cat21wallet-mint-assetnotice-regtest.e2e.spec.ts \
             --config=playwright.regtest.config.ts
+
+      # Every wallet browser launches through launchWalletContext, which writes
+      # Chrome's net log here; the check fails when any request left the machine.
+      - name: Check the net log (nothing left the machine)
+        if: success() || failure()
+        run: node frontend/node_modules/ordpool-sdk/scripts/check-net-log.mjs net-log
 
       - name: Dump backend log on failure
         if: failure()
@@ -394,6 +408,7 @@ jobs:
           path: |
             frontend/test-results
             frontend/playwright-report-regtest
+            net-log
             build.log
             serve.log
             fees-stub.log

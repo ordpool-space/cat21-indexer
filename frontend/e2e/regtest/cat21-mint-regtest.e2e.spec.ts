@@ -15,7 +15,7 @@
  *         on-chain; sign cancel and broadcast failure surface as errors
  */
 /* eslint-disable no-console */
-import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
@@ -32,6 +32,10 @@ import {
   waitForStyleClickable,
   installContextErrorGuard,
   installXverseOfflineRoutes,
+  launchWalletContext,
+  unlockXverse,
+  approveXverseConnect,
+  approveXverseSignPopup,
 } from 'ordpool-sdk/e2e';
 import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
@@ -79,7 +83,6 @@ const CAT_OUTPUT_BODY = { ...catOutputFixture().ord, ...catOutputFixture().cat21
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
 const MINT_PATH = '/dashboard/mint';
-const TEST_PASSWORD = 'TestPassword123!';
 
 const FUND_AMOUNT_BTC = 0.001;
 const FUND_AMOUNT_SATS = Math.round(FUND_AMOUNT_BTC * 1e8);
@@ -151,15 +154,10 @@ test.beforeAll(async () => {
     fs.rmSync(path.join(workingDir, stale), { force: true });
   }
 
-  context = await chromium.launchPersistentContext(workingDir, {
-    headless: false,
-    args: [
-      `--disable-extensions-except=${EXT_PATH}`,
-      `--load-extension=${EXT_PATH}`,
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-    ],
-    viewport: { width: 1280, height: 900 },
+  context = await launchWalletContext({
+    wallet: 'xverse',
+    extensionPath: EXT_PATH,
+    userDataDir: workingDir,
   });
   await installXverseOfflineRoutes(context);
   // Fails a test on any uncaught exception, console.error or failed request on
@@ -202,21 +200,7 @@ test.afterAll(async () => {
 
 test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse', async () => {
   // ─── 1. Unlock the vault ──────────────────────────────────────
-  const primer = await context.newPage();
-  await primer.setViewportSize({ width: 400, height: 800 });
-  await primer.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'domcontentloaded' });
-  await primer.waitForFunction(() => {
-    const t = (document.body.innerText || '').toLowerCase();
-    return t.includes('unlock') || t.includes('account 1');
-  }, undefined, { polling: 250 });
-  if (/unlock/i.test(await primer.locator('body').innerText())) {
-    await primer.locator('input[type="password"]').first().fill(TEST_PASSWORD);
-    await primer.getByRole('button', { name: /^unlock$/i }).first().click();
-    await primer.waitForFunction(() => {
-      const t = (document.body.innerText || '').toLowerCase();
-      return t.includes('account 1') || t.includes('not now') || t.includes('zest') || t.includes('send');
-    }, undefined, { polling: 250 });
-  }
+  const primer = await unlockXverse(context, extensionId);
   await shot(primer, '01-unlocked');
   await primer.close();
 
@@ -231,33 +215,20 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const cta = page.getByTestId('mint-cta');
   await expect(cta).toBeVisible();
 
-  // CRITICAL ordering: snapshot existing pages BEFORE we kick off the
-  // connect flow. Clicking Xverse in the modal triggers sats-connect,
-  // which spawns the Xverse approval tab; if we snapshot AFTER the
-  // click the new tab can already be in `context.pages()` by the time
-  // we read it, and `waitForApprovalPopup` (which filters out pages
-  // in the "known" set) will never see anything new and run out at
-  // the per-wait bound.
-  const knownPagesBeforeConnect = new Set(context.pages());
+  // Clicking Xverse in the modal triggers sats-connect, which opens the
+  // Xverse connect popup. approveXverseConnect snapshots the open pages
+  // before the clicks, finds the popup among the new ones and approves it.
+  await approveXverseConnect(context, async () => {
+    // The wallet-connect trigger inside the CTA (an icon + "Connect"). Pinned by
+    // its data-testid rather than text so the visible label can change freely.
+    await page.getByTestId('wallet-connect-btn').first().click();
 
-  // The wallet-connect trigger inside the CTA (an icon + "Connect"). Pinned by
-  // its data-testid rather than text so the visible label can change freely.
-  await page.getByTestId('wallet-connect-btn').first().click();
-
-  // The modal lists supported wallets — click Xverse. Pick by testid
-  // (matrix-driven rows carry `wallet-pick-<type>`), immune to label wording.
-  await page.getByTestId('wallet-pick-xverse').first()
-    .click();
-  await shot(page, '03-picker-clicked');
-
-  const connectButton = (p: Page) => p.getByRole('button', { name: /^(connect|approve|confirm|allow)$/i }).first();
-  const approvalConnect = await waitForApprovalPopup({
-    context,
-    knownPages: knownPagesBeforeConnect,
-    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: connectButton }),
+    // The modal lists supported wallets — click Xverse. Pick by testid
+    // (matrix-driven rows carry `wallet-pick-<type>`), immune to label wording.
+    await page.getByTestId('wallet-pick-xverse').first()
+      .click();
+    await shot(page, '03-picker-clicked');
   });
-  await shot(approvalConnect, '04-connect-approval');
-  await clickApprovalAndRequireClose(connectButton(approvalConnect), approvalConnect, { label: 'Xverse connect popup' });
 
   // ─── 3. Read the payment address from the empty-state ─────────
   // Before funding, the wallet has no viable UTXOs. cat21.space
@@ -346,17 +317,11 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   const knownPagesBeforeSign = new Set(context.pages());
   await mintBtn.click();
 
-  const approvalSign = await waitForApprovalPopup({
+  await approveXverseSignPopup({
     context,
     knownPages: knownPagesBeforeSign,
-    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
+    onScreenshot: (p) => shot(p, '06-sign-approval'),
   });
-  await shot(approvalSign, '06-sign-approval');
-  // Xverse renders Confirm before its handlers attach and shows it faded until then.
-  const approvalSignConfirm = approvalSign.getByRole('button', { name: /^confirm$/i }).first();
-  await expect(approvalSignConfirm).toBeEnabled();
-  await waitForStyleClickable(approvalSignConfirm, { label: 'Xverse confirm' });
-  await clickApprovalAndRequireClose(approvalSignConfirm, approvalSign, { label: 'Xverse sign popup' });
 
 
   // ─── 7. Wait for success card + extract broadcast txid ────────
@@ -532,16 +497,10 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
   await expect(burnMintBtn).toBeEnabled();
   const knownBeforeBurnSign = new Set(context.pages());
   await burnMintBtn.click();
-  const burnSign = await waitForApprovalPopup({
+  await approveXverseSignPopup({
     context,
     knownPages: knownBeforeBurnSign,
-    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
   });
-  // Xverse renders Confirm before its handlers attach and shows it faded until then.
-  const burnSignConfirm = burnSign.getByRole('button', { name: /^confirm$/i }).first();
-  await expect(burnSignConfirm).toBeEnabled();
-  await waitForStyleClickable(burnSignConfirm, { label: 'Xverse confirm' });
-  await clickApprovalAndRequireClose(burnSignConfirm, burnSign, { label: 'Xverse sign popup' });
 
   const burnSuccessCard = page.getByTestId('mint-success');
   await expect(burnSuccessCard).toBeVisible();
@@ -769,17 +728,11 @@ async function mintAtRateAndVerify(opts: {
   // ─── Click Mint, approve sign popup ──────────────────────────
   const knownBeforeSign = new Set(context.pages());
   await mintBtn.click();
-  const approvalSign = await waitForApprovalPopup({
+  await approveXverseSignPopup({
     context,
     knownPages: knownBeforeSign,
-    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
+    onScreenshot: (p) => shot(p, `mr-${opts.scenarioLabel}-04-sign-popup`),
   });
-  await shot(approvalSign, `mr-${opts.scenarioLabel}-04-sign-popup`);
-  // Xverse renders Confirm before its handlers attach and shows it faded until then.
-  const approvalSignConfirm = approvalSign.getByRole('button', { name: /^confirm$/i }).first();
-  await expect(approvalSignConfirm).toBeEnabled();
-  await waitForStyleClickable(approvalSignConfirm, { label: 'Xverse confirm' });
-  await clickApprovalAndRequireClose(approvalSignConfirm, approvalSign, { label: 'Xverse sign popup' });
 
 
   // ─── Wait for success card + broadcast txid ──────────────────
@@ -914,16 +867,10 @@ test('broadcast failure surfaces as an error, not a fake success', async () => {
 
   const knownBeforeBcast = new Set(context.pages());
   await mintBtn.click();
-  const bcastSign = await waitForApprovalPopup({
+  await approveXverseSignPopup({
     context,
     knownPages: knownBeforeBcast,
-    isApproval: approvalGate({ url: /^chrome-extension:\/\//, control: (p) => p.getByText(/review transaction/i).first() }),
   });
-  // Xverse renders Confirm before its handlers attach and shows it faded until then.
-  const bcastSignConfirm = bcastSign.getByRole('button', { name: /^confirm$/i }).first();
-  await expect(bcastSignConfirm).toBeEnabled();
-  await waitForStyleClickable(bcastSignConfirm, { label: 'Xverse confirm' });
-  await clickApprovalAndRequireClose(bcastSignConfirm, bcastSign, { label: 'Xverse sign popup' });
 
 
   const errorAlert = page.getByTestId('mint-error');

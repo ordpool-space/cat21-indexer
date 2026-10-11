@@ -9,7 +9,7 @@
  *         captured as screenshots; browser errors on our pages fail the test
  */
 /* eslint-disable no-console */
-import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
@@ -20,6 +20,9 @@ import {
   rpc,
   installContextErrorGuard,
   approveCat21WalletConnectPopup,
+  launchWalletContext,
+  installLeatherOfflineRoutes,
+  installCat21WalletOrdRoutes,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -106,11 +109,11 @@ test.beforeAll(async () => {
   }
   const tip = Number(rpc('getblockcount').trim());
   if (tip < 101) throw new Error(`regtest tip is ${tip} (<101).`);
-  context = await chromium.launchPersistentContext('', {
-    headless: false,
-    args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`, '--no-sandbox', '--disable-dev-shm-usage'],
-    viewport: { width: 1280, height: 900 },
-  });
+  context = await launchWalletContext({ wallet: 'cat21wallet', extensionPath: EXT_PATH });
+  // The wallet's vendor backends are answered locally or aborted, and its
+  // cat21-ord reads go to the regtest cat21-ord.
+  await installLeatherOfflineRoutes(context);
+  await installCat21WalletOrdRoutes(context);
   browserErrorGuard = installContextErrorGuard(context);
   let [worker] = context.serviceWorkers();
   if (!worker) worker = await context.waitForEvent('serviceworker');

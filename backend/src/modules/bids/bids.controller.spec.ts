@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   BidsController
+ * Faked:  BidsService -> jest.fn() methods (hand-written; a sibling module of the controller)
+ *         FastifyReply -> { header: jest.fn() } (hand-written)
+ * Proves: the seller view, the orderbook page and the buyer delete delegate to the service with the right arguments and set the route's headers
+ */
 import { UnauthorizedException } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 
@@ -7,7 +14,7 @@ import type { BidsService } from './bids.service';
 /**
  * Unit coverage for the controller's own logic: the response Cache-Control
  * headers and the delete-time session/buyer authorization check. The
- * NoStoreOnErrorFilter error paths live in the integration spec; the create
+ * NoStoreOnErrorFilter error paths live in the HTTP spec (bids.controller.http.spec.ts); the create
  * flow lives in bids.service.spec. Here BidsService is a plain mock (its
  * `network` getter is a fixed property) and the fastify reply is a header spy.
  */

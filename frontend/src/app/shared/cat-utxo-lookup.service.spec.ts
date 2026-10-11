@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   CatUtxoLookupService
+ * Faked:  OrdApiService, the generated cat21 ApiService, HttpClient -> jest.fn() (hand-written answers)
+ * Proves: holdings, the target cat and the deep-link holding resolve from ord and electrs, fail closed when the two disagree, and drop what cannot be read
+ */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { HttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';

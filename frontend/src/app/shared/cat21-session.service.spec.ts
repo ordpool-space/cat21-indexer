@@ -1,3 +1,9 @@
+/**
+ * @test-kind unit
+ * Real:   Cat21SessionService
+ * Faked:  WalletService.signMessage -> jest.fn() returning a fixed signature
+ * Proves: a session is signed once and reused while valid, re-signed inside the refresh window or over a malformed cache entry, and refused without a wallet or for another wallet's address
+ */
 import { jest } from '@jest/globals';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';

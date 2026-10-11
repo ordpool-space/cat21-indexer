@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   ListingsPruner
+ * Faked:  Drizzle db -> select().from() returning hand-written rows
+ *         OrdClientService, ListingsService -> jest.fn() (hand-written)
+ * Proves: a listing is dropped when its cat left the signed outpoint and kept on an ord failure
+ */
 import { ListingsPruner } from './listings.pruner';
 
 const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';

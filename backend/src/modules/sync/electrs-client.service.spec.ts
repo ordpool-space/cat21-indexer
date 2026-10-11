@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   ElectrsClientService
+ * Faked:  globalThis.fetch -> jest.fn() answering esplora /tx/:txid/outspend/:vout bodies (shape written in the spec)
+ *         ConfigService -> hand-written
+ * Proves: outpoint status maps electrs' outspend answer to unspent / spent / unknown, reports a phantom outpoint, and turns a 404 or a failure into unknown
+ */
 import { ConfigService } from '@nestjs/config';
 
 import { ElectrsClientService } from './electrs-client.service';

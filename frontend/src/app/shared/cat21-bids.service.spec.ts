@@ -1,3 +1,10 @@
+/**
+ * @test-kind unit
+ * Real:   Cat21BidsService
+ * Faked:  the backend's /api/v1/bids routes -> HttpTestingController (bodies written in the spec after the backend DTO)
+ *         WalletService, Cat21SessionService -> hand-written stubs
+ * Proves: bids are read per outpoint, posted with the session headers and deleted by the buyer
+ */
 import { describe, expect, it } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';

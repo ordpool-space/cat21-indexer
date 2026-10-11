@@ -1,3 +1,12 @@
+/**
+ * @test-kind unit
+ * Real:   BidsPruner
+ * Faked:  @scure/btc-signer -> jest.mock of Transaction.fromPSBT (hand-written; a third-party library)
+ *         Drizzle db -> select().from() returning hand-written rows
+ *         OrdClientService.getCatsAtOutput, ElectrsClientService.getOutpointStatus / isOutpointSpent -> jest.fn() (hand-written)
+ *         BidsService.deleteByOutpointAndBuyer -> jest.fn() (a sibling module)
+ * Proves: a bid is dropped when the seller's cat left the outpoint or the buyer's funding input is spent, kept on an ord or electrs failure, and prune runs batch without re-entering
+ */
 import { BidsPruner } from './bids.pruner';
 
 // ---------------------------------------------------------------------------

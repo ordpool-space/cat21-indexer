@@ -41,6 +41,13 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      # ordpool-electrs, cat21-ord and cat21-wallet build from the shas this SDK
+      # commit pins (e2e/build-pins.env), read from the installed package so they
+      # match package-lock.json. The SDK bootstrap fails under CI on a checkout
+      # at another revision.
+      - name: Read the SDK's build pins
+        run: grep -E '^[A-Z0-9_]+=' backend/node_modules/ordpool-sdk/e2e/build-pins.env >> "$GITHUB_ENV"
+
       - name: Make SDK consumer-environment scripts executable
         run: chmod +x backend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
 
@@ -51,7 +58,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/ordpool-electrs
-          ref: ordpool
+          ref: ${{ env.ORDPOOL_ELECTRS_SHA }}
           path: ordpool-electrs
 
       # cat21-ord — the REAL cat index the backend's OrdClientService reads
@@ -61,7 +68,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/cat21-ord
-          ref: index-cat21
+          ref: ${{ env.CAT21_ORD_SHA }}
           path: cat21-ord
 
       # buildx gha cache: reuse the compiled electrs image across runs
