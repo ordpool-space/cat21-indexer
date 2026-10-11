@@ -7,6 +7,7 @@ import { CATEGORIES, deriveCategory } from '../shared/categories';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
 import { cats } from '../shared/drizzle/schema/cats';
 import { OrdCatDetail, OrdClientService } from './ord-client.service';
+import { readSyncIntervalMsFromEnv } from './sync-interval';
 
 const BATCH_SIZE = 50;
 
@@ -107,7 +108,7 @@ export class SyncService implements OnModuleInit {
     }
   }
 
-  @Interval(60_000)
+  @Interval(readSyncIntervalMsFromEnv())
   async handleSync() {
     await this.sync();
   }
