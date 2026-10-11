@@ -1,160 +1,132 @@
 /**
  * @test-kind unit
- * Real:   Mint component and its template
- * Faked:  Cat21MintOrchestrator -> hand-built stub of the SDK class (provided via useValue)
- *         UtxoContentScanner -> ScannerStub (testing/scanner.fixtures)
+ * Real:   Mint component; the SDK Cat21MintOrchestrator (fee simulation, funding recommendation with the
+ *         'derive' topology, build, sign and broadcast run for real against wallets whose keys the spec holds)
+ * Faked:  orchestrator ports (testing/orchestrator-ports.fixtures): getUtxos -> the electrs UTXO list the spec sets,
+ *         scan.classify -> the ord/cat21-ord verdict the spec sets per outpoint (UtxoClassification shape),
+ *         broadcast -> the txid of the tx it is handed (electrs POST /tx shape)
+ *         window.Cat21Provider (the wallet API) -> installFakeCat21Provider, signing with the test wallet's keys
+ *         UtxoContentScanner -> ScannerStub (testing/scanner.fixtures), set consistently with the port verdicts
  *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
- * Proves: the mint page renders each orchestrator state (no wallet, loading, utxo error vs mint error, funding states, success) and wires its controls
+ *         E5 only: one snapshot pushed through the component's own subscription, the real orchestrator's
+ *         with fundingRecommendation replaced by a coin that has no row (a state the SDK does not produce)
+ * Proves: the mint page renders each orchestrator state (no wallet, loading, utxo error vs mint error, funding
+ *         states, success), adopts the SDK recommendation (auto and asset-notice) and keeps a deliberate pick,
+ *         and wires its controls
  */
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import {
-  Observable,
-  Subject,
-  firstValueFrom,
-  throwError,
-} from 'rxjs';
 
 import {
   AUTO_SCAN_MAX_VALUE_SAT,
   CAT21_POSTAGE_SATS,
   Cat21MintOrchestrator,
+  MintSnapshot,
   SimulateTransactionResult,
   TxnOutput,
+  UtxoClassification,
+  UtxoContent,
   UtxoContentScanner,
   UtxoScanState,
-  UtxoSimulationRow,
+  WalletInfo,
   WalletService,
 } from 'ordpool-sdk';
 
 import { cat21Config } from '../../shared/sdk-tokens';
 
 import { Mint } from './mint';
-import { makeWallet, WalletServiceStub } from '../../testing/wallet.fixtures';
+import { WalletServiceStub } from '../../testing/wallet.fixtures';
 import { ScannerStub } from '../../testing/scanner.fixtures';
+import { FakePorts, assetsVerdict, fakePorts } from '../../testing/orchestrator-ports.fixtures';
+import {
+  fundingCoin,
+  installFakeCat21Provider,
+  oneAddressTestWallet,
+  testWallet,
+} from '../../testing/test-wallet.fixtures';
 
 // ---------------------------------------------------------------------------
-// Tiny fixture builders. Real production types have lots of fields we don't
-// need to pin in every test; these helpers fill the surface so each test
-// stays focused on the one knob it varies.
+// Fixture builders. A coin is a real electrs UTXO at the test wallet's payment
+// address; `scan` is what the page's scanner shows for it, and the port
+// verdict the orchestrator's force-scan reads is derived from it (below).
 // ---------------------------------------------------------------------------
 
-function utxo(over: Partial<TxnOutput> = {}): TxnOutput {
-  return {
-    txid: 'a'.repeat(64),
-    vout: 0,
-    value: 50_000,
-    status: { confirmed: true, block_height: 800_000, block_hash: 'b'.repeat(64), block_time: 1_700_000_000 },
-    ...over,
-  };
-}
+/** A coin with a value-derived txid, so equal values name the same coin across calls. */
+const coin = (v: number): TxnOutput => ({ ...fundingCoin(v, 1), txid: String(v).repeat(64).slice(0, 64) });
 
-function simulation(over: Partial<SimulateTransactionResult> = {}): SimulateTransactionResult {
+/** A row the component reads `.utxo` from; the simulation fields are structural placeholders. */
+function simulation(): SimulateTransactionResult {
   return {
     finalTransactionFee: 200n,
     amountToRecipient: 546n,
     singleInputAmount: 50_000n,
     changeAmount: 49_254n,
     vsize: 150,
-    // The component never reads `tx`; fixtures keep it as an empty
-    // object cast to the real btc.Transaction type to satisfy
-    // structural checks without dragging in @scure/btc-signer.
     tx: {} as SimulateTransactionResult['tx'],
-    ...over,
   };
 }
 
-const wallet = makeWallet;
+const inscribed = (outpoint: string): UtxoContent =>
+  ({ outpoint, inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null });
 
-interface MintStubSnap {
-  state: 'idle' | 'loading-utxos' | 'ready' | 'minting' | 'success' | 'error';
-  feeRate: number | null;
-  selectedUtxo: TxnOutput | null;
-  fundingRecommendation: { status: string; recommended: TxnOutput | null; candidates: readonly unknown[] };
-  simulations: UtxoSimulationRow[];
-  errorMessage: string | null;
-  successTxId: string | null;
-}
+const assetsScan = (u: TxnOutput): UtxoScanState =>
+  ({ kind: 'scanned-with-assets', content: inscribed(`${u.txid}:${u.vout}`) });
 
 /**
- * Snapshot-driven stand-in for the framework-agnostic Cat21MintOrchestrator.
- * The migrated component CONSTRUCTS its orchestrator (`new`); the spec
- * substitutes this stub via `{ provide: Cat21MintOrchestrator, useValue }` and
- * the component's `inject(..., { optional: true }) ??` seam picks it up. It
- * exposes the real `getSnapshot()`/`subscribe()` surface the component binds
- * to, plus signal/subject-shaped SHIMS (`state.set`, `feeRate.set`,
- * `simulationsSubject.next`, …) that funnel into `_patch`, so the test bodies
- * drive the snapshot the same way they drove the old injected stub. Wallet is
- * NOT here — the component reads it from WalletService, so tests push it via
- * `wallets.connectedWalletSubject.next(...)`.
+ * The verdict the orchestrator's own scan reaches for a coin the page shows as
+ * `scan`. A clean or asset-bearing scan reports the same; a failed scan
+ * rejects. `not-scanned` / `scanning` describe the page's scanner only: the
+ * orchestrator force-scans every covering coin itself (above the auto-scan
+ * ceiling the page never scans unasked), so its verdict there is the coin's
+ * content, clean unless a test says otherwise.
  */
-class OrchestratorStub {
-  private _snap: MintStubSnap = {
-    state: 'idle',
-    feeRate: null,
-    selectedUtxo: null,
-    fundingRecommendation: { status: 'scanning', recommended: null, candidates: [] },
-    simulations: [],
-    errorMessage: null,
-    successTxId: null,
-  };
-  private _listeners: Array<(s: MintStubSnap) => void> = [];
-
-  getSnapshot(): MintStubSnap { return this._snap; }
-  subscribe(l: (s: MintStubSnap) => void): () => void {
-    this._listeners.push(l);
-    l(this._snap);
-    return () => { this._listeners = this._listeners.filter((x) => x !== l); };
+function verdictFor(scan: UtxoScanState): UtxoClassification | Error {
+  switch (scan.kind) {
+    case 'scanned-with-assets':
+      return assetsVerdict({ inscriptionIds: scan.content.inscriptionIds });
+    case 'scan-failed':
+      return new Error(scan.message);
+    default:
+      return 'clean';
   }
-  private _patch(p: Partial<MintStubSnap>): void {
-    this._snap = { ...this._snap, ...p };
-    this._listeners.slice().forEach((l) => l(this._snap));
-  }
-
-  /** Return control for the component's `await orch.mint(prompt)`. */
-  readonly mintReturn$ = new Subject<{ txId: string }>();
-  mintImpl: () => Observable<{ txId: string }> = () => this.mintReturn$.asObservable();
-
-  // Real orchestrator command surface the component calls.
-  setWallet = jest.fn(async (_w: unknown) => {});
-  setFeeRate = jest.fn((r: number) => this._patch({ feeRate: r }));
-  // Idempotent: the component's auto-pick effect re-invokes this on every
-  // snapshot change; patching only on a real change keeps the effect from
-  // looping on a null → null (or same-coin) re-selection.
-  setSelectedUtxo = jest.fn((u: TxnOutput | null) => {
-    if (this._snap.selectedUtxo !== u) this._patch({ selectedUtxo: u });
-  });
-  mint = jest.fn((_prompt?: unknown) => firstValueFrom(this.mintImpl()));
-  reset = jest.fn(() => this._patch({
-    feeRate: null, selectedUtxo: null, errorMessage: null, successTxId: null, state: 'ready',
-  }));
-
-  // Signal/subject-shaped SHIMS the test bodies drive → `_patch`.
-  readonly feeRate = { set: (v: number | null) => this._patch({ feeRate: v }) };
-  readonly state = { set: (v: MintStubSnap['state']) => this._patch({ state: v }) };
-  readonly successTxId = { set: (v: string | null) => this._patch({ successTxId: v }) };
-  readonly errorMessage = { set: (v: string | null) => this._patch({ errorMessage: v }) };
-  readonly simulationsSubject = { next: (v: UtxoSimulationRow[]) => this._patch({ simulations: v }) };
-  readonly fundingRecommendationSubject = {
-    next: (v: MintStubSnap['fundingRecommendation']) => this._patch({ fundingRecommendation: v }),
-  };
-  selectedUtxo(): TxnOutput | null { return this._snap.selectedUtxo; }
 }
 
-
-// ---------------------------------------------------------------------------
+const TEST_TEMPLATE = `
+  @if (!connectedWallet()) {
+    <div data-testid="mint-cta">connect</div>
+  } @else if (state() === 'loading-utxos') {
+    <div data-testid="mint-loading">loading</div>
+  } @else if (utxoError(); as e) {
+    <div data-testid="utxo-error">{{ e }}</div>
+  } @else if (state() === 'success') {
+    <div data-testid="mint-success">{{ successTxId() }}</div>
+  } @else {
+    <div data-testid="ready">
+      <span data-testid="bucket">{{ selectedRow()?.bucket }}</span>
+      <span data-testid="canmint">{{ canMint() }}</span>
+      <span data-testid="funding">{{ recommendedFundingSats() }}</span>
+      @if (showSmallUtxoWarning()) {<span data-testid="small-utxo">on</span>}
+      @if (mintError(); as e) {<span data-testid="mint-error">{{ e }}</span>}
+    </div>
+  }
+`;
 
 describe('Mint component (cat21.space /dashboard/mint)', () => {
-  let orch: OrchestratorStub;
+  let ports: FakePorts;
+  let orch: Cat21MintOrchestrator;
   let scanner: ScannerStub;
   let wallets: WalletServiceStub;
   let fixture: ComponentFixture<Mint>;
   let component: Mint;
+  let snapshotListener: (s: MintSnapshot) => void;
+  let provider: ReturnType<typeof installFakeCat21Provider> | null = null;
 
   async function configure(): Promise<void> {
-    orch = new OrchestratorStub();
+    ports = fakePorts();
+    orch = new Cat21MintOrchestrator(ports);
+    const subscribeSpy = jest.spyOn(orch, 'subscribe');
     scanner = new ScannerStub();
     wallets = new WalletServiceStub();
     await TestBed.configureTestingModule({
@@ -176,9 +148,8 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
         },
       ],
     })
-      // Mint imports FeesPicker + WalletConnect. We don't care about
-      // their internals here; let the schema accept their selectors
-      // without trying to compile their templates.
+      // Mint imports FeesPicker + WalletConnect; the slim template keeps the
+      // sentinel testids this spec reads.
       .overrideComponent(Mint, {
         set: { imports: [], template: TEST_TEMPLATE, schemas: [] },
       })
@@ -186,83 +157,61 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
 
     fixture = TestBed.createComponent(Mint);
     component = fixture.componentInstance;
+    snapshotListener = subscribeSpy.mock.calls[0]![0];
     fixture.detectChanges();
   }
 
-  /**
-   * Slim test-only template. We only care about a few sentinel data-
-   * testids and bucket labels in DOM assertions; the production
-   * template's full markup adds noise without coverage value. The
-   * component's signals/computeds are exercised through their public
-   * surface either way.
-   */
-  const TEST_TEMPLATE = `
-    @if (!connectedWallet()) {
-      <div data-testid="mint-cta">connect</div>
-    } @else if (state() === 'loading-utxos') {
-      <div data-testid="mint-loading">loading</div>
-    } @else if (utxoError(); as e) {
-      <div data-testid="utxo-error">{{ e }}</div>
-    } @else if (state() === 'success') {
-      <div data-testid="mint-success">{{ successTxId() }}</div>
-    } @else {
-      <div data-testid="ready">
-        <span data-testid="bucket">{{ selectedRow()?.bucket }}</span>
-        <span data-testid="canmint">{{ canMint() }}</span>
-        <span data-testid="funding">{{ recommendedFundingSats() }}</span>
-        @if (showSmallUtxoWarning()) {<span data-testid="small-utxo">on</span>}
-        @if (mintError(); as e) {<span data-testid="mint-error">{{ e }}</span>}
-      </div>
+  /** Let effects, the orchestrator's async load/recompute and change detection settle. */
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 6; i++) {
+      fixture.detectChanges();
+      await new Promise((r) => setTimeout(r, 0));
     }
-  `;
+    fixture.detectChanges();
+  }
 
-  /**
-   * Helper: feed a list of (utxo, bucket) tuples through both the
-   * orchestrator's simulations$ AND the scanner's states$ so the
-   * component sees a coherent picture in one tick.
-   */
-  function pushRows(rows: { u: TxnOutput; scan: UtxoScanState }[]): void {
+  /** Stage what electrs, ord and the page's scanner report for these coins. */
+  function stage(rows: { u: TxnOutput; scan: UtxoScanState }[]): void {
     scanner.setStates(rows.map((r) => [`${r.u.txid}:${r.u.vout}`, r.scan]));
-    orch.simulationsSubject.next(rows.map((r) => ({ utxo: r.u, simulation: simulation(), insufficient: false })));
-    // Stand in for the SDK's safe-auto recommendation so blocks that rely on
-    // the auto-pick get a selection: the first content-clean covering coin
-    // (status 'auto'), else a non-auto status (never auto-picks unscanned /
-    // scanning / asset / failed coins). E-block overrides this via recommend().
-    const clean = rows.find((r) => r.scan.kind === 'scanned-clean');
-    orch.fundingRecommendationSubject.next(
-      clean
-        ? { status: 'auto', recommended: clean.u, candidates: [] }
-        : rows.some((r) => r.scan.kind === 'not-scanned' || r.scan.kind === 'scanning')
-          ? { status: 'scanning', recommended: null, candidates: [] }
-          : rows.length
-            ? { status: 'expert-required', recommended: null, candidates: [] }
-            : { status: 'insufficient', recommended: null, candidates: [] },
-    );
-    fixture.detectChanges();
+    for (const r of rows) ports.setVerdict(`${r.u.txid}:${r.u.vout}`, verdictFor(r.scan));
+    ports.setCoins(rows.map((r) => r.u));
   }
 
-  /** Override the SDK recommendation explicitly (E-block adoption tests). */
-  function recommend(status: string, recommended: TxnOutput | null): void {
-    orch.fundingRecommendationSubject.next({ status, recommended, candidates: [] });
-    fixture.detectChanges();
+  /** Connect `w`, set the fee rate, and let the orchestrator price `rows`. */
+  async function ready(rows: { u: TxnOutput; scan: UtxoScanState }[], w: WalletInfo = testWallet(), rate = 5): Promise<void> {
+    stage(rows);
+    wallets.connectedWalletSubject.next(w);
+    await settle();
+    component.onFeeRateChange(rate);
+    await settle();
   }
 
-  /**
-   * Simulate a DELIBERATE user pick via the real `selectUtxo` path (which marks
-   * it as a user override so the auto-pick effect preserves it across
-   * recommendation changes). `selectUtxo` only reads `.utxo`; the other row
-   * fields are structural placeholders.
-   */
-  function userPick(u: TxnOutput): void {
+  /** New electrs answer for the connected wallet (a re-read of its UTXO set). */
+  async function pushRows(rows: { u: TxnOutput; scan: UtxoScanState }[]): Promise<void> {
+    stage(rows);
+    await orch.refreshUtxos();
+    await settle();
+  }
+
+  /** A DELIBERATE user pick via the real `selectUtxo` path; only `.utxo` is read. */
+  async function userPick(u: TxnOutput): Promise<void> {
     component.selectUtxo({ utxo: u, simulation: simulation(), scan: { kind: 'scanned-clean' }, bucket: 'clean' });
+    await settle();
   }
+
+  const selected = () => component.selectedUtxo();
 
   beforeEach(async () => {
     await configure();
   });
 
+  afterEach(() => {
+    provider?.restore();
+    provider = null;
+  });
+
   // -------------------------------------------------------------------
-  // A. Disconnected wallet
+  // A. Disconnected wallet: only the connect CTA.
   // -------------------------------------------------------------------
 
   describe('A. wallet not connected', () => {
@@ -275,539 +224,469 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   });
 
   // -------------------------------------------------------------------
-  // B. Loading state
+  // B. Loading: electrs has not answered yet.
   // -------------------------------------------------------------------
 
   describe('B. wallet connected, loading UTXOs', () => {
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('loading-utxos');
-      fixture.detectChanges();
-    });
-
-    it('B1: shows the loading marker and hides ready / cta', () => {
+    it('B1: shows the loading marker and hides ready / cta', async () => {
+      const held = ports.holdUtxos();
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
       const el: HTMLElement = fixture.nativeElement;
+      expect(component.state()).toBe('loading-utxos');
       expect(el.querySelector('[data-testid="mint-loading"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="mint-cta"]')).toBeNull();
       expect(el.querySelector('[data-testid="ready"]')).toBeNull();
+      held.release();
     });
   });
 
   // -------------------------------------------------------------------
-  // C. Error state attribution
+  // C. Error attribution: a failed UTXO load is utxoError, a failed mint
+  //    is mintError, never both.
   // -------------------------------------------------------------------
 
   describe('C. error attribution (utxo-load vs mint)', () => {
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('error');
-      orch.errorMessage.set('boom');
-      fixture.detectChanges();
-    });
+    it('C1: error before mint attempt → utxoError fires', async () => {
+      const held = ports.holdUtxos();
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
+      held.fail(new Error('boom'));
+      await settle();
 
-    it('C1: error before mint attempt → utxoError fires', () => {
-      expect(component.utxoError()).toBe('boom');
+      expect(component.utxoError()).toBe('Failed to load UTXOs: boom');
       expect(component.mintError()).toBeNull();
       expect(fixture.nativeElement.querySelector('[data-testid="utxo-error"]')).toBeTruthy();
     });
 
-    it('C2: error after mint attempt → mintError fires, utxoError silenced', () => {
-      // Set up a viable row so mint() can run
-      pushRows([{ u: utxo(), scan: { kind: 'scanned-clean' } }]);
-      orch.mintImpl = () => throwError(() => new Error('sign refused'));
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-      fixture.detectChanges();
+    it('C2: error after mint attempt → mintError fires, utxoError silenced', async () => {
+      provider = installFakeCat21Provider();
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
+      provider.rejectWith(new Error('sign refused'));
 
-      component.mint();
-      orch.state.set('error');
-      orch.errorMessage.set('sign refused');
-      fixture.detectChanges();
+      await component.mint();
+      await settle();
 
+      expect(component.state()).toBe('error');
       expect(component.mintError()).toBe('sign refused');
       expect(component.utxoError()).toBeNull();
     });
   });
 
   // -------------------------------------------------------------------
-  // D. Empty-state hint + dynamic funding floor
+  // D. recommendedFundingSats: the component's `?? 1` fee-rate fallback
+  //    over the SDK's calculateRecommendedFundingSats (contract, not the
+  //    SDK's formula).
   // -------------------------------------------------------------------
 
   describe('D. recommendedFundingSats — component contract (value from the SDK)', () => {
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      fixture.detectChanges();
+    beforeEach(async () => {
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
     });
 
-    // The component's OWN logic is the `?? 1` fee-rate fallback plus pass-through
-    // of the SDK's `calculateRecommendedFundingSats`. We assert that contract,
-    // not the SDK's internal vsize/formula (the SDK owns it and may sharpen the
-    // estimate), so this spec doesn't re-break when the SDK refines the number.
-
-    it('D1: null feeRate falls back to the feeRate=1 funding (the component `?? 1` guard)', () => {
-      orch.feeRate.set(1);
-      fixture.detectChanges();
-      const atOne = component.recommendedFundingSats();
-      orch.feeRate.set(null);
-      fixture.detectChanges();
-      expect(component.recommendedFundingSats()).toBe(atOne);
+    it('D1: null feeRate falls back to the feeRate=1 funding (the component `?? 1` guard)', async () => {
+      expect(component.feeRate()).toBeNull();
+      const atNull = component.recommendedFundingSats();
+      component.onFeeRateChange(1);
+      await settle();
+      expect(component.recommendedFundingSats()).toBe(atNull);
     });
 
-    it('D2: funding is a positive sat amount covering at least the cat postage', () => {
-      orch.feeRate.set(1);
-      fixture.detectChanges();
-      const funding = component.recommendedFundingSats();
-      expect(funding).toBeGreaterThanOrEqual(CAT21_POSTAGE_SATS);
+    it('D2: funding is a positive sat amount covering at least the cat postage', async () => {
+      component.onFeeRateChange(1);
+      await settle();
+      expect(component.recommendedFundingSats()).toBeGreaterThanOrEqual(CAT21_POSTAGE_SATS);
     });
 
-    it('D3: funding rises with the fee rate (a higher rate needs more funding)', () => {
-      orch.feeRate.set(1);
-      fixture.detectChanges();
+    it('D3: funding rises with the fee rate (a higher rate needs more funding)', async () => {
+      component.onFeeRateChange(1);
+      await settle();
       const low = component.recommendedFundingSats();
-      orch.feeRate.set(100);
-      fixture.detectChanges();
+      component.onFeeRateChange(100);
+      await settle();
       expect(component.recommendedFundingSats()).toBeGreaterThan(low);
     });
   });
 
   // -------------------------------------------------------------------
-  // E. Bucket-driven auto-pick
+  // E. Auto-pick ADOPTS the SDK recommendation ('auto' and 'asset-notice'),
+  //    never a raw value-based pre-pick, and keeps only a deliberate pick.
   // -------------------------------------------------------------------
 
   describe('E. auto-pick ADOPTS the SDK recommendation (no raw value-based pre-pick)', () => {
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-      fixture.detectChanges();
-    });
-
-    const big = (v: number) => utxo({ txid: String(v).repeat(64).slice(0, 64), value: v });
-
-    it('E1: adopts the SDK-recommended clean coin, NOT the largest by value', () => {
-      // The SDK best-fit recommends the SMALLER covering coin (listed first,
-      // so pushRows recommends it). The consumer must adopt exactly that; the
-      // old raw value-based pre-pick would have taken the 80k (largest).
-      pushRows([
-        { u: big(20_000), scan: { kind: 'scanned-clean' } },
-        { u: big(80_000), scan: { kind: 'scanned-clean' } },
+    it('E1: adopts the SDK-recommended clean coin, NOT the largest by value', async () => {
+      // The SDK best-fit recommends the SMALLER covering coin; a raw
+      // value-based pre-pick would take the 80k.
+      await ready([
+        { u: coin(20_000), scan: { kind: 'scanned-clean' } },
+        { u: coin(80_000), scan: { kind: 'scanned-clean' } },
       ]);
-      expect(orch.selectedUtxo()!.value).toBe(20_000);
-      expect(orch.selectedUtxo()!.value).not.toBe(80_000);
+      expect(selected()!.value).toBe(20_000);
       expect(component.fundingExpertRequired()).toBe(false);
     });
 
-    it('E2: only asset-bearing coins cover (status expert-required, one-address wallet) → NO auto-pick, CTA blocked', () => {
-      pushRows([
-        { u: big(80_000), scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } },
-      ]);
-      // This is the asset-to-miner ruling's one-address branch: given
-      // expert-required, the component leaves the mint BLOCKED — selectedUtxo
-      // null, the expert warning up, canMint false so the CTA stays disabled
-      // until a deliberate pick.
-      //
-      // WHAT THIS PINS, AND WHAT IT DOES NOT: this INJECTS the status
-      // (expert-required) via the orchestrator stub, so it pins STATUS -> CTA in
-      // cat21.space's own component. It does NOT prove the DERIVATION (a
-      // one-address wallet -> that status). The derivation is proven twice
-      // elsewhere, on purpose, since jsdom cannot run it here: recommendFunding's
-      // fee model needs a valid pubkey AND the coin's previous-transaction bytes
-      // (real on-chain data), which is the boundary telling us the regtest owns
-      // that proof, not this unit. So: isOneAddressWallet + its thread-through are
-      // SDK units (mutation-checked); the real 'derive' runs on a real wallet in
-      // the assetnotice regtest lane (separate-address path) and on a real
-      // one-address wallet in ordpool's lanes; this file owns only status -> CTA.
-      expect(orch.selectedUtxo()).toBeNull();
+    it('E2: only asset-bearing coins cover on a one-address wallet → SDK derives expert-required, NO auto-pick, CTA blocked', async () => {
+      // The asset-to-miner ruling's one-address branch, derived for real: the
+      // orchestrator resolves the 'derive' topology from the connected wallet
+      // (payment address == ordinals address) and answers expert-required.
+      await ready([{ u: coin(80_000), scan: assetsScan(coin(80_000)) }], oneAddressTestWallet());
+      expect(component.debugFunding().status).toBe('expert-required');
+      expect(selected()).toBeNull();
       expect(component.fundingExpertRequired()).toBe(true);
       expect(component.canMint()).toBe(false);
     });
 
-    it('E2b: a dirty coin covers on a separate-address wallet (status asset-notice) → AUTO-ADOPTS, CTA enabled', () => {
-      const coin = big(80_000);
-      // The ruling's separate-address branch: no clean coin covers, but a dirty
-      // one does and the wallet keeps a separate payment address, so the SDK
-      // NOTICEs and returns the coin (status asset-notice). The component MUST
-      // adopt it — otherwise selectedUtxo stays null, selectedRow is null, and the
-      // notice (nested in that block) never renders. Regression guard for the real
-      // bug where the auto-select adopted status 'auto' ONLY, so the whole
-      // asset-notice path silently produced no notice and a disabled CTA.
-      pushRows([
-        { u: coin, scan: { kind: 'scanned-with-assets', content: { outpoint: `${coin.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } },
-      ]);
-      recommend('asset-notice', coin);
-      expect(orch.selectedUtxo()).not.toBeNull();
-      expect(orch.selectedUtxo()!.txid).toBe(coin.txid);
+    it('E2b: a dirty coin covers on a separate-address wallet → SDK derives asset-notice, AUTO-ADOPTS, CTA enabled', async () => {
+      // The separate-address branch: no clean coin covers, a dirty one does,
+      // so the SDK NOTICEs and returns the coin. The component must adopt it,
+      // or the notice (nested in the selected-row block) never renders.
+      const c = coin(80_000);
+      await ready([{ u: c, scan: assetsScan(c) }], testWallet());
+      expect(component.assetNotice()).toBe(true);
+      expect(selected()!.txid).toBe(c.txid);
+      expect(component.noticeAssets()).toEqual({ inscriptionIds: ['i'], runeNames: [], catIds: [], rareSat: null });
       expect(component.fundingExpertRequired()).toBe(false);
+      expect(component.canMint()).toBe(true);
     });
 
-    it('E3: unscanned coin (status scanning) → NO auto-pick (the footgun fix)', () => {
-      // The old pre-pick auto-adopted an unscanned coin; the SDK never does.
-      pushRows([{ u: big(80_000), scan: { kind: 'not-scanned' } }]);
-      expect(orch.selectedUtxo()).toBeNull();
+    it('E3: a coin whose content scan has not answered → no rows, NO auto-pick', async () => {
+      // The orchestrator force-scans before it prices anything, so a pending
+      // scan yields no recommendation and no row to adopt.
+      ports.scan.classify.mockImplementation(() => new Promise<UtxoClassification>(() => undefined));
+      stage([{ u: coin(80_000), scan: { kind: 'scanning' } }]);
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
+      component.onFeeRateChange(5);
+      await settle();
+      expect(ports.scan.classify).toHaveBeenCalledWith(`${coin(80_000).txid}:0`);
+      expect(component.viableRows()).toEqual([]);
+      expect(selected()).toBeNull();
     });
 
-    it('E4: scan-failed coin → NO auto-pick (the footgun fix)', () => {
-      pushRows([{ u: big(80_000), scan: { kind: 'scan-failed', message: 'oops' } }]);
-      expect(orch.selectedUtxo()).toBeNull();
+    it('E4: scan-failed coin on a one-address wallet → NO auto-pick', async () => {
+      // A failed scan is unknown content, never clean: blocked on a one-address wallet.
+      await ready([{ u: coin(80_000), scan: { kind: 'scan-failed', message: 'oops' } }], oneAddressTestWallet());
+      expect(component.debugFunding().status).toBe('expert-required');
+      expect(selected()).toBeNull();
     });
 
-    it('E5: status auto but the recommended coin is absent from the viable rows → NO auto-pick (guard)', () => {
-      // Rows have no clean coin (so pushRows recommends nothing), then the SDK
-      // recommends a coin not present in this component's viable set.
-      pushRows([{ u: big(80_000), scan: { kind: 'not-scanned' } }]);
-      recommend('auto', big(999));
-      expect(orch.selectedUtxo()).toBeNull();
+    it('E5: status auto but the recommended coin is absent from the viable rows → NO auto-pick (guard)', async () => {
+      // The real orchestrator never recommends a coin it did not price, so this
+      // guard is reached with a SYNTHETIC snapshot: the real one with only the
+      // recommendation replaced, pushed through the component's own
+      // subscription. Everything else stays the real orchestrator's.
+      await ready([{ u: coin(80_000), scan: assetsScan(coin(80_000)) }], oneAddressTestWallet());
+      expect(selected()).toBeNull();
+      const absent = coin(999);
+      const setSelected = jest.spyOn(orch, 'setSelectedUtxo');
+      snapshotListener({ ...orch.getSnapshot(), fundingRecommendation: { status: 'auto', recommended: { ...absent, bucket: 'clean' }, candidates: [] } });
+      await settle();
+      // The component never hands the orchestrator a coin it has no row for.
+      expect(setSelected.mock.calls.map(([u]) => u?.txid ?? null)).not.toContain(absent.txid);
+      expect(selected()).toBeNull();
     });
 
-    it('E6: an explicit user pick survives a row re-emit if still viable', () => {
-      const smaller = big(20_000);
-      pushRows([
-        { u: big(80_000), scan: { kind: 'scanned-clean' } },
-        { u: smaller, scan: { kind: 'scanned-clean' } },
+    it('E6: an explicit user pick survives a row re-emit if still viable', async () => {
+      const bigger = coin(80_000);
+      await ready([
+        { u: bigger, scan: { kind: 'scanned-clean' } },
+        { u: coin(20_000), scan: { kind: 'scanned-clean' } },
       ]);
-      userPick(smaller);
-      pushRows([
-        { u: big(80_000), scan: { kind: 'scanned-clean' } },
-        { u: smaller, scan: { kind: 'scanned-clean' } },
+      expect(selected()!.value).toBe(20_000); // the SDK's pick
+      await userPick(bigger);
+      await pushRows([
+        { u: bigger, scan: { kind: 'scanned-clean' } },
+        { u: coin(20_000), scan: { kind: 'scanned-clean' } },
       ]);
-      expect(orch.selectedUtxo()!.value).toBe(20_000);
+      expect(selected()!.value).toBe(80_000);
     });
 
-    it('E7: user pick disappears from the list → re-adopts the current recommendation', () => {
-      const gone = big(20_000);
-      pushRows([
-        { u: big(80_000), scan: { kind: 'scanned-clean' } },
+    it('E7: user pick disappears from the list → re-adopts the current recommendation', async () => {
+      const gone = coin(20_000);
+      await ready([
+        { u: coin(80_000), scan: { kind: 'scanned-clean' } },
         { u: gone, scan: { kind: 'scanned-clean' } },
       ]);
-      userPick(gone);
-      // Re-emit WITHOUT the gone one; pushRows now recommends the clean 80k.
-      pushRows([{ u: big(80_000), scan: { kind: 'scanned-clean' } }]);
-      expect(orch.selectedUtxo()!.value).toBe(80_000);
+      await userPick(gone);
+      await pushRows([{ u: coin(80_000), scan: { kind: 'scanned-clean' } }]);
+      expect(selected()!.value).toBe(80_000);
     });
 
-    it('E8: empty row list → selectedUtxo cleared', () => {
-      pushRows([{ u: big(80_000), scan: { kind: 'scanned-clean' } }]);
-      orch.simulationsSubject.next([]);
-      orch.fundingRecommendationSubject.next({ status: 'insufficient', recommended: null, candidates: [] });
-      fixture.detectChanges();
-      expect(orch.selectedUtxo()).toBeNull();
+    it('E8: empty row list → selectedUtxo cleared', async () => {
+      await ready([{ u: coin(80_000), scan: { kind: 'scanned-clean' } }]);
+      expect(selected()).not.toBeNull();
+      await pushRows([]);
+      expect(component.debugFunding().status).toBe('insufficient');
+      expect(selected()).toBeNull();
     });
 
-    it('E9: fee-rate change RE-ADOPTS the recommendation, never keeps a stale AUTO-pick (the 2026-08-31 regtest false-red)', () => {
-      // The regtest picker auto-seeds fastestFee=5, then the user types 100. At the
-      // seed rate the SDK recommends the smallest headroom coin (13689 — a dust-cliff
-      // coin at rate 100); at rate 100 it recommends a real headroom coin (99301).
-      // The component must follow the rate-100 recommendation, not keep the stale
-      // rate-5 AUTO-pick (which mints at 107.7 sat/vB for a typed 100). An explicit
-      // user pick still survives (E6); an auto-pick does not.
-      const c100k = big(100_000), c99301 = big(99_301), c13689 = big(13_689);
-      orch.feeRate.set(5); // auto-seed
-      // 13689 listed first so pushRows' first-clean recommendation is the SDK's
-      // rate-5 pick (the smallest headroom coin).
-      pushRows([
-        { u: c13689, scan: { kind: 'scanned-clean' } },
-        { u: c99301, scan: { kind: 'scanned-clean' } },
-        { u: c100k, scan: { kind: 'scanned-clean' } },
-      ]);
-      expect(orch.selectedUtxo()!.value).toBe(13_689);
-      // user types 100 -> SDK re-recommends the headroom coin
-      orch.feeRate.set(100);
-      recommend('auto', c99301);
-      expect(orch.selectedUtxo()!.value).toBe(99_301);
+    it('E9: fee-rate change RE-ADOPTS the recommendation, never keeps a stale AUTO-pick', async () => {
+      // At rate 5 the SDK recommends the smallest headroom coin (13 689); at
+      // rate 100 that coin is a dust-cliff coin and the SDK recommends a real
+      // headroom coin. The auto-pick follows; only an explicit pick survives (E6).
+      await ready([
+        { u: coin(13_689), scan: { kind: 'scanned-clean' } },
+        { u: coin(99_301), scan: { kind: 'scanned-clean' } },
+        { u: coin(100_000), scan: { kind: 'scanned-clean' } },
+      ], testWallet(), 5);
+      expect(selected()!.value).toBe(13_689);
+      component.onFeeRateChange(100);
+      await settle();
+      const recommended = orch.getSnapshot().fundingRecommendation.recommended;
+      expect(recommended!.value).not.toBe(13_689);
+      expect(selected()!.value).toBe(recommended!.value);
     });
   });
 
   // -------------------------------------------------------------------
-  // F. Scanner integration — autoScan + scanRow
+  // F. Scanner integration: autoScan on every row change, scanRow by outpoint.
   // -------------------------------------------------------------------
 
   describe('F. scanner integration', () => {
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-      fixture.detectChanges();
-    });
-
-    it('F1: autoScan called with the {txid, vout, value} list every row change', () => {
-      pushRows([
-        { u: utxo({ txid: 'a'.repeat(64), vout: 0, value: 5_000 }), scan: { kind: 'not-scanned' } },
-        { u: utxo({ txid: 'b'.repeat(64), vout: 1, value: 90_000 }), scan: { kind: 'not-scanned' } },
+    it('F1: autoScan called with the {txid, vout, value} list every row change', async () => {
+      await ready([
+        { u: { ...fundingCoin(5_000, 0xa1), vout: 0 }, scan: { kind: 'not-scanned' } },
+        { u: { ...fundingCoin(90_000, 0xb1), vout: 1 }, scan: { kind: 'not-scanned' } },
       ]);
       expect(scanner.autoScan).toHaveBeenCalled();
       const lastCall = (scanner.autoScan as jest.Mock).mock.calls.at(-1)![0] as { value: number }[];
       expect(lastCall.map((u) => u.value).sort()).toEqual([5_000, 90_000]);
     });
 
-    it('F2: scanRow(row) calls scanner.scan with the outpoint string', () => {
-      const u = utxo({ txid: 'c'.repeat(64), vout: 7 });
-      pushRows([{ u, scan: { kind: 'not-scanned' } }]);
+    it('F2: scanRow(row) calls scanner.scan with the outpoint string', async () => {
+      const u = fundingCoin(60_000, 0xc1, 7);
+      await ready([{ u, scan: { kind: 'not-scanned' } }]);
       component.scanRow({ utxo: u, simulation: simulation(), scan: { kind: 'not-scanned' }, bucket: 'unscanned' });
-      expect(scanner.scan).toHaveBeenCalledWith(`${'c'.repeat(64)}:7`);
+      expect(scanner.scan).toHaveBeenCalledWith(`${u.txid}:7`);
     });
   });
 
   // -------------------------------------------------------------------
-  // G. Bucket label rendering / selectedRow bucket
+  // G. The selected row carries the page scanner's bucket.
   // -------------------------------------------------------------------
 
   describe('G. bucket label on selectedRow', () => {
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-      fixture.detectChanges();
-    });
-
-    const u = utxo();
+    const u = coin(50_000);
 
     it.each<[UtxoScanState['kind'], string]>([
       ['not-scanned', 'unscanned'],
       ['scanning', 'scanning'],
       ['scanned-clean', 'clean'],
       ['scan-failed', 'failed'],
-    ])('G1: scan kind %s → bucket %s', (kind, bucket) => {
+    ])('G1: scan kind %s → bucket %s', async (kind, bucket) => {
       const scan = kind === 'scan-failed'
         ? { kind: 'scan-failed' as const, message: 'x' }
         : { kind } as UtxoScanState;
-      pushRows([{ u, scan }]);
-      // Only a content-clean coin is auto-picked now (via the SDK's
-      // fundingRecommendation$); every non-clean kind is left for a deliberate
-      // pick, so force-select to inspect the bucket on a selected row.
-      if (kind !== 'scanned-clean') {
-        userPick(u);
-        fixture.detectChanges();
-      }
+      await ready([{ u, scan }]);
+      if (kind !== 'scanned-clean') await userPick(u);
       expect(component.selectedRow()!.bucket).toBe(bucket);
     });
 
-    it('G2: scanned-with-assets → bucket "assets"', () => {
-      pushRows([{ u, scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['x'], runes: null, catIds: [], catSat: null, rareSat: null } } }]);
-      // assets is never auto-picked; the user has to pick it themselves
-      userPick(u);
-      fixture.detectChanges();
+    it('G2: scanned-with-assets → bucket "assets"', async () => {
+      await ready([{ u, scan: assetsScan(u) }], oneAddressTestWallet());
+      // assets is never auto-picked on a one-address wallet; the user picks it
+      await userPick(u);
       expect(component.selectedRow()!.bucket).toBe('assets');
     });
   });
 
   // -------------------------------------------------------------------
-  // H. canMint gating
+  // H. canMint gating: viable rows, fee rate, a selection, state ready.
   // -------------------------------------------------------------------
 
   describe('H. canMint gating', () => {
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-    });
-
-    it('H1: viable+feeRate+selected+ready → true', () => {
-      orch.feeRate.set(5);
-      pushRows([{ u: utxo(), scan: { kind: 'scanned-clean' } }]);
+    it('H1: viable+feeRate+selected+ready → true', async () => {
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
       expect(component.canMint()).toBe(true);
     });
 
-    it('H2: no viable rows → false', () => {
-      orch.feeRate.set(5);
-      orch.simulationsSubject.next([]);
-      fixture.detectChanges();
+    it('H2: no viable rows → false', async () => {
+      await ready([]);
+      expect(component.viableRows()).toEqual([]);
       expect(component.canMint()).toBe(false);
     });
 
-    it('H3: feeRate null → false', () => {
-      pushRows([{ u: utxo(), scan: { kind: 'scanned-clean' } }]);
-      orch.feeRate.set(null);
-      fixture.detectChanges();
+    it('H3: feeRate null → false', async () => {
+      // The fee rate becomes null again through "mint another" (orchestrator reset).
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
+      component.mintAnother();
+      await settle();
+      expect(component.feeRate()).toBeNull();
       expect(component.canMint()).toBe(false);
     });
 
-    it('H4: selectedUtxo null → false', () => {
-      orch.feeRate.set(5);
-      pushRows([{ u: utxo(), scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } }]);
-      // auto-pick refuses assets-only, so selectedUtxo stays null
-      expect(orch.selectedUtxo()).toBeNull();
+    it('H4: selectedUtxo null → false', async () => {
+      await ready([{ u: coin(50_000), scan: assetsScan(coin(50_000)) }], oneAddressTestWallet());
+      // auto-pick refuses assets-only on a one-address wallet, so selectedUtxo stays null
+      expect(component.viableRows().length).toBe(1);
+      expect(selected()).toBeNull();
       expect(component.canMint()).toBe(false);
     });
 
-    it('H5: state=minting → false', () => {
-      orch.feeRate.set(5);
-      pushRows([{ u: utxo(), scan: { kind: 'scanned-clean' } }]);
-      orch.state.set('minting');
-      fixture.detectChanges();
+    it('H5: state=minting → false', async () => {
+      provider = installFakeCat21Provider();
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
+      // A broadcast that never answers holds the orchestrator in 'minting'.
+      ports.broadcast.mockImplementation(() => new Promise<string>(() => undefined));
+      void component.mint();
+      await settle();
+      expect(component.state()).toBe('minting');
       expect(component.canMint()).toBe(false);
     });
   });
 
   // -------------------------------------------------------------------
-  // I. showSmallUtxoWarning — single-address content-safety hint
+  // I. showSmallUtxoWarning: single-address wallet, sub-10k, content unknown.
   // -------------------------------------------------------------------
 
   describe('I. showSmallUtxoWarning', () => {
-    beforeEach(() => {
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-    });
-
-    it('I1: split-address wallet → never shows, even for tiny UTXOs', () => {
-      wallets.connectedWalletSubject.next(wallet({
-        ordinalsAddress: 'bc1p-ord',
-        paymentAddress: '3-pay',
-      }));
-      pushRows([{ u: utxo({ value: 1_000 }), scan: { kind: 'not-scanned' } }]);
+    it('I1: split-address wallet → never shows, even for tiny UTXOs', async () => {
+      const u = coin(5_000);
+      await ready([{ u, scan: { kind: 'not-scanned' } }], testWallet());
+      await userPick(u);
+      expect(component.selectedRow()).not.toBeNull();
       expect(component.showSmallUtxoWarning()).toBe(false);
     });
 
-    it('I2: single-address + sub-10k + unscanned → shows', () => {
-      wallets.connectedWalletSubject.next(wallet({
-        ordinalsAddress: 'same-addr',
-        paymentAddress: 'same-addr',
-      }));
-      const u = utxo({ value: 5_000 });
-      pushRows([{ u, scan: { kind: 'not-scanned' } }]);
-      // Unscanned coins are no longer auto-picked; the user picks it (expert
-      // mode) and only then does the small-UTXO safety warning apply.
-      userPick(u);
-      fixture.detectChanges();
+    it('I2: single-address + sub-10k + unscanned → shows', async () => {
+      const u = coin(5_000);
+      await ready([{ u, scan: { kind: 'not-scanned' } }], oneAddressTestWallet());
+      await userPick(u);
       expect(component.showSmallUtxoWarning()).toBe(true);
     });
 
-    it('I3: single-address + sub-10k + clean → suppressed (clean takes over)', () => {
-      wallets.connectedWalletSubject.next(wallet({
-        ordinalsAddress: 'same-addr',
-        paymentAddress: 'same-addr',
-      }));
-      pushRows([{ u: utxo({ value: 5_000 }), scan: { kind: 'scanned-clean' } }]);
+    it('I3: single-address + sub-10k + clean → suppressed (clean takes over)', async () => {
+      await ready([{ u: coin(5_000), scan: { kind: 'scanned-clean' } }], oneAddressTestWallet());
+      expect(component.selectedRow()!.bucket).toBe('clean');
       expect(component.showSmallUtxoWarning()).toBe(false);
     });
 
-    it('I4: single-address + sub-10k + assets → suppressed (assets-found takes over)', () => {
-      wallets.connectedWalletSubject.next(wallet({
-        ordinalsAddress: 'same-addr',
-        paymentAddress: 'same-addr',
-      }));
-      const u = utxo({ value: 5_000 });
-      pushRows([{ u, scan: { kind: 'scanned-with-assets', content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } } }]);
-      userPick(u);
-      fixture.detectChanges();
+    it('I4: single-address + sub-10k + assets → suppressed (assets-found takes over)', async () => {
+      const u = coin(5_000);
+      await ready([{ u, scan: assetsScan(u) }], oneAddressTestWallet());
+      await userPick(u);
+      expect(component.selectedRow()!.bucket).toBe('assets');
       expect(component.showSmallUtxoWarning()).toBe(false);
     });
 
-    it('I5: single-address + >10k UTXO → suppressed (above threshold)', () => {
-      wallets.connectedWalletSubject.next(wallet({
-        ordinalsAddress: 'same-addr',
-        paymentAddress: 'same-addr',
-      }));
-      pushRows([{ u: utxo({ value: 50_000 }), scan: { kind: 'not-scanned' } }]);
+    it('I5: single-address + >10k UTXO → suppressed (above threshold)', async () => {
+      const u = coin(50_000);
+      await ready([{ u, scan: { kind: 'not-scanned' } }], oneAddressTestWallet());
+      await userPick(u);
+      expect(component.selectedRow()!.bucket).toBe('unscanned');
       expect(component.showSmallUtxoWarning()).toBe(false);
     });
   });
 
   // -------------------------------------------------------------------
-  // J. isSingleAddressWallet detection
+  // J. isSingleAddressWallet: payment address == ordinals address.
   // -------------------------------------------------------------------
 
   describe('J. isSingleAddressWallet', () => {
-    it('J1: same addresses → true', () => {
-      wallets.connectedWalletSubject.next(wallet({ ordinalsAddress: 'x', paymentAddress: 'x' }));
-      fixture.detectChanges();
+    it('J1: same addresses → true', async () => {
+      wallets.connectedWalletSubject.next(oneAddressTestWallet());
+      await settle();
       expect(component.isSingleAddressWallet()).toBe(true);
     });
 
-    it('J2: different addresses → false', () => {
-      wallets.connectedWalletSubject.next(wallet({ ordinalsAddress: 'bc1p-x', paymentAddress: '3-y' }));
-      fixture.detectChanges();
+    it('J2: different addresses → false', async () => {
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
       expect(component.isSingleAddressWallet()).toBe(false);
     });
 
-    it('J3: no wallet → false', () => {
+    it('J3: no wallet → false', async () => {
       wallets.connectedWalletSubject.next(null);
-      fixture.detectChanges();
+      await settle();
       expect(component.isSingleAddressWallet()).toBe(false);
     });
   });
 
   // -------------------------------------------------------------------
-  // K. Mint command flow
+  // K. Mint command flow and "mint another".
   // -------------------------------------------------------------------
 
   describe('K. mint() / mintAnother()', () => {
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-      pushRows([{ u: utxo(), scan: { kind: 'scanned-clean' } }]);
+    beforeEach(async () => {
+      provider = installFakeCat21Provider();
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
     });
 
-    it('K1: mint() calls orchestrator.mint and flips mintAttempted on first attempt', () => {
-      component.mint();
-      expect(orch.mint).toHaveBeenCalledTimes(1);
-      // a subsequent error gets routed to mintError, not utxoError
-      orch.state.set('error');
-      orch.errorMessage.set('cancelled');
-      fixture.detectChanges();
+    it('K1: mint() calls orchestrator.mint and flips mintAttempted on first attempt', async () => {
+      const mintSpy = jest.spyOn(orch, 'mint');
+      provider!.rejectWith(new Error('cancelled'));
+      await component.mint();
+      await settle();
+      expect(mintSpy).toHaveBeenCalledTimes(1);
+      // the error is routed to mintError, not utxoError
       expect(component.mintError()).toBe('cancelled');
       expect(component.utxoError()).toBeNull();
     });
 
-    it('K2: mint() error is swallowed by the subscribe and does not throw', () => {
-      orch.mintImpl = () => throwError(() => new Error('user cancelled'));
-      expect(() => component.mint()).not.toThrow();
+    it('K2: mint() error is swallowed and does not throw', async () => {
+      provider!.rejectWith(new Error('user cancelled'));
+      await expect(component.mint()).resolves.toBeUndefined();
     });
 
-    it('K3: mintAnother() resets mintAttempted and calls orchestrator.reset', () => {
-      component.mint();
-      orch.state.set('error');
-      orch.errorMessage.set('boom');
-      fixture.detectChanges();
+    it('K3: mintAnother() resets mintAttempted and calls orchestrator.reset', async () => {
+      const resetSpy = jest.spyOn(orch, 'reset');
+      provider!.rejectWith(new Error('boom'));
+      await component.mint();
+      await settle();
       expect(component.mintError()).toBe('boom');
 
       component.mintAnother();
-      expect(orch.reset).toHaveBeenCalledTimes(1);
+      await settle();
+      expect(resetSpy).toHaveBeenCalledTimes(1);
 
       // After reset, a fresh utxo-load error attributes to utxoError again
-      orch.state.set('error');
-      orch.errorMessage.set('utxo fetch failed');
-      fixture.detectChanges();
-      expect(component.utxoError()).toBe('utxo fetch failed');
+      const held = ports.holdUtxos();
+      const reload = orch.refreshUtxos();
+      held.fail(new Error('utxo fetch failed'));
+      await reload;
+      await settle();
+      expect(component.utxoError()).toBe('Failed to load UTXOs: utxo fetch failed');
       expect(component.mintError()).toBeNull();
+    });
+
+    it('K4: mint() has the wallet sign the funding input and broadcasts the transaction', async () => {
+      await component.mint();
+      await settle();
+      expect(provider!.requests.map((r) => r.signAtIndex)).toEqual([[0]]);
+      expect(ports.broadcast).toHaveBeenCalledTimes(1);
+      expect(component.state()).toBe('success');
+      expect(component.successTxId()).toBe(await ports.broadcast.mock.results[0]!.value);
     });
   });
 
   // -------------------------------------------------------------------
-  // L. selectUtxo + expert override
+  // L. selectUtxo: the expert override reaches the orchestrator.
   // -------------------------------------------------------------------
 
   describe('L. selectUtxo (expert override)', () => {
-    it('L1: clicking a row delegates to orchestrator.setSelectedUtxo', () => {
-      const u = utxo({ value: 60_000 });
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-      pushRows([{ u, scan: { kind: 'scanned-clean' } }]);
-      orch.setSelectedUtxo.mockClear();
+    it('L1: clicking a row delegates to orchestrator.setSelectedUtxo', async () => {
+      const u = coin(60_000);
+      await ready([{ u, scan: { kind: 'scanned-clean' } }]);
+      const setSelected = jest.spyOn(orch, 'setSelectedUtxo');
       component.selectUtxo({ utxo: u, simulation: simulation(), scan: { kind: 'scanned-clean' }, bucket: 'clean' });
-      expect(orch.setSelectedUtxo).toHaveBeenCalledWith(u);
+      expect(setSelected).toHaveBeenCalledWith(u);
     });
 
-    it('L2: user can explicitly pick an assets-bearing row (override path)', () => {
-      const u = utxo({ value: 5_000 });
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-      const assetsScan: UtxoScanState = { kind: 'scanned-with-assets', content: { outpoint: `${u.txid}:0`, inscriptionIds: ['inscription-id'], runes: null, catIds: [], catSat: null, rareSat: null } };
-      pushRows([{ u, scan: assetsScan }]);
+    it('L2: user can explicitly pick an assets-bearing row (override path)', async () => {
+      const u = coin(5_000);
+      await ready([{ u, scan: assetsScan(u) }], oneAddressTestWallet());
       // auto-pick refused → selectedUtxo null
-      expect(orch.selectedUtxo()).toBeNull();
-      // explicit override
-      component.selectUtxo({ utxo: u, simulation: simulation(), scan: assetsScan, bucket: 'assets' });
-      expect(orch.selectedUtxo()).toBe(u);
+      expect(selected()).toBeNull();
+      component.selectUtxo({ utxo: u, simulation: simulation(), scan: assetsScan(u), bucket: 'assets' });
+      await settle();
+      expect(selected()).toEqual(u);
       expect(component.selectedRow()!.bucket).toBe('assets');
     });
-
   });
 
   // -------------------------------------------------------------------
-  // M. Helper: runeNames + autoScanThreshold + toNumber
+  // M. Small helpers.
   // -------------------------------------------------------------------
 
   describe('M. small helpers', () => {
@@ -830,26 +709,26 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       // Link construction itself is proven in funding-asset-links.spec; here we
       // pin that the panel delegates to it rather than building its own URL.
       expect(component.inscriptionReviewLink(`${txid}i0`)).toBe(`https://ordpool.space/tx/${txid}?artifact=${txid}i0`);
-      // Nothing resolved yet → no link, so the row shows the balance as text and
-      // one slow name never blocks the panel.
+      // Nothing resolved yet → no link, so the row shows the balance as text.
       expect(component.runeEtchingHref('UNCOMMON•GOODS')).toBeNull();
     });
   });
 
   // -------------------------------------------------------------------
-  // N. Success card
+  // N. Success card shows the broadcast txid.
   // -------------------------------------------------------------------
 
   describe('N. success state', () => {
-    it('N1: state=success shows the success marker with the broadcast txid', () => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('success');
-      orch.successTxId.set('deadbeef'.repeat(8));
-      fixture.detectChanges();
-      const el: HTMLElement = fixture.nativeElement;
-      const node = el.querySelector('[data-testid="mint-success"]');
+    it('N1: state=success shows the success marker with the broadcast txid', async () => {
+      provider = installFakeCat21Provider();
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
+      await component.mint();
+      await settle();
+      const txid = component.successTxId();
+      expect(txid).toMatch(/^[0-9a-f]{64}$/);
+      const node = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="mint-success"]');
       expect(node).toBeTruthy();
-      expect(node!.textContent).toContain('deadbeef'.repeat(8));
+      expect(node!.textContent).toContain(txid!);
     });
   });
 
@@ -861,33 +740,29 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   // -------------------------------------------------------------------
 
   describe('MATRIX-A. wallet lifecycle', () => {
-    it('MATRIX-A5(B): wallet swap resets scanner', () => {
-      const w1 = wallet({ ordinalsAddress: 'addr-1', paymentAddress: 'pay-1' });
-      const w2 = wallet({ ordinalsAddress: 'addr-2', paymentAddress: 'pay-2' });
+    it('MATRIX-A5(B): wallet swap resets scanner', async () => {
       // First connect → no reset (initial null → wallet)
-      wallets.connectedWalletSubject.next(w1);
-      fixture.detectChanges();
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
       scanner.reset.mockClear();
       // Swap → reset fires
-      wallets.connectedWalletSubject.next(w2);
-      fixture.detectChanges();
+      wallets.connectedWalletSubject.next(oneAddressTestWallet());
+      await settle();
       expect(scanner.reset).toHaveBeenCalledTimes(1);
     });
 
-    it('MATRIX-A6(B): initial null → wallet emission does NOT reset the scanner', () => {
+    it('MATRIX-A6(B): initial null → wallet emission does NOT reset the scanner', async () => {
       scanner.reset.mockClear();
-      wallets.connectedWalletSubject.next(wallet());
-      fixture.detectChanges();
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
       expect(scanner.reset).not.toHaveBeenCalled();
     });
 
-    it('MATRIX-A9(B): disconnect returns to idle state', () => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      fixture.detectChanges();
+    it('MATRIX-A9(B): disconnect returns to idle state', async () => {
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
       wallets.connectedWalletSubject.next(null);
-      orch.state.set('idle');
-      fixture.detectChanges();
+      await settle();
+      expect(component.state()).toBe('idle');
       const el: HTMLElement = fixture.nativeElement;
       expect(el.querySelector('[data-testid="mint-cta"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="ready"]')).toBeNull();
@@ -895,201 +770,142 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   });
 
   describe('MATRIX-B. fee-rate-driven viability', () => {
-    it('MATRIX-B14(B): recommendedFundingSats increases strictly across 1/5/50/100 sat/vB', () => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      // Pin the component contract (strictly rising with the fee rate), not the
-      // SDK's exact vsize output — same reasoning as the D-block.
-      const values = [1, 5, 50, 100].map((rate) => {
-        orch.feeRate.set(rate);
-        fixture.detectChanges();
-        return component.recommendedFundingSats();
-      });
+    it('MATRIX-B14(B): recommendedFundingSats increases strictly across 1/5/50/100 sat/vB', async () => {
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
+      const values: number[] = [];
+      for (const rate of [1, 5, 50, 100]) {
+        component.onFeeRateChange(rate);
+        await settle();
+        values.push(component.recommendedFundingSats());
+      }
       for (let i = 1; i < values.length; i++) {
         expect(values[i]).toBeGreaterThan(values[i - 1]);
       }
     });
 
-    it('MATRIX-B15(B): feeRate=null yields the same funding as feeRate=1 (the `?? 1` fallback)', () => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(1);
-      fixture.detectChanges();
+    it('MATRIX-B15(B): feeRate=null yields the same funding as feeRate=1 (the `?? 1` fallback)', async () => {
+      wallets.connectedWalletSubject.next(testWallet());
+      await settle();
+      component.onFeeRateChange(1);
+      await settle();
       const atOne = component.recommendedFundingSats();
-      orch.feeRate.set(null);
-      fixture.detectChanges();
+      component.mintAnother(); // orchestrator reset → fee rate null
+      await settle();
+      expect(component.feeRate()).toBeNull();
       expect(component.recommendedFundingSats()).toBe(atOne);
     });
   });
 
   describe('MATRIX-D. bucket-driven UI', () => {
-    const big = (v: number) => utxo({ txid: String(v).repeat(64).slice(0, 64), value: v });
-
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-    });
-
-    it('MATRIX-D15(B): viable row list is capped at 10 entries', () => {
-      const rows = Array.from({ length: 25 }, (_, i) => ({
-        u: big(50_000 + i),
+    it('MATRIX-D15(B): viable row list is capped at 10 entries', async () => {
+      await ready(Array.from({ length: 25 }, (_, i) => ({
+        u: coin(50_000 + i),
         scan: { kind: 'scanned-clean' } as UtxoScanState,
-      }));
-      pushRows(rows);
+      })));
+      expect(component.allViableRows().length).toBe(25);
       expect(component.viableRows().length).toBe(10);
     });
 
-    it('MATRIX-D16(B): viable rows sorted strictly descending by UTXO value', () => {
-      pushRows([
-        { u: big(10_000), scan: { kind: 'scanned-clean' } },
-        { u: big(50_000), scan: { kind: 'scanned-clean' } },
-        { u: big(30_000), scan: { kind: 'scanned-clean' } },
+    it('MATRIX-D16(B): viable rows sorted strictly descending by UTXO value', async () => {
+      await ready([
+        { u: coin(10_000), scan: { kind: 'scanned-clean' } },
+        { u: coin(50_000), scan: { kind: 'scanned-clean' } },
+        { u: coin(30_000), scan: { kind: 'scanned-clean' } },
       ]);
-      const values = component.viableRows().map((r) => r.utxo.value);
-      expect(values).toEqual([50_000, 30_000, 10_000]);
+      expect(component.viableRows().map((r) => r.utxo.value)).toEqual([50_000, 30_000, 10_000]);
     });
   });
 
   describe('MATRIX-E. expert-panel visibility (THE 2026-06-12 regression group)', () => {
-    const big = (v: number) => utxo({ txid: String(v).repeat(64).slice(0, 64), value: v });
+    // The assets-only cases run on a one-address wallet, where the SDK
+    // blocks (expert-required) and leaves the selection to the user.
+    const assetsOnly = async (u = coin(50_000)) => ready([{ u, scan: assetsScan(u) }], oneAddressTestWallet());
 
-    beforeEach(() => {
-      wallets.connectedWalletSubject.next(wallet());
-      orch.state.set('ready');
-      orch.feeRate.set(5);
-    });
-
-    it('MATRIX-E1(B): expert panel renders when viableRows > 0 AND a row is selected (baseline)', () => {
-      pushRows([{ u: big(50_000), scan: { kind: 'scanned-clean' } }]);
-      const el: HTMLElement = fixture.nativeElement;
+    it('MATRIX-E1(B): expert panel renders when viableRows > 0 AND a row is selected (baseline)', async () => {
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
       expect(component.viableRows().length).toBeGreaterThan(0);
       expect(component.selectedRow()).not.toBeNull();
-      // The slim test template doesn't render the <details>; we verify
-      // via the component state that drives it.
       expect(component.pickerOpenByDefault()).toBe(false);
     });
 
-    it('MATRIX-E2(B): **THE REGRESSION** — expert panel must render when viableRows > 0 even if selectedRow is null (assets-only case)', () => {
-      // assets-only scenario: auto-pick refuses, selectedUtxo stays null,
-      // but the user MUST still see the panel to override with "Use anyway".
-      const assetsScan: UtxoScanState = {
-        kind: 'scanned-with-assets',
-        content: { outpoint: 'x:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null },
-      };
-      pushRows([{ u: big(50_000), scan: assetsScan }]);
+    it('MATRIX-E2(B): **THE REGRESSION** — expert panel must render when viableRows > 0 even if selectedRow is null (assets-only case)', async () => {
+      await assetsOnly();
       expect(component.viableRows().length).toBeGreaterThan(0);
       expect(component.selectedRow()).toBeNull();
-      // The panel must be open-by-default in this exact case (no other
-      // way for the user to make a decision).
       expect(component.pickerOpenByDefault()).toBe(true);
     });
 
-    it('MATRIX-E3(B): expert panel logic skips render when there are no viable rows', () => {
-      // No simulations emitted → viableRows is empty
-      orch.simulationsSubject.next([]);
-      fixture.detectChanges();
+    it('MATRIX-E3(B): expert panel logic skips render when there are no viable rows', async () => {
+      await ready([]);
       expect(component.viableRows().length).toBe(0);
-      // pickerOpenByDefault returns false in this case (no rows to show);
-      // the template gates the @if on viableRows().length > 0.
       expect(component.pickerOpenByDefault()).toBe(false);
     });
 
-    it('MATRIX-E4(C): pickerOpenByDefault is true when no row is auto-selected', () => {
-      // Only-assets scenario triggers no auto-pick
-      pushRows([{
-        u: big(50_000),
-        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } },
-      }]);
+    it('MATRIX-E4(C): pickerOpenByDefault is true when no row is auto-selected', async () => {
+      await assetsOnly();
       expect(component.selectedRow()).toBeNull();
       expect(component.pickerOpenByDefault()).toBe(true);
     });
 
-    it('MATRIX-E5(C): pickerOpenByDefault is true when selected bucket is "assets"', () => {
-      // Multiple rows, auto-pick refuses, user explicitly picks an
-      // assets row → panel should stay open by default until the
-      // user toggles it closed.
-      const u1 = big(50_000);
-      const assetsScan: UtxoScanState = {
-        kind: 'scanned-with-assets',
-        content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null },
-      };
-      pushRows([{ u: u1, scan: assetsScan }]);
-      userPick(u1);
-      fixture.detectChanges();
+    it('MATRIX-E5(C): pickerOpenByDefault is true when selected bucket is "assets"', async () => {
+      const u1 = coin(50_000);
+      await assetsOnly(u1);
+      await userPick(u1);
       expect(component.selectedRow()!.bucket).toBe('assets');
       expect(component.pickerOpenByDefault()).toBe(true);
     });
 
-    it('MATRIX-E6(C): pickerOpenByDefault is true when selected bucket is "failed"', () => {
-      const u = big(50_000);
-      pushRows([{ u, scan: { kind: 'scan-failed', message: 'oops' } }]);
-      // scan-failed coins are not auto-picked; the user picks it (expert mode).
-      userPick(u);
-      fixture.detectChanges();
+    it('MATRIX-E6(C): pickerOpenByDefault is true when selected bucket is "failed"', async () => {
+      const u = coin(50_000);
+      await ready([{ u, scan: { kind: 'scan-failed', message: 'oops' } }], oneAddressTestWallet());
+      await userPick(u);
       expect(component.selectedRow()!.bucket).toBe('failed');
       expect(component.pickerOpenByDefault()).toBe(true);
     });
 
-    it('MATRIX-E7(C): pickerOpenByDefault is false when selected bucket is "clean" (happy path)', () => {
-      pushRows([{ u: big(50_000), scan: { kind: 'scanned-clean' } }]);
+    it('MATRIX-E7(C): pickerOpenByDefault is false when selected bucket is "clean" (happy path)', async () => {
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
       expect(component.selectedRow()!.bucket).toBe('clean');
       expect(component.pickerOpenByDefault()).toBe(false);
     });
 
-    it('MATRIX-E8(C): pickerOpenByDefault is false when selected bucket is "unscanned" (probably-safe path)', () => {
-      const u = big(80_000);
-      pushRows([{ u, scan: { kind: 'not-scanned' } }]);
-      // Unscanned coins are not auto-picked; the user picks it (expert mode).
-      userPick(u);
-      fixture.detectChanges();
+    it('MATRIX-E8(C): pickerOpenByDefault is false when selected bucket is "unscanned" (probably-safe path)', async () => {
+      const u = coin(80_000);
+      await ready([{ u, scan: { kind: 'not-scanned' } }]);
+      await userPick(u);
       expect(component.selectedRow()!.bucket).toBe('unscanned');
       expect(component.pickerOpenByDefault()).toBe(false);
     });
 
-    it('MATRIX-E9(B): panel state survives a fee-rate change that keeps viable rows > 0', () => {
-      pushRows([{ u: big(50_000), scan: { kind: 'scanned-clean' } }]);
+    it('MATRIX-E9(B): panel state survives a fee-rate change that keeps viable rows > 0', async () => {
+      await ready([{ u: coin(50_000), scan: { kind: 'scanned-clean' } }]);
       const beforeRows = component.viableRows().length;
-      // Bump the rate but keep the UTXO viable
-      orch.feeRate.set(10);
-      pushRows([{ u: big(50_000), scan: { kind: 'scanned-clean' } }]);
+      component.onFeeRateChange(10);
+      await settle();
       expect(component.viableRows().length).toBe(beforeRows);
       expect(component.pickerOpenByDefault()).toBe(false);
     });
 
-    it('MATRIX-E10(B): summary panel is hidden when no row is selected', () => {
-      pushRows([{
-        u: big(50_000),
-        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } },
-      }]);
+    it('MATRIX-E10(B): summary panel is hidden when no row is selected', async () => {
+      await assetsOnly();
       expect(component.selectedRow()).toBeNull();
-      const el: HTMLElement = fixture.nativeElement;
-      // In the slim test template the summary section isn't rendered,
-      // but canMint must be false (the production template gates the
-      // mint button on canMint).
+      // The production template gates the summary and the mint button on canMint.
       expect(component.canMint()).toBe(false);
     });
 
-    it('MATRIX-E11(B): mint button disabled when there is no row selection', () => {
-      pushRows([{
-        u: big(50_000),
-        scan: { kind: 'scanned-with-assets', content: { outpoint: 'a:0', inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null } },
-      }]);
-      expect(orch.selectedUtxo()).toBeNull();
+    it('MATRIX-E11(B): mint button disabled when there is no row selection', async () => {
+      await assetsOnly();
+      expect(selected()).toBeNull();
       expect(component.canMint()).toBe(false);
     });
 
-    it('MATRIX-E12(B): mint button re-enables after the user explicitly picks an assets row ("Use anyway")', () => {
-      const u1 = big(50_000);
-      const assetsScan: UtxoScanState = {
-        kind: 'scanned-with-assets',
-        content: { outpoint: `${u1.txid}:0`, inscriptionIds: ['i'], runes: null, catIds: [], catSat: null, rareSat: null },
-      };
-      pushRows([{ u: u1, scan: assetsScan }]);
-      // Pre: auto-pick refuses, mint disabled
+    it('MATRIX-E12(B): mint button re-enables after the user explicitly picks an assets row ("Use anyway")', async () => {
+      const u1 = coin(50_000);
+      await assetsOnly(u1);
       expect(component.canMint()).toBe(false);
-      // Explicit override
-      component.selectUtxo({ utxo: u1, simulation: simulation(), scan: assetsScan, bucket: 'assets' });
+      component.selectUtxo({ utxo: u1, simulation: simulation(), scan: assetsScan(u1), bucket: 'assets' });
+      await settle();
       expect(component.canMint()).toBe(true);
     });
   });
@@ -1100,8 +916,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(empty).toEqual([]);
     });
 
-    // MATRIX-I21(B) (bucketTooltip) moved to utxo-picker.spec.ts: the tooltip
-    // helper now lives on the shared UtxoPicker, which the mint renders instead
-    // of an inline list. Same assertion, re-pointed at its new subject.
+    // MATRIX-I21(B) (bucketTooltip) lives in utxo-picker.spec.ts: the tooltip
+    // helper is on the shared UtxoPicker, which the mint renders.
   });
 });

@@ -281,7 +281,7 @@ export class AcceptOffer implements OnInit {
   }
 }
 
-function rejectionToHuman(reason: Cat21OfferRejectionReason, detail?: string): string {
+export function rejectionToHuman(reason: Cat21OfferRejectionReason, detail?: string): string {
   switch (reason) {
     case 'malformed-offer-psbt':
       return `The offer isn't a valid PSBT (bad magic bytes, parse failure, or no inputs). ${detail ?? ''}`.trim();

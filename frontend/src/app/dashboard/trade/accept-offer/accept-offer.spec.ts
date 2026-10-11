@@ -1,102 +1,46 @@
 /**
  * @test-kind unit
- * Real:   AcceptOffer component and its template
- * Faked:  Cat21AcceptOfferOrchestrator -> hand-built stub of the SDK class (provided via useValue)
+ * Real:   AcceptOffer component; the SDK Cat21AcceptOfferOrchestrator (validates and signs for real);
+ *         buy-offer PSBTs built and buyer-signed by @scure/btc-signer (testing/buy-offer-psbt.fixtures)
+ * Faked:  orchestrator broadcast port -> jest.fn answering the txid of the tx it is handed (electrs POST /tx shape)
+ *         window.Cat21Provider (the wallet API) -> installFakeCat21Provider, signing with the test wallet's keys
  *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
  *         CatUtxoLookupService -> jest.fn() (hand-written; a sibling module)
  *         ActivatedRoute -> hand-written query params
- * Proves: validator rejections surface in the UI, the URL prefills offer and cat outpoint, the wallet drives the picker, and the form actions reach the orchestrator
+ * Proves: the orchestrator's validation verdict surfaces as the human rejection, every SDK rejection reason has its
+ *         own sentence, the URL prefills offer and cat outpoint, the wallet drives the expected cat and payout
+ *         address, and accept signs input 0 and broadcasts
  */
-import { jest, describe, it, expect } from '@jest/globals';
+import { jest, describe, it, expect, afterEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 
 import {
+  BroadcastOutcome,
   Cat21AcceptOfferOrchestrator,
-  Cat21OfferValidation,
   CatOutpoint,
-  WalletInfo,
+  Network,
   WalletService,
 } from 'ordpool-sdk';
 
 import { cat21Config } from '../../../shared/sdk-tokens';
 
-import { AcceptOffer } from './accept-offer';
+import { AcceptOffer, rejectionToHuman } from './accept-offer';
 import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';
-import { makeWallet, WalletServiceStub } from '../../../testing/wallet.fixtures';
+import { WalletServiceStub } from '../../../testing/wallet.fixtures';
+import { BUYER_PAYMENT_ADDRESS, buildOfferPsbt } from '../../../testing/buy-offer-psbt.fixtures';
+import {
+  TEST_ORDINALS_ADDRESS,
+  TEST_PAYMENT_ADDRESS,
+  installFakeCat21Provider,
+  testWallet,
+} from '../../../testing/test-wallet.fixtures';
 
-const WALLET_ORDINALS = 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9';
-const WALLET_PAYMENT = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx';
-
-const wallet = (over: Partial<WalletInfo> = {}): WalletInfo =>
-  makeWallet({
-    ordinalsAddress: WALLET_ORDINALS,
-    paymentAddress: WALLET_PAYMENT,
-    ...over,
-  });
-
-interface AcceptStubSnap {
-  state: 'idle' | 'parsed' | 'invalid' | 'accepting' | 'success' | 'error';
-  errorMessage: string | null;
-  successTxId: string | null;
-  preview: unknown;
-  validationResult: Cat21OfferValidation | null;
-  pastedOffer: string | null;
-  expectedCatUtxo: CatOutpoint | null;
-  floorPriceSats: number | null;
-}
-
-/**
- * Snapshot-driven stand-in for the framework-agnostic
- * Cat21AcceptOfferOrchestrator. The migrated component CONSTRUCTS its
- * orchestrator (`new`); the spec substitutes this stub via
- * `{ provide: Cat21AcceptOfferOrchestrator, useValue }` and the component's
- * `inject(..., { optional: true }) ??` seam picks it up. Exposes the real
- * `getSnapshot()`/`subscribe()` surface plus a `validationResult.set` shim that
- * funnels into `_patch`. Wallet is NOT here (the component reads it from
- * WalletService), so tests push it via `walletService.connectedWalletSubject`.
- */
-class OrchestratorStub {
-  private _snap: AcceptStubSnap = {
-    state: 'idle',
-    errorMessage: null,
-    successTxId: null,
-    preview: null,
-    validationResult: null,
-    pastedOffer: null,
-    expectedCatUtxo: null,
-    floorPriceSats: null,
-  };
-  private _listeners: Array<(s: AcceptStubSnap) => void> = [];
-
-  getSnapshot(): AcceptStubSnap { return this._snap; }
-  subscribe(l: (s: AcceptStubSnap) => void): () => void {
-    this._listeners.push(l);
-    l(this._snap);
-    return () => { this._listeners = this._listeners.filter((x) => x !== l); };
-  }
-  private _patch(p: Partial<AcceptStubSnap>): void {
-    this._snap = { ...this._snap, ...p };
-    this._listeners.slice().forEach((l) => l(this._snap));
-  }
-
-  // Command surface the component calls.
-  setWallet = jest.fn((_w: unknown) => undefined);
-  disableFloorGate = jest.fn();
-  setPastedOffer = jest.fn((p: string | null) => this._patch({ pastedOffer: p }));
-  setExpectedCatUtxo = jest.fn((u: CatOutpoint | null) => this._patch({ expectedCatUtxo: u }));
-  setExpectedSellerPaymentAddress = jest.fn();
-  setFloorPriceSats = jest.fn((n: number) => this._patch({ floorPriceSats: n }));
-  acceptOffer = jest.fn(async (_prompt?: unknown) => ({ txid: 'broadcast-txid' }));
-  reset = jest.fn();
-
-  // Signal-shaped shim the test bodies drive → `_patch`.
-  readonly validationResult = {
-    set: (v: Cat21OfferValidation | null) => this._patch({ validationResult: v }),
-  };
-}
+const CAT_TXID = 'b'.repeat(64);
+const CAT = { txid: CAT_TXID, vout: 1, value: 546 };
+const PRICE = 21_000;
 
 class LookupStub {
   readonly getMyHoldingsImpl = jest.fn((_: string) => of([] as MyCatHolding[]));
@@ -108,8 +52,29 @@ const routeStub = (queryParams: Record<string, string> = {}) => ({
   snapshot: { queryParams },
 });
 
+let provider: ReturnType<typeof installFakeCat21Provider> | null = null;
+
+afterEach(() => {
+  provider?.restore();
+  provider = null;
+});
+
 async function setup(queryParams: Record<string, string> = {}) {
-  const orchestrator = new OrchestratorStub();
+  const broadcast = jest.fn(async (signedTxHex: string): Promise<BroadcastOutcome> =>
+    ({ txid: `txid-of-${signedTxHex.length}`, channel: 'mempool' }));
+  const orchestrator = new Cat21AcceptOfferOrchestrator({ broadcast, network: Network.Mainnet });
+  // Spies call through: the orchestrator keeps its real behaviour, the spec
+  // only reads what the component asked of it.
+  const spies = {
+    setWallet: jest.spyOn(orchestrator, 'setWallet'),
+    disableFloorGate: jest.spyOn(orchestrator, 'disableFloorGate'),
+    setPastedOffer: jest.spyOn(orchestrator, 'setPastedOffer'),
+    setExpectedCatUtxo: jest.spyOn(orchestrator, 'setExpectedCatUtxo'),
+    setExpectedSellerPaymentAddress: jest.spyOn(orchestrator, 'setExpectedSellerPaymentAddress'),
+    setFloorPriceSats: jest.spyOn(orchestrator, 'setFloorPriceSats'),
+    acceptOffer: jest.spyOn(orchestrator, 'acceptOffer'),
+    reset: jest.spyOn(orchestrator, 'reset'),
+  };
   const walletService = new WalletServiceStub();
   const lookup = new LookupStub();
 
@@ -138,10 +103,25 @@ async function setup(queryParams: Record<string, string> = {}) {
   fixture.componentRef.instance.ngOnInit();
   fixture.detectChanges();
 
-  return { fixture, component: fixture.componentInstance, orchestrator, walletService, lookup };
+  /** Let the component's effects run and the orchestrator settle. */
+  async function settle(ticks = 5): Promise<void> {
+    fixture.detectChanges();
+    for (let i = 0; i < ticks; i++) await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  return { fixture, component: fixture.componentInstance, orchestrator, spies, broadcast, walletService, lookup, settle };
 }
 
-describe('AcceptOffer — validator rejections surface to UI', () => {
+/** The seller's page with the wallet connected and the cat outpoint from the URL. */
+async function sellerReady() {
+  const ctx = await setup({ catTxid: CAT.txid, catVout: String(CAT.vout) });
+  ctx.walletService.connectedWalletSubject.next(testWallet());
+  await ctx.settle();
+  return ctx;
+}
+
+describe('AcceptOffer: the orchestrator verdict surfaces to the UI', () => {
 
   it('humanRejection is null when no validation has run', async () => {
     const { component } = await setup();
@@ -149,24 +129,55 @@ describe('AcceptOffer — validator rejections surface to UI', () => {
   });
 
   it('payment-output-wrong-address (the regression class we care about) → specific human string + canAccept stays false', async () => {
-    const { component, orchestrator } = await setup();
-    orchestrator.validationResult.set({
-      ok: false,
-      reason: 'payment-output-wrong-address',
-      detail: 'expected bc1qEXPECTED got bc1pWRONG',
-    });
-    // canAccept is now a component-derived computed (snap().state === 'parsed');
-    // state stays 'idle' on an invalid result, so it is false without a setter.
+    const { component, settle } = await sellerReady();
+    // The buyer's offer pays the seller's price to the buyer's own address.
+    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE, sellerPaymentAddress: BUYER_PAYMENT_ADDRESS }));
+    await settle();
+
     expect(component.humanRejection()).toBe(
-      'The seller-payment output is going to a different address than expected. expected bc1qEXPECTED got bc1pWRONG',
+      'The seller-payment output is going to a different address than expected. ' +
+        `expected ${TEST_PAYMENT_ADDRESS}, got ${BUYER_PAYMENT_ADDRESS}`,
     );
+    expect(component.state()).toBe('invalid');
     expect(component.canAccept()).toBe(false);
   });
+
+  it('an offer for another cat surfaces as missing-seller-input', async () => {
+    const { component, settle } = await sellerReady();
+    component.onPasteChange(buildOfferPsbt({ cat: { ...CAT, txid: 'c'.repeat(64) }, priceSats: PRICE }));
+    await settle();
+
+    expect(component.humanRejection()).toBe(`The offer's input 0 doesn't reference your cat. got ${'c'.repeat(64)}:${CAT.vout}`);
+    expect(component.canAccept()).toBe(false);
+  });
+
+  it('a paste that is not a PSBT surfaces as malformed-offer-psbt', async () => {
+    const { component, settle } = await sellerReady();
+    component.onPasteChange('definitely not a psbt');
+    await settle();
+
+    expect(component.humanRejection()).toMatch(/^The offer isn't a valid PSBT \(bad magic bytes, parse failure, or no inputs\)\. \S/);
+    expect(component.canAccept()).toBe(false);
+  });
+
+  it('a valid offer for the seller\'s cat → no rejection, canAccept true', async () => {
+    const { component, settle } = await sellerReady();
+    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    await settle();
+
+    expect(component.validationResult()).toEqual({ ok: true, pricePaidSats: PRICE, postageSats: CAT.value });
+    expect(component.humanRejection()).toBeNull();
+    expect(component.state()).toBe('parsed');
+    expect(component.canAccept()).toBe(true);
+  });
+});
+
+describe('rejectionToHuman: one sentence per SDK rejection reason', () => {
 
   const REJECTION_CASES: Array<[string, string]> = [
     ['malformed-offer-psbt', "The offer isn't a valid PSBT (bad magic bytes, parse failure, or no inputs)."],
     ['missing-seller-input', "The offer's input 0 doesn't reference your cat."],
-    // wrong-postage no longer pins 546: ord preserves the cat's real UTXO
+    // wrong-postage does not pin 546: ord preserves the cat's real UTXO
     // value on output 0, so the only invariant is the dust floor.
     ['wrong-postage', 'The cat output value is below the dust floor.'],
     ['wrong-price', 'The seller-payment output is below your floor price.'],
@@ -182,98 +193,93 @@ describe('AcceptOffer — validator rejections surface to UI', () => {
     ['change-output-wrong-address', "The buyer's change output is going to an unexpected address."],
   ];
 
-  it.each(REJECTION_CASES)('rejection reason %s maps to the expected human string', async (reason, expected) => {
-    const { component, orchestrator } = await setup();
-    orchestrator.validationResult.set({ ok: false, reason: reason as never, detail: '' });
-    expect(component.humanRejection()).toBe(expected.trim());
+  it.each(REJECTION_CASES)('rejection reason %s maps to the expected human string', (reason, expected) => {
+    expect(rejectionToHuman(reason as never, '')).toBe(expected.trim());
   });
 
-  it('unknown rejection reason falls through to a generic "Rejected: …" message', async () => {
-    const { component, orchestrator } = await setup();
-    orchestrator.validationResult.set({
-      ok: false,
-      // Deliberately not one of the branched reasons; the rejectionToHuman
-      // function's default branch should catch it.
-      reason: 'some-future-reason' as never,
-      detail: 'why',
-    });
-    const msg = component.humanRejection();
-    expect(msg).toBeTruthy();
-    expect(msg).toContain('Rejected');
-    expect(msg).toContain('some-future-reason');
+  it('appends the SDK detail after the sentence', () => {
+    expect(rejectionToHuman('wrong-price', '20000 < 21000')).toBe('The seller-payment output is below your floor price. 20000 < 21000');
   });
 
-  it('validationResult.ok=true → humanRejection is null', async () => {
-    const { component, orchestrator } = await setup();
-    orchestrator.validationResult.set({
-      ok: true,
-      pricePaidSats: 21_000,
-      postageSats: 546,
-    } as unknown as Cat21OfferValidation);
-    expect(component.humanRejection()).toBeNull();
+  it('unknown rejection reason falls through to a generic "Rejected: …" message', () => {
+    // Deliberately not one of the branched reasons; the default branch catches it.
+    const msg = rejectionToHuman('some-future-reason' as never, 'why');
+    expect(msg).toBe('Rejected: some-future-reason why');
   });
 });
 
 describe('AcceptOffer — URL prefill via ?offer=&catTxid=&catVout=', () => {
 
   it('URL supplies BOTH offer + catOutpoint → orchestrator receives both', async () => {
-    const { component, orchestrator } = await setup({
-      offer: 'cHNidP8BAA==', // valid base64 shape; the orchestrator itself validates further
-      catTxid: 'a'.repeat(64),
-      catVout: '0',
+    const offer = buildOfferPsbt({ cat: CAT, priceSats: PRICE });
+    const { component, spies, orchestrator } = await setup({
+      offer,
+      catTxid: CAT.txid,
+      catVout: String(CAT.vout),
     });
     // urlCatOutpoint is populated from the URL for the effect fallback.
-    expect(component.urlCatOutpoint()).toEqual({ txid: 'a'.repeat(64), vout: 0 });
-    expect(orchestrator.setPastedOffer).toHaveBeenCalledWith('cHNidP8BAA==');
+    expect(component.urlCatOutpoint()).toEqual({ txid: CAT.txid, vout: CAT.vout });
+    expect(spies.setPastedOffer).toHaveBeenCalledWith(offer);
+    expect(orchestrator.getSnapshot().pastedOffer).toBe(offer);
+    expect(orchestrator.getSnapshot().expectedCatUtxo).toEqual({ txid: CAT.txid, vout: CAT.vout });
   });
 
   it('URL missing catTxid → urlCatOutpoint stays null; orchestrator gets pasted offer only', async () => {
-    const { component, orchestrator } = await setup({ offer: 'cHNidP8BAA==' });
+    const { component, spies, orchestrator } = await setup({ offer: 'cHNidP8BAA==' });
     expect(component.urlCatOutpoint()).toBeNull();
-    expect(orchestrator.setPastedOffer).toHaveBeenCalledWith('cHNidP8BAA==');
+    expect(spies.setPastedOffer).toHaveBeenCalledWith('cHNidP8BAA==');
+    expect(orchestrator.getSnapshot().expectedCatUtxo).toBeNull();
   });
 
   it('no URL params → orchestrator receives nothing at init; state stays idle', async () => {
-    const { component, orchestrator } = await setup();
+    const { component, spies } = await setup();
     expect(component.urlCatOutpoint()).toBeNull();
-    expect(orchestrator.setPastedOffer).not.toHaveBeenCalled();
+    expect(spies.setPastedOffer).not.toHaveBeenCalled();
     expect(component.state()).toBe('idle');
   });
 
-  it('disableFloorGate is called on init (opts out of the SDK safety-net)', async () => {
-    const { orchestrator } = await setup();
-    expect(orchestrator.disableFloorGate).toHaveBeenCalled();
+  it('disableFloorGate is called on init (opts out of the SDK safety-net): the floor is 0', async () => {
+    const { spies, component } = await setup();
+    expect(spies.disableFloorGate).toHaveBeenCalled();
+    expect(component.floorPriceSats()).toBe(0);
   });
 });
 
 describe('AcceptOffer — wallet-driven picker/payment wiring', () => {
 
   it('when a wallet connects with the URL outpoint already set, the orchestrator receives BOTH the outpoint AND the seller-payment address', async () => {
-    const { fixture, orchestrator, walletService } = await setup({
-      catTxid: 'b'.repeat(64),
-      catVout: '1',
+    const { spies, orchestrator, walletService, settle } = await setup({
+      catTxid: CAT.txid,
+      catVout: String(CAT.vout),
     });
-    walletService.connectedWalletSubject.next(wallet());
-    fixture.detectChanges();
-    // Effect scheduler is async — give it several ticks.
-    for (let i = 0; i < 5; i++) await Promise.resolve();
-    fixture.detectChanges();
+    walletService.connectedWalletSubject.next(testWallet());
+    await settle();
 
-    expect(orchestrator.setExpectedCatUtxo).toHaveBeenCalledWith({
-      txid: 'b'.repeat(64),
-      vout: 1,
-    });
+    expect(spies.setExpectedCatUtxo).toHaveBeenCalledWith({ txid: CAT.txid, vout: CAT.vout });
     // CRITICAL: the seller-payment address the seller expects comes
     // from wallet.paymentAddress — NOT from any lookup or from the
     // wallet.ordinalsAddress. This is the symmetric guarantee to the
     // buyer-side make-offer fix.
-    expect(orchestrator.setExpectedSellerPaymentAddress).toHaveBeenCalledWith(WALLET_PAYMENT);
-    expect(orchestrator.setExpectedSellerPaymentAddress).not.toHaveBeenCalledWith(WALLET_ORDINALS);
+    expect(spies.setExpectedSellerPaymentAddress).toHaveBeenCalledWith(TEST_PAYMENT_ADDRESS);
+    expect(spies.setExpectedSellerPaymentAddress).not.toHaveBeenCalledWith(TEST_ORDINALS_ADDRESS);
+    expect(orchestrator.getSnapshot().expectedSellerPaymentAddress).toBe(TEST_PAYMENT_ADDRESS);
+  });
+
+  it('the connected wallet reaches the orchestrator as the seller identity (ordinals key signs input 0)', async () => {
+    const { spies, walletService, settle } = await setup();
+    const w = testWallet();
+    walletService.connectedWalletSubject.next(w);
+    await settle();
+    expect(spies.setWallet).toHaveBeenLastCalledWith({
+      type: w.type,
+      ordinalsAddress: w.ordinalsAddress,
+      ordinalsPublicKey: w.ordinalsPublicKey,
+    });
   });
 
   it('picker selection overrides urlCatOutpoint when both are present', async () => {
-    const { fixture, component, orchestrator, walletService, lookup } = await setup({
-      catTxid: 'b'.repeat(64),
+    const { component, spies, orchestrator, walletService, lookup, settle } = await setup({
+      catTxid: CAT.txid,
       catVout: '0',
     });
     const holding: MyCatHolding = {
@@ -284,74 +290,111 @@ describe('AcceptOffer — wallet-driven picker/payment wiring', () => {
       value: 546,
     } as MyCatHolding;
     lookup.getMyHoldingsImpl.mockReturnValue(of([holding]));
-    walletService.connectedWalletSubject.next(wallet());
-    fixture.detectChanges();
-    for (let i = 0; i < 8; i++) await Promise.resolve();
-    fixture.detectChanges();
+    walletService.connectedWalletSubject.next(testWallet());
+    await settle(8);
 
     component.onCatPick('inscription-999-i0');
-    fixture.detectChanges();
-    for (let i = 0; i < 5; i++) await Promise.resolve();
-    fixture.detectChanges();
+    await settle();
 
     // Picker selection wins over urlCatOutpoint. Look for the picker
     // call anywhere in the history (not just the last one — the effect
     // may have re-run when the wallet connected first).
-    const calls = orchestrator.setExpectedCatUtxo.mock.calls;
-    const pickerCall = calls.find(
+    const pickerCall = spies.setExpectedCatUtxo.mock.calls.find(
       (c) => (c[0] as CatOutpoint | null)?.txid === 'c'.repeat(64),
     );
-    expect(pickerCall).toBeDefined();
-    expect(pickerCall![0]).toEqual({ txid: 'c'.repeat(64), vout: 2 });
+    expect(pickerCall?.[0]).toEqual({ txid: 'c'.repeat(64), vout: 2 });
+    expect(orchestrator.getSnapshot().expectedCatUtxo).toEqual({ txid: 'c'.repeat(64), vout: 2 });
   });
 });
 
 describe('AcceptOffer — form actions', () => {
 
   it('onPasteChange forwards to orchestrator', async () => {
-    const { component, orchestrator } = await setup();
+    const { component, spies } = await setup();
     component.onPasteChange('cHNidP8BAA==');
-    expect(orchestrator.setPastedOffer).toHaveBeenCalledWith('cHNidP8BAA==');
+    expect(spies.setPastedOffer).toHaveBeenCalledWith('cHNidP8BAA==');
   });
 
   it('onFloorPriceChange with empty string → orchestrator floor=0 (accept any positive offer)', async () => {
-    const { component, orchestrator } = await setup();
+    const { component, spies } = await setup();
     component.onFloorPriceChange('   ');
-    expect(orchestrator.setFloorPriceSats).toHaveBeenCalledWith(0);
+    expect(spies.setFloorPriceSats).toHaveBeenCalledWith(0);
+    expect(component.floorPriceSats()).toBe(0);
   });
 
   it('onFloorPriceChange with a positive integer → orchestrator floor=n', async () => {
-    const { component, orchestrator } = await setup();
+    const { component, spies } = await setup();
     component.onFloorPriceChange('21000');
-    expect(orchestrator.setFloorPriceSats).toHaveBeenCalledWith(21_000);
+    expect(spies.setFloorPriceSats).toHaveBeenCalledWith(21_000);
+    expect(component.floorPriceSats()).toBe(21_000);
+  });
+
+  it('a floor above the offer\'s price rejects it as wrong-price', async () => {
+    const { component, settle } = await sellerReady();
+    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    component.onFloorPriceChange(String(PRICE + 1));
+    await settle();
+    expect(component.humanRejection()).toBe(`The seller-payment output is below your floor price. ${PRICE} < ${PRICE + 1}`);
   });
 
   it('onFloorPriceChange with garbage → orchestrator not called (input parser rejects)', async () => {
-    const { component, orchestrator } = await setup();
-    orchestrator.setFloorPriceSats.mockClear();
+    const { component, spies } = await setup();
+    spies.setFloorPriceSats.mockClear();
     component.onFloorPriceChange('not-a-number');
-    expect(orchestrator.setFloorPriceSats).not.toHaveBeenCalled();
+    expect(spies.setFloorPriceSats).not.toHaveBeenCalled();
   });
 
   it('onFloorPriceChange with negative → orchestrator not called', async () => {
-    const { component, orchestrator } = await setup();
-    orchestrator.setFloorPriceSats.mockClear();
+    const { component, spies } = await setup();
+    spies.setFloorPriceSats.mockClear();
     component.onFloorPriceChange('-1');
-    expect(orchestrator.setFloorPriceSats).not.toHaveBeenCalled();
+    expect(spies.setFloorPriceSats).not.toHaveBeenCalled();
   });
 
-  it('onAcceptClick triggers orchestrator.acceptOffer()', async () => {
-    const { component, orchestrator } = await setup();
-    component.onAcceptClick();
-    expect(orchestrator.acceptOffer).toHaveBeenCalledTimes(1);
+  it('onAcceptClick has the wallet sign input 0 and broadcasts the finished transaction', async () => {
+    provider = installFakeCat21Provider();
+    const { component, spies, broadcast, settle } = await sellerReady();
+    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    await settle();
+    expect(component.canAccept()).toBe(true);
+
+    await component.onAcceptClick();
+    await settle();
+
+    expect(spies.acceptOffer).toHaveBeenCalledTimes(1);
+    // The seller signs the cat input only; the buyer already signed theirs.
+    expect(provider.requests.map((r) => r.signAtIndex)).toEqual([[0]]);
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    const txHex = broadcast.mock.calls[0]![0];
+    expect(component.state()).toBe('success');
+    expect(component.successTxId()).toBe(`txid-of-${txHex.length}`);
+  });
+
+  it('a wallet that refuses to sign leaves the offer unbroadcast and the error on the page', async () => {
+    provider = installFakeCat21Provider();
+    provider.rejectWith(new Error('User rejected the request'));
+    const { component, broadcast, settle } = await sellerReady();
+    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    await settle();
+
+    await component.onAcceptClick();
+    await settle();
+
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(component.state()).toBe('error');
+    expect(component.errorMessage()).toContain('User rejected the request');
   });
 
   it('onResetClick calls orchestrator.reset() + clears local state', async () => {
-    const { component, orchestrator } = await setup();
+    const { component, spies, settle } = await sellerReady();
+    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
     component.onFloorPriceChange('50000');
     component.onCatPick('inscription-x-i0');
+    await settle();
+
     component.onResetClick();
-    expect(orchestrator.reset).toHaveBeenCalled();
+    expect(spies.reset).toHaveBeenCalled();
+    expect(component.pastedOffer()).toBeNull();
     expect(component.selectedInscriptionId()).toBeNull();
     expect(component.floorPriceInput()).toBe('');
   });

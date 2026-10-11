@@ -1,34 +1,60 @@
 /**
  * @test-kind unit
- * Real:   Cat21SessionGuard, buildCat21SessionMessage (ordpool-sdk/cat21-session)
- * Faked:  ordpool-sdk/cat21-validation -> jest.mock of verifyBip322Signature without the actual module
- * Proves: the guard rejects a malformed, expired or over-dated session and a failed BIP-322 verification, accepts a valid one and stashes its address; the param decorator returns it
+ * Real:   Cat21SessionGuard, buildCat21SessionMessage + checkSessionValidity (ordpool-sdk/cat21-session),
+ *         verifyBip322Signature (ordpool-sdk/cat21-validation); BIP-322 "simple" signatures made in the spec by
+ *         @scure/btc-signer with a fixed test key (taproot key path, SIGHASH_DEFAULT)
+ * Faked:  nothing
+ * Proves: the guard rejects a malformed, expired or over-dated session and a signature that does not verify over
+ *         the canonical message it rebuilds, accepts a valid one and stashes its address; the param decorator returns it
  */
 import { UnauthorizedException, type ExecutionContext } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
-
-/**
- * Mock ONLY the crypto boundary (`verifyBip322Signature`). The pure,
- * deterministic helpers `checkSessionValidity` + `buildCat21SessionMessage`
- * stay REAL (via requireActual) so the guard's validity gate and canonical
- * message rebuild are exercised for real, not stubbed. The mocked return
- * shape is the SDK's exact `VerifyBip322SignatureResult` contract
- * (`ok: true | { ok: false, reason, detail? }`, from
- * verify-bip322-signature.d.ts), not an invented shape.
- */
-jest.mock('ordpool-sdk/cat21-validation', () => ({
-  ...jest.requireActual('ordpool-sdk/cat21-validation'),
-  verifyBip322Signature: jest.fn(),
-}));
-
+import { schnorr } from '@noble/curves/secp256k1';
+import { base64, hex } from '@scure/base';
+import * as btc from '@scure/btc-signer';
 import { buildCat21SessionMessage } from 'ordpool-sdk/cat21-session';
-import { verifyBip322Signature } from 'ordpool-sdk/cat21-validation';
 
 import { Cat21SessionAddress, Cat21SessionGuard } from './cat21-session.guard';
 
-const mockVerify = verifyBip322Signature as jest.MockedFunction<typeof verifyBip322Signature>;
+/** Fixed test key; the spec holds it, so it can sign for ADDR. */
+const SESSION_KEY = hex.decode('07'.repeat(32));
+const sessionP2tr = btc.p2tr(schnorr.getPublicKey(SESSION_KEY), undefined, btc.NETWORK);
+const ADDR = sessionP2tr.address!;
+/** A valid P2TR address whose key the spec does not use to sign. */
+const OTHER_ADDR = btc.p2tr(schnorr.getPublicKey(hex.decode('08'.repeat(32))), undefined, btc.NETWORK).address!;
 
-const ADDR = 'bc1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c';
+/**
+ * BIP-322 "simple" signature over `message` for ADDR, as a wallet returns it:
+ * the serialized to_sign witness (one 64-byte schnorr signature), base64.
+ * Built from the BIP's own recipe (to_spend commits the tagged message hash,
+ * to_sign spends it to OP_RETURN), independent of the verifier under test.
+ */
+function signSession(message: string): string {
+  const messageHash = schnorr.utils.taggedHash('BIP0322-signed-message', new TextEncoder().encode(message));
+  const toSpend = new btc.Transaction({ version: 0, lockTime: 0, allowUnknownInputs: true, allowUnknownOutputs: true });
+  // Output first: @scure treats an input carrying finalScriptSig as signed and
+  // refuses outputs added after it.
+  toSpend.addOutput({ script: sessionP2tr.script, amount: 0n });
+  toSpend.addInput({
+    txid: new Uint8Array(32),
+    index: 0xffffffff,
+    sequence: 0,
+    finalScriptSig: btc.Script.encode(['OP_0', messageHash]),
+  });
+
+  const toSign = new btc.Transaction({ version: 0, lockTime: 0, allowUnknownOutputs: true });
+  toSign.addInput({
+    txid: toSpend.id,
+    index: 0,
+    sequence: 0,
+    witnessUtxo: { script: sessionP2tr.script, amount: 0n },
+    tapInternalKey: schnorr.getPublicKey(SESSION_KEY),
+  });
+  toSign.addOutput({ script: btc.Script.encode(['RETURN']), amount: 0n });
+  toSign.signIdx(SESSION_KEY, 0);
+  const sig = toSign.getInput(0).tapKeySig!;
+  return base64.encode(new Uint8Array([0x01, sig.length, ...sig]));
+}
 
 function ctxWith(headers: Record<string, string | string[] | undefined>): {
   ctx: ExecutionContext;
@@ -60,7 +86,6 @@ describe('Cat21SessionGuard', () => {
 
   beforeEach(() => {
     guard = new Cat21SessionGuard();
-    mockVerify.mockReset();
   });
 
   it.each([
@@ -111,8 +136,7 @@ describe('Cat21SessionGuard', () => {
     expect((thrown as UnauthorizedException).getResponse()).toMatchObject({ code: 'session-session-too-far-in-future' });
   });
 
-  it('rejects when BIP-322 verification fails, surfacing the SDK reason + detail', () => {
-    mockVerify.mockReturnValue({ ok: false, reason: 'signature-does-not-verify', detail: 'schnorr verify failed' });
+  it('rejects a signature payload the verifier cannot read, surfacing the SDK reason + detail', () => {
     const { ctx, req } = ctxWith({
       'x-cat21-session-address': ADDR,
       'x-cat21-session-valid-until': futureIso(),
@@ -122,39 +146,63 @@ describe('Cat21SessionGuard', () => {
     try { guard.canActivate(ctx); } catch (e) { thrown = e; }
     expect(thrown).toBeInstanceOf(UnauthorizedException);
     expect((thrown as UnauthorizedException).getResponse()).toMatchObject({
-      code: 'session-signature-does-not-verify',
-      detail: 'schnorr verify failed',
+      code: 'session-malformed-signature',
+      detail: expect.stringContaining('base64 decode failed'),
     });
     // a rejected signature must NOT leave an authorized address behind
     expect(req.cat21SessionAddress).toBeUndefined();
   });
 
-  it('accepts a valid session, stashes the verified address, and verifies the rebuilt canonical message', () => {
-    mockVerify.mockReturnValue({ ok: true });
+  it('rejects a real signature over a different message (the canonical message is rebuilt, not trusted)', () => {
+    const validUntilIso = futureIso();
+    // Signed by the right key, but for a session that expires an hour later:
+    // the guard verifies the message it rebuilds from the headers, so this fails.
+    const signature = signSession(buildCat21SessionMessage({ address: ADDR, validUntilIso: futureIso(2 * 60 * 60 * 1000) }));
+    const { ctx, req } = ctxWith({
+      'x-cat21-session-address': ADDR,
+      'x-cat21-session-valid-until': validUntilIso,
+      'x-cat21-session-signature': signature,
+    });
+    let thrown: unknown;
+    try { guard.canActivate(ctx); } catch (e) { thrown = e; }
+    expect((thrown as UnauthorizedException).getResponse()).toMatchObject({
+      code: 'session-signature-does-not-verify',
+      detail: 'BIP-322 verify rejected: signature-does-not-verify',
+    });
+    expect(req.cat21SessionAddress).toBeUndefined();
+  });
+
+  it('rejects a real signature presented for another address', () => {
+    const validUntilIso = futureIso();
+    const signature = signSession(buildCat21SessionMessage({ address: OTHER_ADDR, validUntilIso }));
+    const { ctx, req } = ctxWith({
+      'x-cat21-session-address': OTHER_ADDR,
+      'x-cat21-session-valid-until': validUntilIso,
+      'x-cat21-session-signature': signature,
+    });
+    let thrown: unknown;
+    try { guard.canActivate(ctx); } catch (e) { thrown = e; }
+    expect((thrown as UnauthorizedException).getResponse()).toMatchObject({ code: 'session-signature-does-not-verify' });
+    expect(req.cat21SessionAddress).toBeUndefined();
+  });
+
+  it('accepts a session signed over the canonical message and stashes the verified address', () => {
     const validUntilIso = futureIso();
     const { ctx, req } = ctxWith({
       'x-cat21-session-address': ADDR,
       'x-cat21-session-valid-until': validUntilIso,
-      'x-cat21-session-signature': 'base64signature',
+      'x-cat21-session-signature': signSession(buildCat21SessionMessage({ address: ADDR, validUntilIso })),
     });
     expect(guard.canActivate(ctx)).toBe(true);
     expect(req.cat21SessionAddress).toBe(ADDR);
-    // the guard rebuilds the message from the headers and verifies THAT exact message,
-    // not any client-supplied one (real buildCat21SessionMessage, not a stub).
-    expect(mockVerify).toHaveBeenCalledWith({
-      address: ADDR,
-      message: buildCat21SessionMessage({ address: ADDR, validUntilIso }),
-      signatureBase64: 'base64signature',
-    });
   });
 
   it('reads a header delivered as a string array (fastify multi-value): takes the first element', () => {
-    mockVerify.mockReturnValue({ ok: true });
     const validUntilIso = futureIso();
     const { ctx, req } = ctxWith({
       'x-cat21-session-address': [ADDR, 'second-ignored'],
       'x-cat21-session-valid-until': validUntilIso,
-      'x-cat21-session-signature': 'sig',
+      'x-cat21-session-signature': signSession(buildCat21SessionMessage({ address: ADDR, validUntilIso })),
     });
     expect(guard.canActivate(ctx)).toBe(true);
     expect(req.cat21SessionAddress).toBe(ADDR);

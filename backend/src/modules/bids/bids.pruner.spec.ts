@@ -1,28 +1,14 @@
 /**
  * @test-kind unit
- * Real:   BidsPruner
- * Faked:  @scure/btc-signer -> jest.mock of Transaction.fromPSBT (hand-written; a third-party library)
- *         Drizzle db -> select().from() returning hand-written rows
+ * Real:   BidsPruner, @scure/btc-signer, @scure/base; the stored PSBTs are real buy-offers built and signed by
+ *         @scure/btc-signer with fixed test keys (buy-offer-psbt.test-helper.ts)
+ * Faked:  Drizzle db -> select().from() returning hand-written rows
  *         OrdClientService.getCatsAtOutput, ElectrsClientService.getOutpointStatus / isOutpointSpent -> jest.fn() (hand-written)
  *         BidsService.deleteByOutpointAndBuyer -> jest.fn() (a sibling module)
  * Proves: a bid is dropped when the seller's cat left the outpoint or the buyer's funding input is spent, kept on an ord or electrs failure, and prune runs batch without re-entering
  */
 import { BidsPruner } from './bids.pruner';
-
-// ---------------------------------------------------------------------------
-// Mock @scure/btc-signer so pruner tests can inject a PSBT-shape without
-// generating real bytes. The pruner extracts input outpoints from the
-// PSBT to check them via electrs; we script the fromPSBT return value
-// per-test.
-// ---------------------------------------------------------------------------
-
-let mockFromPSBT: jest.Mock;
-
-jest.mock('@scure/btc-signer', () => ({
-  Transaction: {
-    fromPSBT: (...args: unknown[]) => mockFromPSBT(...args),
-  },
-}));
+import { buildBuyOfferPsbt } from './buy-offer-psbt.test-helper';
 
 const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';
 const BUYER_A = 'bc1p-buyer-a';
@@ -31,6 +17,9 @@ const BUYER_B = 'bc1p-buyer-b';
 // Buyer funding txids used across scenarios.
 const FUND_TXID_LIVE = 'aa'.repeat(32);
 const FUND_TXID_SPENT = 'bb'.repeat(32);
+
+/** The PSBT `row()` stores unless a test passes its own; `stubPsbt` replaces it. */
+let rowPsbt = '';
 
 const row = (over: Record<string, unknown> = {}) => ({
   id: 'uuid-x',
@@ -43,7 +32,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   buyerOrdinalsAddress: BUYER_A,
   buyerPaymentAddress: 'bc1q-pay',
   sellerPaymentAddress: 'bc1q-seller-pay',
-  psbtBase64: 'AAECAw==',
+  psbtBase64: rowPsbt,
   createdAt: new Date(),
   ...over,
 });
@@ -57,20 +46,16 @@ function drizzleWithRows(rows: unknown[]) {
 }
 
 /**
- * Programmable PSBT: buyer inputs 1..N pointing at whichever funding
- * txids the test wants. Input 0 is stubbed as the seller's cat UTXO
- * (never checked by the pruner directly — its outpoint is on the row).
+ * A real signed buy-offer whose buyer inputs 1..N spend the given funding
+ * txids (output `i` of each, so a txid may repeat), stored by every `row()`
+ * that follows. Input 0 is the seller's cat UTXO, which the pruner never
+ * checks directly: its outpoint is on the row.
  */
 function stubPsbt(buyerFundingTxids: string[]): void {
-  mockFromPSBT.mockReturnValue({
-    inputsLength: buyerFundingTxids.length + 1,
-    getInput(i: number) {
-      if (i === 0) return { txid: new Uint8Array(32), index: 0 };
-      const txid = buyerFundingTxids[i - 1];
-      const bytes = new Uint8Array(txid.match(/../g)!.map((h) => parseInt(h, 16)));
-      return { txid: bytes, index: 0 };
-    },
-  });
+  rowPsbt = buildBuyOfferPsbt({
+    sellerUtxo: { txid: REAL_TXID, vout: 0, value: 546 },
+    buyerFunding: buyerFundingTxids.map((txid, i) => ({ txid, vout: i, value: 50_000 })),
+  }).base64;
 }
 
 /**
@@ -93,7 +78,6 @@ function createElectrsMock(status: Record<string, 'spent' | 'unspent' | 'unknown
 describe('BidsPruner.runPrune — seller-side (cat UTXO drift)', () => {
 
   beforeEach(() => {
-    mockFromPSBT = jest.fn();
     stubPsbt([FUND_TXID_LIVE]);
   });
 
@@ -162,10 +146,6 @@ describe('BidsPruner.runPrune — seller-side (cat UTXO drift)', () => {
 
 describe('BidsPruner.runPrune — buyer-side (funding UTXO liveness)', () => {
 
-  beforeEach(() => {
-    mockFromPSBT = jest.fn();
-  });
-
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -202,11 +182,13 @@ describe('BidsPruner.runPrune — buyer-side (funding UTXO liveness)', () => {
     const pruner = new BidsPruner(drizzle as never, ord as never, electrs as never, bidsSvc as never);
     await pruner.runPrune();
     expect(bidsSvc.deleteByOutpointAndBuyer).not.toHaveBeenCalled();
+    // Every buyer input is checked, by the outpoint the signed PSBT spends.
+    expect(electrs.getOutpointStatus.mock.calls).toEqual([[FUND_TXID_LIVE, 0], [FUND_TXID_LIVE, 1]]);
   });
 
   it('drops a bid whose PSBT no longer parses (corrupt row)', async () => {
-    mockFromPSBT.mockImplementation(() => { throw new Error('PSBT magic bytes wrong'); });
-    const drizzle = drizzleWithRows([row()]);
+    // Valid base64, not a PSBT: the bytes a corrupted row would carry.
+    const drizzle = drizzleWithRows([row({ psbtBase64: 'AAECAw==' })]);
     const ord = { getCatsAtOutput: jest.fn().mockResolvedValue([42]) };
     const electrs = createElectrsMock();
     const bidsSvc = { deleteByOutpointAndBuyer: jest.fn().mockResolvedValue(undefined) };
@@ -233,7 +215,6 @@ describe('BidsPruner.runPrune — buyer-side (funding UTXO liveness)', () => {
 describe('BidsPruner.runPrune — batching + re-entrancy', () => {
 
   beforeEach(() => {
-    mockFromPSBT = jest.fn();
     stubPsbt([FUND_TXID_LIVE]);
   });
 

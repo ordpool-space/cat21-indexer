@@ -1,24 +1,29 @@
 /**
  * @test-kind unit
- * Real:   MakeOffer component and its template
- * Faked:  Cat21CreateOfferOrchestrator -> hand-built stub of the SDK class (provided via useValue)
+ * Real:   MakeOffer component; the SDK Cat21CreateOfferOrchestrator (funding recommendation, simulation, offer build
+ *         and buyer signing run for real against the test wallet's keys)
+ * Faked:  orchestrator ports getUtxos / scan -> fakePorts (testing/orchestrator-ports.fixtures; SDK port types)
+ *         window.Cat21Provider (the wallet API) -> installFakeCat21Provider, signing with the test wallet's keys
  *         UtxoContentScanner -> ScannerStub (testing/scanner.fixtures)
  *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
  *         CatUtxoLookupService, OrdApiService, Cat21BidsService -> hand-written stubs (sibling modules)
- * Proves: the seller payment address comes from the URL or the user, never from the on-chain owner, and a moved cat marks the offer stale
+ * Proves: the seller payment address comes from the URL or the user, never from the on-chain owner; a moved cat
+ *         marks the offer stale; a real buyer-signed offer is posted to the Bazaar with the live cats bundle, and a
+ *         drifted, unknown or unreadable bundle is not; the seller receives price + the cat's real value; the expert
+ *         picker follows the SDK's funding verdict
  */
-import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { jest, describe, it, expect, afterEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
+import { hex } from '@scure/base';
+import * as btc from '@scure/btc-signer';
 import { Observable, of, throwError } from 'rxjs';
 
 import {
-  AnnotatedFundingUtxo,
   BuyOfferTargetCat,
   Cat21CreateOfferOrchestrator,
-  FundingRecommendation,
-  TxnOutput,
   UtxoContentScanner,
   WalletInfo,
   WalletService,
@@ -29,12 +34,21 @@ import { MakeOffer } from './make-offer';
 import { Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../../../shared/ord-api.service';
-import { makeWallet, WalletServiceStub } from '../../../testing/wallet.fixtures';
+import { WalletServiceStub } from '../../../testing/wallet.fixtures';
 import { ScannerStub } from '../../../testing/scanner.fixtures';
+import { assetsVerdict, fakePorts, FakePorts } from '../../../testing/orchestrator-ports.fixtures';
+import {
+  TEST_ORDINALS_ADDRESS,
+  TEST_PAYMENT_ADDRESS,
+  fundingCoin,
+  installFakeCat21Provider,
+  oneAddressTestWallet,
+  testWallet,
+} from '../../../testing/test-wallet.fixtures';
 
 class OrdApiServiceStub {
-  private catsAtOutputImpl: (txid: string, vout: number) => Observable<number[]> = () => of([]);
-  setCatsAtOutput(fn: (txid: string, vout: number) => Observable<number[]>) {
+  private catsAtOutputImpl: (txid: string, vout: number) => Observable<number[] | null> = () => of([]);
+  setCatsAtOutput(fn: (txid: string, vout: number) => Observable<number[] | null>) {
     this.catsAtOutputImpl = fn;
   }
   getCatsAtOutput = (txid: string, vout: number) => this.catsAtOutputImpl(txid, vout);
@@ -51,113 +65,35 @@ class Cat21BidsServiceStub {
 // ---------------------------------------------------------------------------
 // Distinct addresses ARE THE POINT of this spec. Splitting them ensures
 // any "auto-fill payment address from the cat's on-chain owner lookup"
-// regression re-appearing is caught — the on-chain owner returns the
+// regression re-appearing is caught: the on-chain owner returns the
 // ordinals address, and that value must NEVER flow into sellerPaymentAddress.
 // See SDK CLAUDE.md HARD RULE "Never derive a payment address from an
 // on-chain lookup".
 // ---------------------------------------------------------------------------
-const WALLET_ORDINALS_ADDRESS = 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9';
-const WALLET_PAYMENT_ADDRESS = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8zeqchgx';
 
 // The on-chain owner of any given cat is the seller's ordinals address
 // (cats live on the ordinals key per ordinal theory). We hand this
-// string to `getTargetByNumber(...).sellerAddress` — the same shape ord
+// string to `getTargetByNumber(...).sellerAddress`, the same shape ord
 // returns in production.
 const CAT_OWNER_ORDINALS_ADDRESS = 'bc1p85ra9kv6a48yvk4mq4hx08wxk6t32tdjw9ylahergexkymsc3uwsdrx6sh';
 
-// Local wrapper — same shape as the shared `makeWallet` but with the
-// spec's specific WALLET_* addresses baked in as the defaults. Callers
-// can still override any field.
-const wallet = (over: Partial<WalletInfo> = {}): WalletInfo =>
-  makeWallet({
-    ordinalsAddress: WALLET_ORDINALS_ADDRESS,
-    paymentAddress: WALLET_PAYMENT_ADDRESS,
-    ...over,
-  });
+/** The seller's cat sits on a real P2TR output; its key is not the test wallet's. */
+const SELLER_CAT_SCRIPT = btc.p2tr(schnorr.getPublicKey(hex.decode('31'.repeat(32))), undefined, btc.NETWORK).script;
+/** Where the seller wants to be paid: a real P2WPKH address of a seller key. */
+const SELLER_PAYMENT_ADDRESS = btc.p2wpkh(secp256k1.getPublicKey(hex.decode('32'.repeat(32)), true), btc.NETWORK).address!;
+
+const CAT_TXID = 'aa'.repeat(32);
+const PRICE = 21_000;
+const FEE_RATE = 5;
 
 function target(over: Partial<BuyOfferTargetCat> = {}): BuyOfferTargetCat {
   return {
     catNumber: 42,
-    txid: 'a'.repeat(64),
+    txid: CAT_TXID,
     vout: 0,
     value: 546,
-    scriptPubKey: new Uint8Array([0x51, 0x20]),
+    scriptPubKey: SELLER_CAT_SCRIPT,
     ...over,
-  };
-}
-
-interface CreateOfferStubSnap {
-  state: 'idle' | 'loading-utxos' | 'ready' | 'creating' | 'success' | 'error';
-  targetCat: BuyOfferTargetCat | null;
-  priceSats: number | null;
-  sellerPaymentAddress: string | null;
-  buyerReceiveAddress: string | null;
-  feeRate: number | null;
-  selectedFundingUtxo: TxnOutput | null;
-  fundingRecommendation: FundingRecommendation<TxnOutput & AnnotatedFundingUtxo>;
-  simulation: unknown;
-  bid: { base64: string; hex: string } | null;
-  errorMessage: string | null;
-}
-
-/**
- * Snapshot-driven stand-in for the framework-agnostic
- * Cat21CreateOfferOrchestrator. The migrated component CONSTRUCTS its
- * orchestrator (`new`); the spec substitutes this stub via
- * `{ provide: Cat21CreateOfferOrchestrator, useValue }` and the component's
- * `inject(..., { optional: true }) ??` seam picks it up. Exposes the real
- * `getSnapshot()`/`subscribe()` surface plus signal/subject-shaped SHIMS
- * (`targetCat.set`, `priceSats.set`, `offerArtifact.set`,
- * `buyerFundingRecommendationSubject.next`, …) that funnel into `_patch`, so
- * the test bodies drive the snapshot the same way they drove the old injected
- * stub. Wallet is NOT here (the component reads it from WalletService), so
- * tests push it via `walletService.connectedWalletSubject.next(...)`.
- */
-class OrchestratorStub {
-  private _snap: CreateOfferStubSnap = {
-    state: 'idle',
-    targetCat: null,
-    priceSats: null,
-    sellerPaymentAddress: null,
-    buyerReceiveAddress: null,
-    feeRate: null,
-    selectedFundingUtxo: null,
-    // Default 'auto' so the expert-required picker path stays off unless a test drives it.
-    fundingRecommendation: { status: 'auto', recommended: null, candidates: [] },
-    simulation: null,
-    bid: null,
-    errorMessage: null,
-  };
-  private _listeners: Array<(s: CreateOfferStubSnap) => void> = [];
-
-  getSnapshot(): CreateOfferStubSnap { return this._snap; }
-  subscribe(l: (s: CreateOfferStubSnap) => void): () => void {
-    this._listeners.push(l);
-    l(this._snap);
-    return () => { this._listeners = this._listeners.filter((x) => x !== l); };
-  }
-  private _patch(p: Partial<CreateOfferStubSnap>): void {
-    this._snap = { ...this._snap, ...p };
-    this._listeners.slice().forEach((l) => l(this._snap));
-  }
-
-  // Command surface the component calls (spies that also drive the snapshot).
-  setWallet = jest.fn(async (_w: unknown) => {});
-  setTargetCat = jest.fn((c: BuyOfferTargetCat | null) => this._patch({ targetCat: c }));
-  setSellerPaymentAddress = jest.fn((addr: string | null) => this._patch({ sellerPaymentAddress: addr }));
-  setPriceSats = jest.fn((p: number) => this._patch({ priceSats: p }));
-  setBuyerReceiveAddress = jest.fn((a: string | null) => this._patch({ buyerReceiveAddress: a }));
-  setFeeRate = jest.fn((r: number) => this._patch({ feeRate: r }));
-  setSelectedFundingUtxo = jest.fn((u: TxnOutput | null) => this._patch({ selectedFundingUtxo: u }));
-  createOffer = jest.fn(async (_prompt?: unknown) => ({ base64: '', hex: '' }));
-  reset = jest.fn();
-
-  // Signal/subject-shaped SHIMS the test bodies drive → `_patch`.
-  readonly targetCat = { set: (v: BuyOfferTargetCat | null) => this._patch({ targetCat: v }) };
-  readonly priceSats = { set: (v: number | null) => this._patch({ priceSats: v }) };
-  readonly offerArtifact = { set: (v: { base64: string; hex: string } | null) => this._patch({ bid: v }) };
-  readonly buyerFundingRecommendationSubject = {
-    next: (v: FundingRecommendation<TxnOutput & AnnotatedFundingUtxo>) => this._patch({ fundingRecommendation: v }),
   };
 }
 
@@ -169,53 +105,84 @@ class LookupStub {
   getMyHoldings = jest.fn();
 }
 
+let provider: ReturnType<typeof installFakeCat21Provider> | null = null;
+
+afterEach(() => {
+  provider?.restore();
+  provider = null;
+});
+
+/**
+ * Mount MakeOffer on a REAL create-offer orchestrator built from faked ports.
+ * Spies call through, so the orchestrator keeps its real behaviour.
+ */
+async function mount(opts: { ports?: FakePorts; ordApi?: OrdApiServiceStub; bidsService?: Cat21BidsServiceStub } = {}) {
+  const ports = opts.ports ?? fakePorts([fundingCoin(100_000, 0x41)]);
+  const orchestrator = new Cat21CreateOfferOrchestrator(ports);
+  const spies = {
+    setTargetCat: jest.spyOn(orchestrator, 'setTargetCat'),
+    setSellerPaymentAddress: jest.spyOn(orchestrator, 'setSellerPaymentAddress'),
+    setPriceSats: jest.spyOn(orchestrator, 'setPriceSats'),
+  };
+  const walletService = new WalletServiceStub();
+  const lookup = new LookupStub();
+  const ordApi = opts.ordApi ?? new OrdApiServiceStub();
+  const bidsService = opts.bidsService ?? new Cat21BidsServiceStub();
+
+  await TestBed.configureTestingModule({
+    imports: [MakeOffer],
+    providers: [
+      provideHttpClient(),
+      provideRouter([]),
+      { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
+      { provide: UtxoContentScanner, useValue: new ScannerStub() },
+      { provide: WalletService, useValue: walletService },
+      { provide: CatUtxoLookupService, useValue: lookup },
+      { provide: OrdApiService, useValue: ordApi },
+      { provide: Cat21BidsService, useValue: bidsService },
+      { provide: cat21Config, useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' } },
+    ],
+  })
+    // Skip the template: this spec tests component logic, not the UI.
+    .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
+    .compileComponents();
+
+  const fixture = TestBed.createComponent(MakeOffer);
+  const component = fixture.componentInstance;
+  fixture.detectChanges();
+
+  /** Flush effects and microtasks until `done()` holds; fails loudly instead of hanging. */
+  async function until(done: () => boolean, what: string): Promise<void> {
+    for (let i = 0; i < 500; i++) {
+      fixture.detectChanges();
+      if (done()) return;
+      await Promise.resolve();
+    }
+    throw new Error(`never reached: ${what}`);
+  }
+
+  /** Connect a wallet and wait for its UTXOs to load. */
+  async function connect(w: WalletInfo = testWallet()): Promise<void> {
+    walletService.connectedWalletSubject.next(w);
+    await until(() => component.state() === 'ready', 'wallet ready');
+  }
+
+  /** Fill every input the orchestrator needs to price the offer and wait for the verdict. */
+  async function fillOffer(t: BuyOfferTargetCat = target()): Promise<void> {
+    orchestrator.setTargetCat(t);
+    orchestrator.setSellerPaymentAddress(SELLER_PAYMENT_ADDRESS);
+    orchestrator.setPriceSats(PRICE);
+    orchestrator.setFeeRate(FEE_RATE);
+    await until(() => component.buyerFundingRecommendation().status !== 'scanning', 'funding verdict');
+  }
+
+  return { fixture, component, orchestrator, spies, ports, walletService, lookup, ordApi, bidsService, until, connect, fillOffer };
+}
+
 describe('MakeOffer regression — sellerPaymentAddress never derived from on-chain owner', () => {
-  let orchestrator: OrchestratorStub;
-  let scanner: ScannerStub;
-  let walletService: WalletServiceStub;
-  let lookup: LookupStub;
-  let fixture: ComponentFixture<MakeOffer>;
-  let component: MakeOffer;
 
-  beforeEach(async () => {
-    orchestrator = new OrchestratorStub();
-    scanner = new ScannerStub();
-    walletService = new WalletServiceStub();
-    lookup = new LookupStub();
-
-    await TestBed.configureTestingModule({
-      imports: [MakeOffer],
-      providers: [
-        provideHttpClient(),
-        provideRouter([]),
-        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
-        { provide: UtxoContentScanner, useValue: scanner },
-        { provide: WalletService, useValue: walletService },
-        { provide: CatUtxoLookupService, useValue: lookup },
-        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
-        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
-        {
-          provide: cat21Config,
-          useValue: {
-            ordApiUrl: 'http://test-ord/',
-            cat21OrdApiUrl: 'http://test-cat21-ord/',
-            slipstreamApiUrl: 'http://test-slipstream/',
-          },
-        },
-      ],
-    })
-      // Skip the template — we're testing component logic, not the UI.
-      // The template pulls in WalletConnect + PendingCats which each
-      // subscribe to unrelated observables; not our concern here.
-      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
-      .compileComponents();
-
-    fixture = TestBed.createComponent(MakeOffer);
-    component = fixture.componentInstance;
-    fixture.detectChanges();
-  });
-
-  it('does NOT call setSellerPaymentAddress with the cat owner address after a lookup', () => {
+  it('does NOT call setSellerPaymentAddress with the cat owner address after a lookup', async () => {
+    const { component, spies, lookup, orchestrator } = await mount();
     // Arrange: buyer types a cat number; lookup returns the ordinals
     // address ord provided (= current owner).
     component.draft.update((d) => ({ ...d, catNumberInput: '42' }));
@@ -223,54 +190,48 @@ describe('MakeOffer regression — sellerPaymentAddress never derived from on-ch
     // Act: this is the code path the buyer hits clicking "Look up cat".
     component.onLookupCatClick();
 
-    // Assert 1 — the ONE regression that must hold. Every call to
-    // setSellerPaymentAddress (past + future) must NOT carry the on-
-    // chain owner address. If a future refactor re-adds
-    // `orchestrator.setSellerPaymentAddress(result.sellerAddress)`
-    // inside the lookup subscriber, this assertion fails.
-    for (const call of orchestrator.setSellerPaymentAddress.mock.calls) {
+    // Assert 1: the ONE regression that must hold. Every call to
+    // setSellerPaymentAddress (past + future) must NOT carry the
+    // on-chain owner address, and the orchestrator does not hold it.
+    for (const call of spies.setSellerPaymentAddress.mock.calls) {
       expect(call[0]).not.toBe(CAT_OWNER_ORDINALS_ADDRESS);
     }
+    expect(orchestrator.getSnapshot().sellerPaymentAddress).toBeNull();
 
-    // Assert 2 — the ord lookup itself DID run (this test is not a
+    // Assert 2: the ord lookup itself DID run (this test is not a
     // vacuous no-op because the subscriber never fired).
     expect(lookup.getTargetByNumberImpl).toHaveBeenCalledWith(42);
 
-    // Assert 3 — setTargetCat's FINAL call receives the parsed target
+    // Assert 3: setTargetCat's FINAL call receives the parsed target
     // (that part of the lookup is legitimate: the target's txid + vout
     // + scriptPubKey are cat-outpoint context, not address-type
     // context). The lookup first clears with `null` then sets the
     // resolved target.
-    expect(orchestrator.setTargetCat).toHaveBeenCalledTimes(2);
-    const calls = orchestrator.setTargetCat.mock.calls;
+    expect(spies.setTargetCat).toHaveBeenCalledTimes(2);
+    const calls = spies.setTargetCat.mock.calls;
     expect(calls[0]![0]).toBeNull();
-    const finalTarget = calls[1]![0] as BuyOfferTargetCat;
-    expect(finalTarget.catNumber).toBe(42);
+    expect((calls[1]![0] as BuyOfferTargetCat).catNumber).toBe(42);
+    expect(orchestrator.getSnapshot().targetCat?.catNumber).toBe(42);
   });
 
   it('does propagate a URL-supplied payTo into the orchestrator (the correct source)', async () => {
+    const { fixture, spies, orchestrator, connect } = await mount();
     // The `payTo` URL param comes from the seller's own wallet at
-    // sell-modal-open time — that's the sanctioned source for the
+    // sell-modal-open time: that's the sanctioned source for the
     // payment address. Prove this input signal path DOES reach the
     // orchestrator so the bug fix doesn't cut off the intended flow.
     fixture.componentRef.setInput('catNumber', '42');
-    fixture.componentRef.setInput('payTo', WALLET_PAYMENT_ADDRESS);
+    fixture.componentRef.setInput('payTo', SELLER_PAYMENT_ADDRESS);
     // The prefill effect reads `this.connectedWallet()`, sourced from
-    // WalletService.connectedWallet$. Push the wallet there so the effect's
-    // dependency fires.
-    walletService.connectedWalletSubject.next(wallet());
-    fixture.detectChanges();
-    // Effects run async — await a microtask so the prefill effect fires.
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.detectChanges();
+    // WalletService.connectedWallet$.
+    await connect();
 
-    const paymentCalls = orchestrator.setSellerPaymentAddress.mock.calls
-      .map((c) => c[0]);
-    expect(paymentCalls).toContain(WALLET_PAYMENT_ADDRESS);
+    const paymentCalls = spies.setSellerPaymentAddress.mock.calls.map((c) => c[0]);
+    expect(paymentCalls).toContain(SELLER_PAYMENT_ADDRESS);
     // And critically: NOT the ordinals address.
-    expect(paymentCalls).not.toContain(WALLET_ORDINALS_ADDRESS);
+    expect(paymentCalls).not.toContain(TEST_ORDINALS_ADDRESS);
     expect(paymentCalls).not.toContain(CAT_OWNER_ORDINALS_ADDRESS);
+    expect(orchestrator.getSnapshot().sellerPaymentAddress).toBe(SELLER_PAYMENT_ADDRESS);
   });
 });
 
@@ -280,32 +241,7 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
   const OTHER_TXID = 'bb'.repeat(32); // cat's current outpoint (differs → stale)
 
   it('URL-supplied catTxid + catVout parse via linkedOutpoint()', async () => {
-    const orchestrator = new OrchestratorStub();
-    const scanner = new ScannerStub();
-    const walletService = new WalletServiceStub();
-    const lookup = new LookupStub();
-
-    await TestBed.configureTestingModule({
-      imports: [MakeOffer],
-      providers: [
-        provideHttpClient(),
-        provideRouter([]),
-        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
-        { provide: UtxoContentScanner, useValue: scanner },
-        { provide: WalletService, useValue: walletService },
-        { provide: CatUtxoLookupService, useValue: lookup },
-        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
-        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
-        {
-          provide: cat21Config,
-          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
-        },
-      ],
-    })
-      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
-      .compileComponents();
-
-    const fixture = TestBed.createComponent(MakeOffer);
+    const { fixture } = await mount();
     fixture.componentRef.setInput('catTxid', URL_TXID);
     fixture.componentRef.setInput('catVout', '0');
     fixture.detectChanges();
@@ -313,145 +249,50 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
   });
 
   it('staleOffer=true when URL outpoint ≠ orchestrator targetCat outpoint (cat moved)', async () => {
-    const orchestrator = new OrchestratorStub();
-    const scanner = new ScannerStub();
-    const walletService = new WalletServiceStub();
-    const lookup = new LookupStub();
-
-    await TestBed.configureTestingModule({
-      imports: [MakeOffer],
-      providers: [
-        provideHttpClient(),
-        provideRouter([]),
-        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
-        { provide: UtxoContentScanner, useValue: scanner },
-        { provide: WalletService, useValue: walletService },
-        { provide: CatUtxoLookupService, useValue: lookup },
-        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
-        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
-        {
-          provide: cat21Config,
-          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
-        },
-      ],
-    })
-      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
-      .compileComponents();
-
-    const fixture = TestBed.createComponent(MakeOffer);
+    const { fixture, component, orchestrator, connect, fillOffer } = await mount();
     fixture.componentRef.setInput('catTxid', URL_TXID);
     fixture.componentRef.setInput('catVout', '0');
-    // Simulate the on-chain lookup completing with a DIFFERENT outpoint
-    // (cat has moved since the URL was minted).
-    orchestrator.targetCat.set(target({ txid: OTHER_TXID, vout: 0 }));
-    fixture.detectChanges();
+    await connect();
+    // The on-chain lookup completes with a DIFFERENT outpoint (the cat
+    // has moved since the URL was minted). Everything else is ready, so
+    // the stale lock is the only thing keeping the CTA disabled.
+    await fillOffer(target({ txid: OTHER_TXID, vout: 0 }));
+    expect(orchestrator.getSnapshot().simulation).not.toBeNull();
 
-    expect(fixture.componentInstance.staleOffer()).toBe(true);
-    expect(fixture.componentInstance.canCreateOffer()).toBe(false);
+    expect(component.staleOffer()).toBe(true);
+    expect(component.canCreateOffer()).toBe(false);
   });
 
   it('staleOffer=false when URL outpoint == orchestrator targetCat outpoint (fresh link)', async () => {
-    const orchestrator = new OrchestratorStub();
-    const scanner = new ScannerStub();
-    const walletService = new WalletServiceStub();
-    const lookup = new LookupStub();
-
-    await TestBed.configureTestingModule({
-      imports: [MakeOffer],
-      providers: [
-        provideHttpClient(),
-        provideRouter([]),
-        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
-        { provide: UtxoContentScanner, useValue: scanner },
-        { provide: WalletService, useValue: walletService },
-        { provide: CatUtxoLookupService, useValue: lookup },
-        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
-        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
-        {
-          provide: cat21Config,
-          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
-        },
-      ],
-    })
-      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
-      .compileComponents();
-
-    const fixture = TestBed.createComponent(MakeOffer);
+    const { fixture, component, connect, fillOffer } = await mount();
     fixture.componentRef.setInput('catTxid', URL_TXID);
     fixture.componentRef.setInput('catVout', '0');
-    orchestrator.targetCat.set(target({ txid: URL_TXID, vout: 0 }));
-    fixture.detectChanges();
+    await connect();
+    await fillOffer(target({ txid: URL_TXID, vout: 0 }));
 
-    expect(fixture.componentInstance.staleOffer()).toBe(false);
+    expect(component.staleOffer()).toBe(false);
+    // The same fully-filled form IS creatable when the link is fresh.
+    expect(component.canCreateOffer()).toBe(true);
   });
 
   it('staleOffer=false when URL has no intent-lock (legacy link — no stale check)', async () => {
-    const orchestrator = new OrchestratorStub();
-    const scanner = new ScannerStub();
-    const walletService = new WalletServiceStub();
-    const lookup = new LookupStub();
-
-    await TestBed.configureTestingModule({
-      imports: [MakeOffer],
-      providers: [
-        provideHttpClient(),
-        provideRouter([]),
-        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
-        { provide: UtxoContentScanner, useValue: scanner },
-        { provide: WalletService, useValue: walletService },
-        { provide: CatUtxoLookupService, useValue: lookup },
-        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
-        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
-        {
-          provide: cat21Config,
-          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
-        },
-      ],
-    })
-      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
-      .compileComponents();
-
-    const fixture = TestBed.createComponent(MakeOffer);
-    orchestrator.targetCat.set(target({ txid: OTHER_TXID, vout: 0 }));
+    const { component, orchestrator, fixture } = await mount();
+    orchestrator.setTargetCat(target({ txid: OTHER_TXID, vout: 0 }));
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.linkedOutpoint()).toBeNull();
-    expect(fixture.componentInstance.staleOffer()).toBe(false);
+    expect(component.linkedOutpoint()).toBeNull();
+    expect(component.staleOffer()).toBe(false);
   });
 
   it('staleOffer=false while the lookup has not resolved (do NOT block the form before truth is known)', async () => {
-    const orchestrator = new OrchestratorStub();
-    const scanner = new ScannerStub();
-    const walletService = new WalletServiceStub();
-    const lookup = new LookupStub();
-
-    await TestBed.configureTestingModule({
-      imports: [MakeOffer],
-      providers: [
-        provideHttpClient(),
-        provideRouter([]),
-        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
-        { provide: UtxoContentScanner, useValue: scanner },
-        { provide: WalletService, useValue: walletService },
-        { provide: CatUtxoLookupService, useValue: lookup },
-        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
-        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
-        {
-          provide: cat21Config,
-          useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' },
-        },
-      ],
-    })
-      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
-      .compileComponents();
-
-    const fixture = TestBed.createComponent(MakeOffer);
+    const { fixture, component } = await mount();
     fixture.componentRef.setInput('catTxid', URL_TXID);
     fixture.componentRef.setInput('catVout', '0');
-    // orchestrator.targetCat stays null (lookup in flight).
+    // targetCat stays null (lookup in flight).
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.staleOffer()).toBe(false);
+    expect(component.targetCat()).toBeNull();
+    expect(component.staleOffer()).toBe(false);
   });
 });
 
@@ -459,69 +300,54 @@ describe('MakeOffer — catOutpoint intent-lock (stale detection)', () => {
 
 describe('MakeOffer — Post to Bazaar (X.5)', () => {
 
-  const CAT_TXID = 'aa'.repeat(32);
-
   async function setupBazaar(opts: {
     withOffer?: boolean;
-    catsAtOutput?: (txid: string, vout: number) => Observable<number[]>;
+    catsAtOutput?: (txid: string, vout: number) => Observable<number[] | null>;
     onPost?: (args: PostBidArgs) => Observable<PersistedCat21Bid>;
   } = {}) {
-    const orchestrator = new OrchestratorStub();
-    const scanner = new ScannerStub();
-    const walletService = new WalletServiceStub();
-    const lookup = new LookupStub();
     const ordApi = new OrdApiServiceStub();
     const bidsService = new Cat21BidsServiceStub();
-
     if (opts.catsAtOutput) ordApi.setCatsAtOutput(opts.catsAtOutput);
     if (opts.onPost) bidsService.postBid = jest.fn(opts.onPost) as never;
 
-    await TestBed.configureTestingModule({
-      imports: [MakeOffer],
-      providers: [
-        provideHttpClient(),
-        provideRouter([]),
-        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
-        { provide: UtxoContentScanner, useValue: scanner },
-        { provide: WalletService, useValue: walletService },
-        { provide: CatUtxoLookupService, useValue: lookup },
-        { provide: OrdApiService, useValue: ordApi },
-        { provide: Cat21BidsService, useValue: bidsService },
-        { provide: cat21Config, useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' } },
-      ],
-    })
-      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
-      .compileComponents();
-
-    const fixture = TestBed.createComponent(MakeOffer);
-    const component = fixture.componentInstance;
-    // MakeOffer's `this.connectedWallet` is sourced from
-    // WalletService.connectedWallet$; push the wallet there.
-    walletService.connectedWalletSubject.next(wallet());
-    fixture.detectChanges();
+    const ctx = await mount({ ordApi, bidsService });
+    await ctx.connect();
 
     if (opts.withOffer !== false) {
-      // Simulate a completed offer flow: seller-payment address set,
-      // price set, buyer-receive address set, artifact populated,
-      // target locked in.
-      orchestrator.setTargetCat(target({ txid: CAT_TXID, vout: 0 }));
-      orchestrator.setSellerPaymentAddress('bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm');
-      orchestrator.setPriceSats(21_000);
-      orchestrator.setBuyerReceiveAddress(WALLET_ORDINALS_ADDRESS);
-      orchestrator.offerArtifact.set({ base64: 'cHNidP8BAP0Y', hex: 'aabb' });
+      // A completed offer flow: target, seller-payment address, price and
+      // fee rate set; the wallet buyer-signs the real offer PSBT.
+      provider = installFakeCat21Provider();
+      await ctx.fillOffer(target({ txid: CAT_TXID, vout: 0 }));
+      expect(ctx.component.canCreateOffer()).toBe(true);
+      await ctx.component.onCreateOfferClick();
+      await ctx.until(() => ctx.component.offerArtifact() !== null, 'offer artifact');
     }
+    return { ...ctx, bidsService, ordApi };
+  }
 
-    return { fixture, component, orchestrator, ordApi, bidsService };
+  /** Let the publish chain (ord lookup, then POST) settle. */
+  async function flush(): Promise<void> {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
   }
 
   it('canPostToBazaar() is false without an offer artifact', async () => {
     const { component } = await setupBazaar({ withOffer: false });
+    expect(component.offerArtifact()).toBeNull();
     expect(component.canPostToBazaar()).toBe(false);
   });
 
   it('canPostToBazaar() is true once the offer artifact + target are set', async () => {
     const { component } = await setupBazaar({ catsAtOutput: () => of([42]) });
     expect(component.canPostToBazaar()).toBe(true);
+  });
+
+  it('the offer artifact is the wallet-signed buyer PSBT: input 1 signed, the seller\'s cat input left for the seller', async () => {
+    const { component } = await setupBazaar({ catsAtOutput: () => of([42]) });
+    expect(provider!.requests.map((r) => r.signAtIndex)).toEqual([[1]]);
+    const tx = btc.Transaction.fromPSBT(hex.decode(component.offerArtifact()!.hex));
+    expect(hex.encode(tx.getInput(0).txid!)).toBe(CAT_TXID);
+    expect(tx.getInput(0).partialSig ?? tx.getInput(0).tapKeySig).toBeUndefined();
+    expect(tx.getInput(1).partialSig?.length).toBe(1);
   });
 
   it('onPostToBazaarClick fetches cats + calls bidsService.postBid with the assembled args', async () => {
@@ -534,10 +360,10 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
         catVout: 0,
         cats: [42],
         headlineCatNumber: 42,
-        bidSats: 21_000,
-        buyerOrdinalsAddress: WALLET_ORDINALS_ADDRESS,
-        buyerPaymentAddress: WALLET_PAYMENT_ADDRESS,
-        sellerPaymentAddress: 'bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm',
+        bidSats: PRICE,
+        buyerOrdinalsAddress: TEST_ORDINALS_ADDRESS,
+        buyerPaymentAddress: TEST_PAYMENT_ADDRESS,
+        sellerPaymentAddress: SELLER_PAYMENT_ADDRESS,
         psbtBase64: 'cHNidP8BAP0Y',
         createdAt: '2026-07-22T10:00:00Z',
       }),
@@ -545,38 +371,57 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
     const catsSpy = jest.spyOn(ordApi, 'getCatsAtOutput');
 
     component.onPostToBazaarClick();
-    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await flush();
 
     expect(catsSpy).toHaveBeenCalledWith(CAT_TXID, 0);
     expect(bidsService.postBid).toHaveBeenCalledTimes(1);
-    expect((bidsService.postBid as jest.Mock).mock.calls[0]?.[0]).toMatchObject({
+    expect((bidsService.postBid as jest.Mock).mock.calls[0]?.[0]).toEqual({
       catTxid: CAT_TXID,
       catVout: 0,
       cats: [42],
       headlineCatNumber: 42,
-      bidSats: 21_000,
-      buyerOrdinalsAddress: WALLET_ORDINALS_ADDRESS,
-      buyerPaymentAddress: WALLET_PAYMENT_ADDRESS,
-      sellerPaymentAddress: 'bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm',
-      psbtBase64: 'cHNidP8BAP0Y',
+      bidSats: PRICE,
+      buyerOrdinalsAddress: TEST_ORDINALS_ADDRESS,
+      buyerPaymentAddress: TEST_PAYMENT_ADDRESS,
+      sellerPaymentAddress: SELLER_PAYMENT_ADDRESS,
+      // The exact bytes the wallet signed, not a re-encoding.
+      psbtBase64: component.offerArtifact()!.base64,
     });
     expect(component.bidPublishState()).toBe('success');
     expect(component.bidPublishedRow()?.id).toBe('uuid-x');
   });
 
   it('surfaces cats-bundle-drift when the target catNumber is not in the fetched bundle', async () => {
-    // ord reports [7, 100] — cat #42 (target headline) has moved off
+    // ord reports [7, 100]: cat #42 (target headline) has moved off
     // this UTXO. postBid must NOT be called; UI shows drift error.
     const { component, bidsService } = await setupBazaar({
       catsAtOutput: () => of([7, 100]),
     });
 
     component.onPostToBazaarClick();
-    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await flush();
 
     expect(bidsService.postBid).not.toHaveBeenCalled();
     expect(component.bidPublishState()).toBe('error');
     expect(component.bidPublishError()?.code).toBe('cats-bundle-drift');
+  });
+
+  it('surfaces cat-not-found when cat21-ord does not know the outpoint (null)', async () => {
+    // getCatsAtOutput emits null for a 404: the UTXO is spent or not
+    // indexed yet. Same code the backend answers for it; nothing is posted.
+    const { component, bidsService } = await setupBazaar({
+      catsAtOutput: () => of(null),
+    });
+
+    component.onPostToBazaarClick();
+    await flush();
+
+    expect(bidsService.postBid).not.toHaveBeenCalled();
+    expect(component.bidPublishState()).toBe('error');
+    expect(component.bidPublishError()).toEqual({
+      code: 'cat-not-found',
+      detail: expect.stringContaining(`${CAT_TXID}:0`),
+    });
   });
 
   it('surfaces backend errors from postBid (e.g. cats-bundle-drift server-side) via bidPublishError', async () => {
@@ -586,7 +431,7 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
     });
 
     component.onPostToBazaarClick();
-    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await flush();
 
     expect(component.bidPublishState()).toBe('error');
     expect(component.bidPublishError()?.code).toBe('cats-bundle-drift');
@@ -598,7 +443,7 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
     });
 
     component.onPostToBazaarClick();
-    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await flush();
 
     expect(bidsService.postBid).not.toHaveBeenCalled();
     expect(component.bidPublishState()).toBe('error');
@@ -611,79 +456,70 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
       onPost: () => of({} as PersistedCat21Bid),
     });
     component.onPostToBazaarClick();
-    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await flush();
     expect(component.bidPublishState()).toBe('success');
 
     component.onResetClick();
     expect(component.bidPublishState()).toBe('idle');
     expect(component.bidPublishError()).toBeNull();
     expect(component.bidPublishedRow()).toBeNull();
+    expect(component.offerArtifact()).toBeNull();
   });
 });
 
 describe('MakeOffer: offer accounting is preserve-V (never 546) + expert-required funding', () => {
 
-  async function mount() {
-    const orchestrator = new OrchestratorStub();
-    await TestBed.configureTestingModule({
-      imports: [MakeOffer],
-      providers: [
-        provideHttpClient(),
-        provideRouter([]),
-        { provide: Cat21CreateOfferOrchestrator, useValue: orchestrator },
-        { provide: UtxoContentScanner, useValue: new ScannerStub() },
-        { provide: WalletService, useValue: new WalletServiceStub() },
-        { provide: CatUtxoLookupService, useValue: new LookupStub() },
-        { provide: OrdApiService, useValue: new OrdApiServiceStub() },
-        { provide: Cat21BidsService, useValue: new Cat21BidsServiceStub() },
-        { provide: cat21Config, useValue: { ordApiUrl: 't', cat21OrdApiUrl: 't', slipstreamApiUrl: 't' } },
-      ],
-    })
-      .overrideComponent(MakeOffer, { set: { template: '', imports: [] } })
-      .compileComponents();
-    const fixture = TestBed.createComponent(MakeOffer);
-    fixture.detectChanges();
-    return { fixture, component: fixture.componentInstance, orchestrator };
-  }
-
   it('sellerReceivesSats = price + the cat\'s REAL value (9000), never price + 546', async () => {
-    const { component, orchestrator } = await mount();
-    // A cat riding a 9000-sat UTXO, the exact non-546 case the 546-hardcode
-    // hid. ord routes `priceSats + sellerInput.value` to the seller's payment
-    // output, so the seller receives price + V, not price + 546.
-    orchestrator.targetCat.set(target({ value: 9_000 }));
-    orchestrator.priceSats.set(100_000);
+    const { component, orchestrator, fixture } = await mount();
+    // A cat riding a 9000-sat UTXO, the exact non-546 case a 546-hardcode
+    // would hide. ord routes `priceSats + sellerInput.value` to the seller's
+    // payment output, so the seller receives price + V, not price + 546.
+    orchestrator.setTargetCat(target({ value: 9_000 }));
+    orchestrator.setPriceSats(100_000);
+    fixture.detectChanges();
     expect(component.sellerReceivesSats()).toBe(109_000);
-    // Guard the exact bug: it must NOT be the old price + 546 answer.
     expect(component.sellerReceivesSats()).not.toBe(100_546);
   });
 
   it('sellerReceivesSats is null until BOTH price and the cat lookup resolve', async () => {
-    const { component, orchestrator } = await mount();
+    const { component, orchestrator, fixture } = await mount();
     expect(component.sellerReceivesSats()).toBeNull();
-    orchestrator.targetCat.set(target({ value: 9_000 }));
+    orchestrator.setTargetCat(target({ value: 9_000 }));
+    fixture.detectChanges();
     expect(component.sellerReceivesSats()).toBeNull(); // price still missing
-    orchestrator.priceSats.set(50_000);
+    orchestrator.setPriceSats(50_000);
+    fixture.detectChanges();
     expect(component.sellerReceivesSats()).toBe(59_000);
   });
 
-  it('buyerFundingExpertRequired mirrors the SDK recommendation status', async () => {
-    const { component, orchestrator } = await mount();
-    // Default stub emits 'auto' → no expert picker.
+  it('buyerFundingExpertRequired is false while the verdict is still open (scanning)', async () => {
+    const { component, connect } = await mount();
+    // Coins are loaded but no offer inputs yet: the SDK has nothing to
+    // price, so its recommendation stays 'scanning'.
+    await connect();
+    expect(component.buyerFundingRecommendation().status).toBe('scanning');
     expect(component.buyerFundingExpertRequired()).toBe(false);
-    // Only asset-bearing coins cover → the picker must surface.
-    orchestrator.buyerFundingRecommendationSubject.next({
-      status: 'expert-required',
-      recommended: null,
-      candidates: [],
-    });
+  });
+
+  it('buyerFundingExpertRequired is false when a clean coin covers (auto)', async () => {
+    const { component, connect, fillOffer } = await mount();
+    await connect();
+    await fillOffer();
+    expect(component.buyerFundingRecommendation().status).toBe('auto');
+    expect(component.buyerFundingExpertRequired()).toBe(false);
+  });
+
+  it('buyerFundingExpertRequired is true when only an asset coin covers on a one-address wallet', async () => {
+    const coin = fundingCoin(100_000, 0x51);
+    const ports = fakePorts([coin]);
+    ports.setVerdict(`${coin.txid}:${coin.vout}`, assetsVerdict({ inscriptionIds: [`${'e'.repeat(64)}i0`] }));
+    const { component, connect, fillOffer } = await mount({ ports });
+    await connect(oneAddressTestWallet());
+    await fillOffer();
+    expect(component.buyerFundingRecommendation().status).toBe('expert-required');
     expect(component.buyerFundingExpertRequired()).toBe(true);
-    // 'scanning' / 'insufficient' are NOT the expert-picker trigger.
-    orchestrator.buyerFundingRecommendationSubject.next({
-      status: 'scanning',
-      recommended: null,
-      candidates: [],
-    });
-    expect(component.buyerFundingExpertRequired()).toBe(false);
+    // No coin is chosen for the user, so the offer cannot be built.
+    expect(component.simulation()).toBeNull();
+    expect(component.canCreateOffer()).toBe(false);
   });
 });
