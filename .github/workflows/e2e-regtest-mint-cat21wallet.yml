@@ -213,7 +213,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: cat21-wallet-src/apps/extension/dist
-          key: cat21wallet-dist-${{ hashFiles('cat21-wallet-src/pnpm-lock.yaml', 'cat21-wallet-src/apps/extension/**/*.ts', 'cat21-wallet-src/apps/extension/**/*.tsx', 'cat21-wallet-src/packages/**/*.ts') }}
+          key: cat21wallet-dist-${{ env.CAT21_WALLET_SHA }}
 
       - name: Install cat21-wallet dependencies
         if: steps.cat21wallet-dist-cache.outputs.cache-hit != 'true'

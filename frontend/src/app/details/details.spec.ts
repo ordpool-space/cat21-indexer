@@ -40,11 +40,11 @@ class ApiServiceStub {
 
 class OrdApiServiceStub {
   private ownerImpl: (n: number) => Observable<string | null> = () => EMPTY;
-  private catsAtOutputImpl: (txid: string, vout: number) => Observable<number[]> = () => of([]);
+  private catsAtOutputImpl: (txid: string, vout: number) => Observable<number[] | null> = () => of([]);
   setOwner(fn: (n: number) => Observable<string | null>) {
     this.ownerImpl = fn;
   }
-  setCatsAtOutput(fn: (txid: string, vout: number) => Observable<number[]>) {
+  setCatsAtOutput(fn: (txid: string, vout: number) => Observable<number[] | null>) {
     this.catsAtOutputImpl = fn;
   }
   getCurrentOwner = (n: number) => this.ownerImpl(n);
@@ -89,7 +89,7 @@ async function setup(opts: {
   owner?: (n: number) => Observable<string | null>;
   currentTarget?: (n: number) => Observable<{ target: BuyOfferTargetCat; sellerAddress: string } | null>;
   bids?: (txid: string, vout: number) => Observable<PersistedCat21Bid[]>;
-  catsAtOutput?: (txid: string, vout: number) => Observable<number[]>;
+  catsAtOutput?: (txid: string, vout: number) => Observable<number[] | null>;
 } = {}) {
   const walletService = new WalletServiceStub();
   const api = new ApiServiceStub();
@@ -756,6 +756,31 @@ describe('Details — publishListing threads the cats bundle from ord (v3 flow)'
     expect(spy).not.toHaveBeenCalled();
     expect(component.orderbookState()).toBe('error');
     expect(component.orderbookError()?.code).toBe('cats-bundle-drift');
+  });
+
+  it('surfaces cat-not-found when cat21-ord does not know the outpoint (null)', async () => {
+    // getCatsAtOutput emits null for a 404: the UTXO is spent or not indexed.
+    // Same code the backend answers for it, and nothing is signed or posted.
+    const { component, listingService, walletService } = await setup({
+      catNumber: 42,
+      currentTarget: () => of(targetAt(REAL_TXID, 0)),
+      catsAtOutput: () => of(null),
+    });
+    walletService.connectedWalletSubject.next(wallet());
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    const spy = jest.spyOn(listingService, 'publishListing');
+
+    component.onAskInputChange('21000');
+    component.publishToOrderbook.set(true);
+    component.onCopyPermalinkClick();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(component.orderbookState()).toBe('error');
+    expect(component.orderbookError()).toEqual({
+      code: 'cat-not-found',
+      detail: expect.stringContaining(`${REAL_TXID}:0`),
+    });
   });
 });
 

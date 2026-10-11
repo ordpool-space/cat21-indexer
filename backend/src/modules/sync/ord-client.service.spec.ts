@@ -1,9 +1,21 @@
 /**
  * @test-kind unit
  * Real:   OrdClientService, parseSatpoint
- * Faked:  global fetch -> jest.spyOn answering cat21-ord /cat, /status, /output and /inscription bodies (shapes written in the spec; the regtest lane proves them against a real cat21-ord)
- * Proves: cat, latest number, cats-at-output and current location parse cat21-ord's answers and treat errors as unknown
+ * Faked:  global fetch -> jest.spyOn answering cat21-ord. /output and /inscription for cats-at-output from
+ *         cat21OrdOutputWithCatFixture, cat21OrdOutputWithoutCatsFixture, cat21OrdCatInscriptionFixture,
+ *         cat21OrdOutputNotFoundBody (ordpool-sdk/testing, captured from cat21-ord 486f5338 on regtest, 2026-10-11);
+ *         /cat, /cats and /inscription for the other reads written in the spec (the regtest lane proves them
+ *         against a real cat21-ord)
+ * Proves: cat, latest number and current location parse cat21-ord's answers and treat errors as unknown;
+ *         cats-at-output reads cat21-ord through the SDK's getCatsAtOutput with a bounded request
  */
+import {
+  cat21OrdCatInscriptionFixture,
+  cat21OrdOutputNotFoundBody,
+  cat21OrdOutputWithCatFixture,
+  cat21OrdOutputWithoutCatsFixture,
+} from 'ordpool-sdk/testing';
+
 import { OrdClientService } from './ord-client.service';
 
 const BASE_URL = 'https://ord.test';
@@ -117,60 +129,6 @@ describe('OrdClientService', () => {
     });
   });
 
-  describe('getCatsAtOutput', () => {
-    it('maps cat21-ord `/output` inscription-id strings to cat numbers', async () => {
-      // cat21-ord re-emits ord's `inscriptions` array as `cats`, whose entries
-      // are inscription-id strings — NOT numbers. getCatsAtOutput must resolve
-      // each to its cat number via /cat/<id>.
-      jest.spyOn(global, 'fetch').mockImplementation((input: any) => {
-        const url = String(input);
-        if (url.includes('/output/')) {
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({ cats: ['bbb222i0', 'aaa111i0'] }),
-          } as any);
-        }
-        if (url.endsWith('/cat/aaa111i0')) {
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({ id: 'aaa111i0', number: 7 }),
-          } as any);
-        }
-        if (url.endsWith('/cat/bbb222i0')) {
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({ id: 'bbb222i0', number: 42 }),
-          } as any);
-        }
-        return Promise.reject(new Error(`unexpected url ${url}`));
-      });
-
-      expect(await service.getCatsAtOutput('deadbeef', 0)).toEqual([7, 42]);
-    });
-
-    it('returns [] when the output carries no cats', async () => {
-      jest.spyOn(global, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ cats: [] }),
-      } as any);
-
-      expect(await service.getCatsAtOutput('deadbeef', 0)).toEqual([]);
-    });
-
-    it('returns null when ord 404s the outpoint', async () => {
-      jest.spyOn(global, 'fetch').mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      } as any);
-
-      expect(await service.getCatsAtOutput('deadbeef', 0)).toBeNull();
-    });
-  });
 });
 
 const TXID_A = 'a'.repeat(64);
@@ -237,22 +195,99 @@ describe('OrdClientService.getCatCurrentLocation', () => {
   });
 });
 
-describe('OrdClientService.getCatsAtOutput — numeric + non-array branches', () => {
+/** The mint outpoint the captured fixtures describe. */
+const [CAT_TXID, CAT_VOUT_RAW] = cat21OrdOutputWithCatFixture.outpoint.split(':');
+const CAT_VOUT = Number(CAT_VOUT_RAW);
+const CAT_ID = cat21OrdOutputWithCatFixture.cats[0];
+
+/** A fetch answer the way cat21-ord sends it: JSON for a 2xx, plain text otherwise. */
+function answer(status: number, body: unknown): Response {
+  const isText = typeof body === 'string';
+  return new Response(isText ? body : JSON.stringify(body), {
+    status,
+    headers: { 'content-type': isText ? 'text/plain' : 'application/json' },
+  });
+}
+
+/** Fake cat21-ord: exact URL -> answer. Any other URL rejects, so an unexpected read fails the test. */
+function fakeCat21Ord(routes: Record<string, () => Response>) {
+  return jest.spyOn(global, 'fetch').mockImplementation((input: unknown) => {
+    const url = String(input);
+    const route = routes[url];
+    return route ? Promise.resolve(route()) : Promise.reject(new Error(`unexpected url ${url}`));
+  });
+}
+
+describe('OrdClientService.getCatsAtOutput (the SDK getCatsAtOutput over cat21-ord)', () => {
   beforeEach(() => jest.restoreAllMocks());
 
-  it('passes numeric entries through, dedupes, and sorts ascending', async () => {
-    routeFetch([['/output/', { body: { cats: [42, 7, 42, 0] } }]]);
-    expect(await createService().getCatsAtOutput(TXID_A, 0)).toEqual([0, 7, 42]);
+  it('resolves the inscription ids /output lists through /inscription to cat numbers', async () => {
+    const fetchSpy = fakeCat21Ord({
+      [`${BASE_URL}/output/${CAT_TXID}:${CAT_VOUT}`]: () => answer(200, cat21OrdOutputWithCatFixture),
+      [`${BASE_URL}/inscription/${CAT_ID}`]: () => answer(200, cat21OrdCatInscriptionFixture),
+    });
+
+    expect(await createService().getCatsAtOutput(CAT_TXID, CAT_VOUT)).toEqual([cat21OrdCatInscriptionFixture.number]);
+    expect(fetchSpy.mock.calls.map(([url]) => String(url))).toEqual([
+      `${BASE_URL}/output/${CAT_TXID}:${CAT_VOUT}`,
+      `${BASE_URL}/inscription/${CAT_ID}`,
+    ]);
   });
 
-  it('drops negative / non-integer numeric entries', async () => {
-    routeFetch([['/output/', { body: { cats: [5, -1, 3.5, 9] } }]]);
-    expect(await createService().getCatsAtOutput(TXID_A, 0)).toEqual([5, 9]);
+  it('asks for JSON and bounds every request with an abort signal', async () => {
+    const fetchSpy = fakeCat21Ord({
+      [`${BASE_URL}/output/${CAT_TXID}:${CAT_VOUT}`]: () => answer(200, cat21OrdOutputWithCatFixture),
+      [`${BASE_URL}/inscription/${CAT_ID}`]: () => answer(200, cat21OrdCatInscriptionFixture),
+    });
+
+    await createService().getCatsAtOutput(CAT_TXID, CAT_VOUT);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchSpy.mock.calls) {
+      expect(init?.headers).toEqual({ Accept: 'application/json' });
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    }
   });
 
-  it('returns [] when `cats` is not an array', async () => {
-    routeFetch([['/output/', { body: { cats: undefined } }]]);
-    expect(await createService().getCatsAtOutput(TXID_A, 0)).toEqual([]);
+  it('returns [] for an output that carries no cat', async () => {
+    const [txid, vout] = cat21OrdOutputWithoutCatsFixture.outpoint.split(':');
+    fakeCat21Ord({
+      [`${BASE_URL}/output/${txid}:${vout}`]: () => answer(200, cat21OrdOutputWithoutCatsFixture),
+    });
+
+    expect(await createService().getCatsAtOutput(txid, Number(vout))).toEqual([]);
+  });
+
+  it('returns null when cat21-ord 404s the outpoint', async () => {
+    fakeCat21Ord({
+      [`${BASE_URL}/output/${CAT_TXID}:${CAT_VOUT}`]: () => answer(404, cat21OrdOutputNotFoundBody),
+    });
+
+    expect(await createService().getCatsAtOutput(CAT_TXID, CAT_VOUT)).toBeNull();
+  });
+
+  it('throws on any other error status, so a caller reads it as a failed lookup', async () => {
+    fakeCat21Ord({
+      [`${BASE_URL}/output/${CAT_TXID}:${CAT_VOUT}`]: () => answer(500, 'internal error'),
+    });
+
+    await expect(createService().getCatsAtOutput(CAT_TXID, CAT_VOUT)).rejects.toThrow('answered 500');
+  });
+
+  it('throws when an entry is a number instead of an inscription id', async () => {
+    fakeCat21Ord({
+      [`${BASE_URL}/output/${CAT_TXID}:${CAT_VOUT}`]: () => answer(200, { ...cat21OrdOutputWithCatFixture, cats: [42] }),
+    });
+
+    await expect(createService().getCatsAtOutput(CAT_TXID, CAT_VOUT)).rejects.toThrow('not an inscription id');
+  });
+
+  it('throws when the answer has no `cats` list', async () => {
+    const { cats: _cats, ...withoutCats } = cat21OrdOutputWithCatFixture;
+    fakeCat21Ord({
+      [`${BASE_URL}/output/${CAT_TXID}:${CAT_VOUT}`]: () => answer(200, withoutCats),
+    });
+
+    await expect(createService().getCatsAtOutput(CAT_TXID, CAT_VOUT)).rejects.toThrow('has no cats list');
   });
 });
 

@@ -525,6 +525,16 @@ export class Details {
     // the backend uses for its own drift check.
     this.ordApi.getCatsAtOutput(target.txid, target.vout).subscribe({
       next: (cats) => {
+        if (cats === null) {
+          this.orderbookState.set('error');
+          this.orderbookError.set({
+            code: 'cat-not-found',
+            detail:
+              `cat21-ord does not know UTXO ${target.txid}:${target.vout} (already spent, or not ` +
+              'indexed yet). The cat may have moved; refresh and re-list.',
+          });
+          return;
+        }
         if (!cats.includes(this.catNumber())) {
           this.orderbookState.set('error');
           this.orderbookError.set({

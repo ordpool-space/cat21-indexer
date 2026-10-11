@@ -27,7 +27,8 @@
       // themselves. Compile-time-only accommodation.
       "ordpool-sdk/cat21-validation": ["node_modules/ordpool-sdk/dist/cat21-validation/index"],
       "ordpool-sdk/cat21-session": ["node_modules/ordpool-sdk/dist/cat21-session/index"],
-      "ordpool-sdk/network": ["node_modules/ordpool-sdk/dist/network"]
+      "ordpool-sdk/network": ["node_modules/ordpool-sdk/dist/network"],
+      "ordpool-sdk/testing": ["node_modules/ordpool-sdk/dist/testing"]
     }
   },
   "include": ["src/**/*"],

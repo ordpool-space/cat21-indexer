@@ -22,6 +22,7 @@ import {
   launchWalletContext,
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
+  closeCat21WalletPage,
   SeededListedCat,
 } from 'ordpool-sdk/e2e';
 
@@ -93,7 +94,7 @@ test.beforeAll(async () => {
   const extensionId = worker.url().split('/')[2];
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
-  await primer.close();
+  await closeCat21WalletPage(primer);
 
   const owner = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
   const cat = await seedListedCat({ ordinalsAddress: owner });

@@ -29,6 +29,7 @@ import {
   launchWalletContext,
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
+  closeCat21WalletPage,
 } from 'ordpool-sdk/e2e';
 import { buildCat21BuyOfferPsbt, KnownOrdinalWalletType, Network } from 'ordpool-sdk/core';
 
@@ -201,7 +202,7 @@ test.beforeAll(async () => {
   const extensionId = worker.url().split('/')[2];
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
-  await primer.close();
+  await closeCat21WalletPage(primer);
 
   const page = await context.newPage();
   seller = await connectAndReadAddresses(page);

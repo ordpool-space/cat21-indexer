@@ -41,6 +41,7 @@ import {
   launchWalletContext,
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
+  closeCat21WalletPage,
 } from 'ordpool-sdk/e2e';
 import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
@@ -282,7 +283,7 @@ test.beforeAll(async () => {
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
   await shot(primer, '00-onboarded');
-  await primer.close();
+  await closeCat21WalletPage(primer);
 
   // Connect the wallet ONCE for the whole suite (rule 1). Every test
   // reads sharedPaymentAddress from module scope; no ordering coupling

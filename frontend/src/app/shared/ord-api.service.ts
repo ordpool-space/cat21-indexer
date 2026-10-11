@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { forkJoin, interval, map, Observable, of, shareReplay, startWith, switchMap } from 'rxjs';
+import { cat21OrdFetchReader, getCatsAtOutput } from 'ordpool-sdk';
+import { defer, interval, map, Observable, shareReplay, startWith, switchMap } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 
@@ -181,40 +182,22 @@ export class OrdApiService {
   }
 
   /**
-   * Return the sorted-ascending, deduped list of cat numbers riding
-   * on a given UTXO.
+   * The cat numbers riding on a UTXO, ascending and deduped, read from
+   * cat21-ord by the SDK's `getCatsAtOutput` (the same reader the backend's
+   * `OrdClientService` uses, so both sides of the listing and bid drift check
+   * see one answer).
    *
-   * cat21-ord's `/output` lists the cats as inscription ids
-   * (`<txid>i<n>`); each one is resolved through `/inscription/<id>`,
-   * whose `number` is the cat number (cat21-ord indexes nothing but
-   * cats, so its inscription number IS the cat number). A numeric entry
-   * passes through as it is. The backend's `OrdClientService` reads the
-   * same answer the same way.
+   * Load-bearing for the v3 listings + bids flow: the seller signs against
+   * this exact array, and the backend re-verifies against its own live
+   * cat21-ord read. If the two drift, the backend rejects with
+   * `cats-bundle-drift`.
    *
-   * Load-bearing for the v3 listings + bids flow: the seller signs
-   * against this exact array, and the backend re-verifies against
-   * its own live ord query. If the two drift, the backend rejects
-   * with `cats-bundle-drift`.
-   *
-   * Returns `[]` for a UTXO with no cats (e.g. a plain BTC output
-   * queried by mistake). Any HTTP error propagates; callers wrap
-   * with `catchError` if they want a null fallback.
+   * Emits `null` when cat21-ord does not know the outpoint (spent, or not
+   * indexed yet) and `[]` for an output that carries no cat. Any other answer
+   * errors the stream, a malformed one included; callers map an error to
+   * `ord-lookup-failed`.
    */
-  getCatsAtOutput(txid: string, vout: number): Observable<number[]> {
-    return this.getOutput(`${txid}:${vout}`).pipe(
-      switchMap((out) => {
-        const raw = (out?.cats ?? []) as unknown[];
-        const numbers = raw.map((c): Observable<number | null> => {
-          if (typeof c === 'number') return of(c);
-          if (typeof c === 'string') return this.getInscription(c).pipe(map((insc) => insc.number));
-          return of(null);
-        });
-        return numbers.length === 0 ? of([]) : forkJoin(numbers);
-      }),
-      map((nums) => {
-        const valid = nums.filter((c): c is number => c !== null && Number.isInteger(c) && c >= 0);
-        return Array.from(new Set(valid)).sort((a, b) => a - b);
-      }),
-    );
+  getCatsAtOutput(txid: string, vout: number): Observable<number[] | null> {
+    return defer(() => getCatsAtOutput(cat21OrdFetchReader(environment.ordExplorer), txid, vout));
   }
 }

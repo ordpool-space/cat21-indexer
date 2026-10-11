@@ -23,6 +23,7 @@ import {
   launchWalletContext,
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
+  closeCat21WalletPage,
 } from 'ordpool-sdk/e2e';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
@@ -133,7 +134,7 @@ test.beforeAll(async () => {
 
   const primer = await context.newPage();
   await onboardCat21Wallet(primer, extensionId);
-  await primer.close();
+  await closeCat21WalletPage(primer);
   browserErrorGuard.assertClean();
 });
 

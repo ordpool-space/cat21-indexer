@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { cat21OrdFetchReader, getCatsAtOutput } from 'ordpool-sdk/cat21-validation';
 
 const FETCH_TIMEOUT_MS = 30_000;
 
@@ -38,26 +39,6 @@ export interface CatCurrentLocation {
   txid: string;
   vout: number;
   ordinalsAddress: string;
-}
-
-/**
- * Response shape for ord's `/output/<outpoint>` endpoint. Only the
- * fields the listings/bids modules care about are typed here — ord
- * returns more (`sat_ranges`, `value`, `script_pubkey`, …) that
- * we don't need.
- *
- * `cats` is the load-bearing field for v3 listings: a UTXO can carry
- * multiple cats via consolidation of previously-minted 546-sat cat
- * UTXOs. The seller signs a snapshot of this array; if it drifts
- * between sign-time and accept-time, the listing is stale.
- */
-export interface OrdOutputDetail {
-  // cat21-ord's `/output` re-emits ord's `inscriptions` array as `cats`, whose
-  // entries are inscription-id strings (`<txid>i<n>`). Older instances may
-  // surface numbers directly; both are tolerated by `getCatsAtOutput`.
-  cats: (string | number)[];
-  inscriptions: string[];
-  runes: Record<string, unknown>;
 }
 
 @Injectable()
@@ -112,36 +93,20 @@ export class OrdClientService {
   }
 
   /**
-   * Fetch every cat riding on a given UTXO, sorted ascending. Used
-   * by the listings module to (a) compare against the seller-signed
-   * bundle at insert time and (b) let the pruner detect bundle
-   * drift (a cat was consolidated onto or off the UTXO after the
-   * listing was signed).
+   * The cats riding on a UTXO, ascending and deduped, as the SDK's
+   * `getCatsAtOutput` reads them from cat21-ord. The listings module compares
+   * them against the seller-signed bundle at insert time, the bids module
+   * against the buyer-signed one, and the bids pruner re-checks both for
+   * bundle drift.
    *
-   * Returns null when ord returns 404 for the outpoint (UTXO
-   * unknown / already spent). An empty array `[]` means the UTXO
-   * exists but carries no cats — a legit outcome for regular
-   * (non-cat) UTXOs that a scanner might accidentally query.
+   * `null` when cat21-ord answers 404 for the outpoint (unknown or spent),
+   * `[]` for an output that carries no cat. Every other answer it does not
+   * expect throws, which each caller treats as "lookup failed", never as
+   * "no cats".
    */
   async getCatsAtOutput(txid: string, vout: number): Promise<number[] | null> {
-    const out = await this.fetchJson<OrdOutputDetail>(
-      `${this.baseUrl}/output/${txid}:${vout}`,
-      true,
-    );
-    if (!out) return null;
-    if (!Array.isArray(out.cats)) return [];
-    // cat21-ord returns `cats` as inscription-id strings (`<txid>i<n>`); map
-    // each to its cat number (under --index-cat21 the inscription number IS the
-    // cat number). Already-numeric entries pass through unchanged.
-    const numbers = await Promise.all(
-      out.cats.map(async (entry) => {
-        if (typeof entry === 'number') return Number.isInteger(entry) && entry >= 0 ? entry : null;
-        const cat = await this.getCat(entry);
-        return cat?.number ?? null;
-      }),
-    );
-    const resolved = numbers.filter((n): n is number => n !== null && n >= 0);
-    return Array.from(new Set(resolved)).sort((a, b) => a - b);
+    const reader = cat21OrdFetchReader(this.baseUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    return getCatsAtOutput(reader, txid, vout);
   }
 
   private async fetchJson<T>(url: string, allow404: true): Promise<T | null>;

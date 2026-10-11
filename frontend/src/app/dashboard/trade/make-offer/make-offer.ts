@@ -633,6 +633,16 @@ export class MakeOffer {
     this.bidPublishedRow.set(null);
     this.ordApi.getCatsAtOutput(target.txid, target.vout).subscribe({
       next: (cats) => {
+        if (cats === null) {
+          this.bidPublishState.set('error');
+          this.bidPublishError.set({
+            code: 'cat-not-found',
+            detail:
+              `cat21-ord does not know UTXO ${target.txid}:${target.vout} (already spent, or not ` +
+              'indexed yet). Rebuild the offer against the current outpoint.',
+          });
+          return;
+        }
         if (!cats.includes(target.catNumber)) {
           this.bidPublishState.set('error');
           this.bidPublishError.set({
