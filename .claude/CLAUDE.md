@@ -69,7 +69,7 @@ Why: the SDK ships a CJS emit only behind those three subpaths (`require` export
 - `npm install github:ordpool-space/ordpool-sdk#<sha>` to force it, then `rm -rf node_modules/ordpool-sdk .angular/cache`.
 - Verify ON DISK, never from package.json: lockfile resolved sha, installed `@scure/btc-signer` version, the INSTALLED sdk's peer range, and diff one known file against the sha. `node_modules/ordpool-sdk/package.json` carries a fixed `"version": "0.1.0"` and no `_resolved`, so it cannot tell you the sha.
 - Frontend and backend pin the sha separately and can dedupe `@scure/btc-signer` down a shared range; pin it exactly (`1.6.0`) to stop that.
-- Pin the FULL 40-char sha, never the short form: short resolves on npm but pnpm cannot see an ancestor sha (it fails `git ls-remote`). Both cat21-indexer package.jsons pin short today; normalise to the full sha on the next bump.
+- Pin the FULL 40-char sha, never the short form: short resolves on npm but pnpm cannot see an ancestor sha (it fails `git ls-remote`). Both cat21-indexer package.jsons pin the full sha.
 Why: npm serves stale git resolutions from cache; the on-disk check is the only proof. Full rule: workspace HQ "Pinning a sha pins neither what it runs against nor itself" + the full-sha ruling `5c6e915`.
 
 ## Frontend reference
@@ -164,7 +164,7 @@ Why: unguarded, a re-emission flips `state:'loading-utxos'` and tears the picker
 - A mocked `/output` lane never exercises the real scan, so keep at least one real-ord lane (`funding-guard-inscription-regtest.spec.ts`, "No mock") as the classifier's only proof. Do not retire it (§7.7e).
 - `cat21-mint-regtest.spec.ts` + `cat21wallet-mint-regtest.spec.ts` fund via `sendtoaddress` but install a context-level `**/output/*` -> `CLEAN_OUTPUT_BODY` mock, so §7.7e does not bite them. Do NOT "fix" them with `fundCommonSats`.
 - Route clicks on re-rendering controls through `clickUntilEffect` (`ordpool-sdk/e2e`); a `{ clicks }` count proves a retry happened, never that it was needed (§7.7c).
-Ref: `E2E_BEST_PRACTICES.md` §7.7/§7.7c/§7.7e/§7.8. Local footgun: `isVisible({ timeout })` / `isHidden({ timeout })` compile and IGNORE the timeout; use `isVisibleWithin(locator, ms)` from `ordpool-sdk/e2e`.
+Ref: `E2E_BEST_PRACTICES.md` §7.7/§7.7c/§7.7e/§7.8. No spec sets a timeout of its own: wait on a state (`expect(locator).toBeVisible()`) under the runner's 30 s per-wait bound, and race a popup that may not come against the state that means it is not coming (`raceApprovalPopup`). `isVisible({ timeout })` ignores its timeout.
 
 ---
 
