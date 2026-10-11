@@ -182,13 +182,26 @@ describe('Cat21ListingService.deleteListingForCat', () => {
 
 describe('Cat21ListingService.getListingForCat', () => {
 
-  it('returns null on 404 (unlisted cat)', async () => {
+  // Body shape captured from the backend: GET /api/v1/listings/cat/:n answers
+  // an unlisted cat with 200 and the JSON body `null`
+  // (listings.controller.integration.spec.ts pins it over HTTP).
+  it('returns null for an unlisted cat (200, JSON null body)', async () => {
     const { service, httpMock } = await setup();
     let result: PersistedCat21Listing | null | undefined;
     service.getListingForCat(999).subscribe({ next: (r) => { result = r; } });
     const req = httpMock.expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/cat/999'));
-    req.flush('', { status: 404, statusText: 'Not Found' });
+    req.flush(null, { status: 200, statusText: 'OK' });
     expect(result).toBeNull();
+    httpMock.verify();
+  });
+
+  it('surfaces an HTTP error as a CreateListingError, not as "not listed"', async () => {
+    const { service, httpMock } = await setup();
+    let error: unknown;
+    service.getListingForCat(7).subscribe({ error: (e) => { error = e; } });
+    const req = httpMock.expectOne((r) => r.method === 'GET' && r.url.endsWith('/api/v1/listings/cat/7'));
+    req.flush({ code: 'internal', detail: 'db down' }, { status: 500, statusText: 'Internal Server Error' });
+    expect(error).toEqual({ code: 'internal', detail: 'db down' });
     httpMock.verify();
   });
 

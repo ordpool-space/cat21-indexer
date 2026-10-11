@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   HttpCode,
-  NotFoundException,
   Param,
   ParseIntPipe,
   Post,
@@ -15,13 +14,14 @@ import {
 import {
   ApiBadRequestResponse,
   ApiCreatedResponse,
+  ApiExtraModels,
   ApiNoContentResponse,
-  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
   ApiTooManyRequestsResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
@@ -35,8 +35,8 @@ import { ListingDto, PaginatedListingsDto } from './dto/listing.dto';
 import { ListingsService } from './listings.service';
 
 // Per the backend HARD RULE (Cache-Control):
-// - Errors → no-store (prevent 404 cache poisoning on a listing that
-//   just got pruned).
+// - Errors and "not listed" (null) → no-store (a listing can appear or
+//   be pruned at any moment; caching either answer shadows the change).
 // - Paginated feed → no header (dynamic, edge bypasses cache).
 // - Single listing → short max-age (60s) so a new listing shows up
 //   within a minute; a stale one for a moved cat is culled by the
@@ -102,9 +102,10 @@ export class ListingsController {
   @ApiOperation({
     summary: 'Get the active listing for a cat',
     description:
-      'Returns the active seller-signed listing for cat #catNumber, or 404 if the cat is ' +
-      'not currently listed. External clients can re-verify the returned signature offline ' +
-      'via ordpool-sdk `verifyListingSignature` — no trust in cat21-indexer required.',
+      'Returns the active seller-signed listing for cat #catNumber, or null if the cat is ' +
+      'not currently listed. "Not listed" is a normal state, so it answers 200, not an error. ' +
+      'External clients can re-verify the returned signature offline via ordpool-sdk ' +
+      '`verifyListingSignature` — no trust in cat21-indexer required.',
   })
   @ApiParam({
     name: 'catNumber',
@@ -112,18 +113,20 @@ export class ListingsController {
     example: 42,
     schema: { type: 'integer', minimum: 0 },
   })
-  @ApiOkResponse({ type: ListingDto })
-  @ApiNotFoundResponse({ description: 'No active listing for this cat.' })
+  @ApiExtraModels(ListingDto)
+  @ApiOkResponse({
+    description: 'The active listing, or null when the cat is not listed.',
+    schema: { allOf: [{ $ref: getSchemaPath(ListingDto) }], nullable: true },
+  })
   async findByCatNumber(
     @Param('catNumber', ParseIntPipe) catNumber: number,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<ListingDto> {
+  ): Promise<ListingDto | null> {
     const listing = await this.listings.findByCatNumber(catNumber);
     if (!listing) {
-      // Per HARD RULE: 404 gets `no-store` to prevent cache poisoning
-      // when a listing appears later.
+      // A listing can appear at any moment, so "not listed" is never cached.
       reply.header('Cache-Control', NO_STORE);
-      throw new NotFoundException(`No active listing for cat #${catNumber}`);
+      return null;
     }
     reply.header('Cache-Control', SINGLE_LISTING_CACHE_CONTROL);
     return listing;

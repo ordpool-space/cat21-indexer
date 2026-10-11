@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable, catchError, map, of, switchMap, throwError } from 'rxjs';
+import { Observable, catchError, switchMap, throwError } from 'rxjs';
 
 import {
   Cat21Listing,
@@ -158,19 +158,14 @@ export class Cat21ListingService {
   }
 
   /**
-   * GET the active listing for a cat, or null if none. 404 maps to
-   * null; everything else throws a CreateListingError.
+   * GET the active listing for a cat, or null if none. The backend answers
+   * an unlisted cat with 200 and a JSON null body; every HTTP error throws a
+   * CreateListingError.
    */
   getListingForCat(catNumber: number): Observable<PersistedCat21Listing | null> {
     return this.http
-      .get<PersistedCat21Listing>(`${this.baseUrl}/cat/${catNumber}`)
-      .pipe(
-        map((listing) => listing as PersistedCat21Listing | null),
-        catchError((err: HttpErrorResponse) => {
-          if (err.status === 404) return of(null);
-          return throwError(() => this.mapHttpError(err, null));
-        }),
-      );
+      .get<PersistedCat21Listing | null>(`${this.baseUrl}/cat/${catNumber}`)
+      .pipe(catchError((err: HttpErrorResponse) => throwError(() => this.mapHttpError(err, null))));
   }
 
   /**

@@ -121,9 +121,9 @@ export class Details {
   /**
    * Active orderbook listing for THIS cat, if any. Fetches from the
    * cat21-indexer backend's GET /api/v1/listings/cat/:catNumber. The
-   * backend returns null (404) when there's no active listing —
-   * getListingForCat swallows that as `null` here, so the template
-   * just uses `activeListing()` truthy-check to render the badge.
+   * backend answers null when there's no active listing, so the
+   * template just uses `activeListing()` truthy-check to render the
+   * badge.
    *
    * The stale check is server-side (the pruner drops moved cats
    * hourly), so if a row is present, it's cryptographically signed

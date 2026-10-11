@@ -143,3 +143,61 @@ describe('ListingsController — error responses carry Cache-Control: no-store (
     expect(res.headers['cache-control']).toBe('no-store');
   });
 });
+
+describe('GET /api/v1/listings/cat/:catNumber over HTTP (integration)', () => {
+  let app: INestApplication & NestFastifyApplication;
+  let findByCatNumber: jest.Mock;
+
+  beforeEach(async () => {
+    findByCatNumber = jest.fn();
+    const module = await Test.createTestingModule({
+      imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }])],
+      controllers: [ListingsController],
+      providers: [{ provide: ListingsService, useValue: { findByCatNumber } }],
+    }).compile();
+    app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter({ logger: false }));
+    app.useGlobalFilters(new NoStoreOnErrorFilter(app.get(HttpAdapterHost)));
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+  });
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it('answers an unlisted cat with 200 and a JSON null body, never cached', async () => {
+    findByCatNumber.mockResolvedValue(null);
+
+    const res = await app.inject({ method: 'GET', url: '/api/v1/listings/cat/999' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^application\/json/);
+    expect(res.body).toBe('null');
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(findByCatNumber).toHaveBeenCalledWith(999);
+  });
+
+  it('answers a listed cat with 200 and the listing, cached for 60 s', async () => {
+    const listing = {
+      id: '7f3c2a10-1b2c-4d5e-8f90-123456789abc',
+      catNumber: 42,
+      cats: [42],
+      network: 'mainnet',
+      askSats: 21_000,
+      payTo: 'bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm',
+      catTxid: 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df',
+      catVout: 0,
+      ordinalsAddress: 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9',
+      signedAt: 1_760_000_000,
+      signature: 'AUBsignature',
+      createdAt: '2026-10-11T00:00:00.000Z',
+    };
+    findByCatNumber.mockResolvedValue(listing);
+
+    const res = await app.inject({ method: 'GET', url: '/api/v1/listings/cat/42' });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual(listing);
+    expect(res.headers['cache-control']).toBe('public, max-age=60, s-maxage=60');
+  });
+});

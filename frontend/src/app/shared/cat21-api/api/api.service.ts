@@ -29,6 +29,8 @@ import { CatsPaginatedResultDto } from '../model/catsPaginatedResultDto';
 // @ts-ignore
 import { ExtendedHealthDto } from '../model/extendedHealthDto';
 // @ts-ignore
+import { FeeRateSampleDto } from '../model/feeRateSampleDto';
+// @ts-ignore
 import { HealthDto } from '../model/healthDto';
 // @ts-ignore
 import { StatusDto } from '../model/statusDto';
@@ -227,6 +229,62 @@ export class ApiService extends BaseService {
             {
                 context: localVarHttpContext,
                 params: localVarQueryParameters.toHttpParams(),
+                responseType: <any>responseType_,
+                ...(withCredentials ? { withCredentials } : {}),
+                headers: localVarHeaders,
+                observe: observe,
+                ...(localVarTransferCache !== undefined ? { transferCache: localVarTransferCache } : {}),
+                reportProgress: reportProgress
+            }
+        );
+    }
+
+    /**
+     * Get cat social-share card
+     * Returns a 1200x630 PNG card sized for Open Graph / Twitter previews. The cat art is composited onto a full-bleed field of its own background colour, so a shared /cat/:catNumber link shows the specific cat instead of the generic site preview.
+     * @endpoint get /api/cat/{catNumber}/social.png
+     * @param catNumber Cat number (0-based)
+     * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
+     * @param reportProgress flag to report request and response progress.
+     * @param options additional options
+     */
+    public catsControllerGetCatSocialCard(catNumber: number, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any>;
+    public catsControllerGetCatSocialCard(catNumber: number, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<any>>;
+    public catsControllerGetCatSocialCard(catNumber: number, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<any>>;
+    public catsControllerGetCatSocialCard(catNumber: number, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any> {
+        if (catNumber === null || catNumber === undefined) {
+            throw new Error('Required parameter catNumber was null or undefined when calling catsControllerGetCatSocialCard.');
+        }
+
+        let localVarHeaders = this.defaultHeaders;
+
+        const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
+        ]);
+        if (localVarHttpHeaderAcceptSelected !== undefined) {
+            localVarHeaders = localVarHeaders.set('Accept', localVarHttpHeaderAcceptSelected);
+        }
+
+        const localVarHttpContext: HttpContext = options?.context ?? new HttpContext();
+
+        const localVarTransferCache: boolean = options?.transferCache ?? true;
+
+
+        let responseType_: 'text' | 'json' | 'blob' = 'json';
+        if (localVarHttpHeaderAcceptSelected) {
+            if (localVarHttpHeaderAcceptSelected.startsWith('text')) {
+                responseType_ = 'text';
+            } else if (this.configuration.isJsonMime(localVarHttpHeaderAcceptSelected)) {
+                responseType_ = 'json';
+            } else {
+                responseType_ = 'blob';
+            }
+        }
+
+        let localVarPath = `/api/cat/${this.configuration.encodeParam({name: "catNumber", value: catNumber, in: "path", style: "simple", explode: false, dataType: "number", dataFormat: undefined})}/social.png`;
+        const { basePath, withCredentials } = this.configuration;
+        return this.httpClient.request<any>('get', `${basePath}${localVarPath}`,
+            {
+                context: localVarHttpContext,
                 responseType: <any>responseType_,
                 ...(withCredentials ? { withCredentials } : {}),
                 headers: localVarHeaders,
@@ -742,6 +800,75 @@ export class ApiService extends BaseService {
         let localVarPath = `/api/cats/search/random`;
         const { basePath, withCredentials } = this.configuration;
         return this.httpClient.request<CatsControllerRandomCat200Response>('get', `${basePath}${localVarPath}`,
+            {
+                context: localVarHttpContext,
+                params: localVarQueryParameters.toHttpParams(),
+                responseType: <any>responseType_,
+                ...(withCredentials ? { withCredentials } : {}),
+                headers: localVarHeaders,
+                observe: observe,
+                ...(localVarTransferCache !== undefined ? { transferCache: localVarTransferCache } : {}),
+                reportProgress: reportProgress
+            }
+        );
+    }
+
+    /**
+     * Sample cats by fee rate (debug)
+     * For each fee rate in the &#x60;rates&#x60; query parameter, returns the cat closest to that rate within ±0.5 sat/vB. Used by the frontend color debug page to anchor each fee-rate row to a real minted cat.
+     * @endpoint get /api/cats/debug/samples-by-feerate
+     * @param rates Comma-separated list of fee rates (sat/vB), max 200 entries
+     * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
+     * @param reportProgress flag to report request and response progress.
+     * @param options additional options
+     */
+    public catsControllerSampleCatsByFeeRate(rates: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<Array<FeeRateSampleDto>>;
+    public catsControllerSampleCatsByFeeRate(rates: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<Array<FeeRateSampleDto>>>;
+    public catsControllerSampleCatsByFeeRate(rates: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<Array<FeeRateSampleDto>>>;
+    public catsControllerSampleCatsByFeeRate(rates: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+        if (rates === null || rates === undefined) {
+            throw new Error('Required parameter rates was null or undefined when calling catsControllerSampleCatsByFeeRate.');
+        }
+
+        let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'rates',
+            <any>rates,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        let localVarHeaders = this.defaultHeaders;
+
+        const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
+            'application/json'
+        ]);
+        if (localVarHttpHeaderAcceptSelected !== undefined) {
+            localVarHeaders = localVarHeaders.set('Accept', localVarHttpHeaderAcceptSelected);
+        }
+
+        const localVarHttpContext: HttpContext = options?.context ?? new HttpContext();
+
+        const localVarTransferCache: boolean = options?.transferCache ?? true;
+
+
+        let responseType_: 'text' | 'json' | 'blob' = 'json';
+        if (localVarHttpHeaderAcceptSelected) {
+            if (localVarHttpHeaderAcceptSelected.startsWith('text')) {
+                responseType_ = 'text';
+            } else if (this.configuration.isJsonMime(localVarHttpHeaderAcceptSelected)) {
+                responseType_ = 'json';
+            } else {
+                responseType_ = 'blob';
+            }
+        }
+
+        let localVarPath = `/api/cats/debug/samples-by-feerate`;
+        const { basePath, withCredentials } = this.configuration;
+        return this.httpClient.request<Array<FeeRateSampleDto>>('get', `${basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 params: localVarQueryParameters.toHttpParams(),

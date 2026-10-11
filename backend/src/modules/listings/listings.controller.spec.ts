@@ -1,4 +1,3 @@
-import { NotFoundException } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 
 import { ListingsController } from './listings.controller';
@@ -6,7 +5,7 @@ import type { ListingsService } from './listings.service';
 
 /**
  * Unit coverage for the controller's own logic: Cache-Control headers on the
- * single-listing hit vs the 404 (no-store, per the cache-poisoning HARD RULE),
+ * single-listing hit vs "not listed" (null, no-store, per the cache-poisoning HARD RULE),
  * pagination delegation, and the ownership-scoped delete wiring. The create
  * flow + NoStoreOnErrorFilter live in the service + integration specs.
  */
@@ -35,18 +34,14 @@ describe('ListingsController (unit)', () => {
       expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'public, max-age=60, s-maxage=60');
     });
 
-    it('throws NotFoundException with no-store (cache-poisoning guard) when there is no listing', async () => {
-      const { controller, reply } = make({ findByCatNumber: jest.fn().mockResolvedValue(null) });
+    it('returns null with no-store when the cat is not listed', async () => {
+      const { controller, svc, reply } = make({ findByCatNumber: jest.fn().mockResolvedValue(null) });
 
-      let thrown: unknown;
-      try {
-        await controller.findByCatNumber(999, reply);
-      } catch (e) {
-        thrown = e;
-      }
+      const out = await controller.findByCatNumber(999, reply);
 
-      expect(thrown).toBeInstanceOf(NotFoundException);
-      // the 404 must not be edge-cached, or a later listing gets shadowed
+      expect(out).toBeNull();
+      expect(svc.findByCatNumber).toHaveBeenCalledWith(999);
+      // "not listed" must not be edge-cached, or a later listing gets shadowed
       expect(reply.header).toHaveBeenCalledWith('Cache-Control', 'no-store');
     });
   });
