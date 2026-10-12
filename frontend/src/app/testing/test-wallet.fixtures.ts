@@ -3,6 +3,7 @@ import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
 import { hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { KnownOrdinalWalletType, TxnOutput, WalletInfo } from 'ordpool-sdk';
+import { electrsConfirmedUtxoFixture } from 'ordpool-sdk/testing';
 
 /**
  * A connected wallet whose keys the spec holds, so the SDK orchestrators run
@@ -51,16 +52,17 @@ export function oneAddressTestWallet(over: Partial<WalletInfo> = {}): WalletInfo
 }
 
 /**
- * A confirmed coin at the test payment address, the shape electrs returns
- * through `Cat21Service.getUtxos`. `tag` (1..255) makes the txid distinct.
+ * A confirmed coin at the test payment address: the confirmed row electrs
+ * answers to `GET /address/<a>/utxo` (`electrsConfirmedUtxoFixture`, captured
+ * from regtest), with this coin's outpoint and value. `tag` (1..255) makes the
+ * txid distinct.
  */
 export function fundingCoin(value: number, tag: number, vout = 0): TxnOutput {
-  return {
+  return electrsConfirmedUtxoFixture({
     txid: tag.toString(16).padStart(2, '0').repeat(32),
     vout,
     value,
-    status: { confirmed: true, block_height: 800_000, block_hash: 'b'.repeat(64), block_time: 1_700_000_000 },
-  };
+  });
 }
 
 /** What the fake wallet was asked to sign, per request. */

@@ -497,10 +497,12 @@ export class Mint {
       // (state/errorMessage/successTxId), so there is nothing to bind here.
       await this.orch.mint((unsigned) => firstValueFrom(this.psbtBridge.promptForSignedPsbt(unsigned)));
     } catch {
-      // On a real failure (sign / broadcast) the orchestrator has already
-      // populated its snapshot error fields, which mintError() surfaces. The
-      // orchestrator's pre-patch early guards (no wallet / no fee / no UTXO)
-      // can't reach here: canMint() gates the button on exactly those.
+      // A sign or broadcast failure lands in the snapshot (state 'error',
+      // errorMessage), which mintError() surfaces. A FundingBlockedError is
+      // thrown before the snapshot changes, and only while its
+      // fundingRecommendation is `expert-required`: the expert-required warning
+      // already renders that recommendation's cause and named assets, the same
+      // facts the error carries, and the CTA is disabled.
     }
   }
 

@@ -20,6 +20,7 @@ import {
   UtxoContentScanner,
   WalletService,
 } from 'ordpool-sdk';
+import { electrsConfirmedUtxoFixture } from 'ordpool-sdk/testing';
 
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 import { Mint } from './mint';
@@ -35,8 +36,7 @@ import { ScannerStub } from '../../testing/scanner.fixtures';
 describe('Mint: a same-outpoint funding refresh does not re-emit (recompute-loop guard)', () => {
   let orch: Cat21MintOrchestrator;
 
-  const coin = (txid: string, vout = 0): TxnOutput =>
-    ({ txid, vout, value: 10_000, status: { confirmed: true } }) as TxnOutput;
+  const coin = (txid: string, vout = 0): TxnOutput => electrsConfirmedUtxoFixture({ txid, vout, value: 10_000 });
   const OUT_A = 'a'.repeat(64);
   const OUT_B = 'b'.repeat(64);
 

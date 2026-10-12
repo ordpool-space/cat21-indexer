@@ -4,12 +4,13 @@
  *         SingleAddressNote, WalletCapabilityNotice, WalletConnect); the SDK Cat21CreateOfferOrchestrator on the
  *         production port wiring (cat21OrchestratorPorts, 'derive'), the SDK Cat21Service and UtxoContentScanner,
  *         recommendFunding; CatUtxoLookupService, OrdApiService, Cat21BidsService (none is asked anything here)
- * Faked:  fetch (testing/funding-fetch.fixtures): electrs' UTXO list (TxnOutput, test-wallet coins), the fee tiers
+ * Faked:  fetch (testing/funding-fetch.fixtures): electrs' UTXO list (fundingCoin rows built on electrsConfirmedUtxoFixture, ordpool-sdk/testing), the fee tiers
  *         (recommendedFeesFixture, ordpool-sdk) and ord + cat21-ord /output (inscribedOutputFixture,
  *         notIndexedOutputFixture, ordpool-sdk)
  *         unnamed-assets only: the orchestrator's scan port answers 'has-assets' with no detail, or with a detail
  *         whose fields are all empty (ContentScanPort shape), the answers a port that cannot name assets gives
  *         HttpClient -> HttpTestingController (nothing answered)
+ *         window.Cat21Provider (the wallet API) -> installFakeCat21Provider, signing with the test wallet's keys
  *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
  *         The cat, seller payment address and price are set on the real orchestrator, as the page does after a
  *         lookup and the form inputs
@@ -17,9 +18,11 @@
  *         unknown content), the offer CTA stays disabled and no coin carries the recommended star; a
  *         separate-address wallet whose only cover is unnamed or unchecked gets that warning and a disabled CTA,
  *         never an empty notice beside an enabled CTA; the asset notice names the coin, keeps the CTA enabled
- *         and the star
+ *         and the star; an offer that reaches the orchestrator on expert-required is refused with a
+ *         FundingBlockedError whose cause and coin are the ones the warning shows, and signs nothing; on the
+ *         notice the CTA builds the offer, funded by that coin
  */
-import { describe, it, expect, afterEach } from '@jest/globals';
+import { jest, describe, it, expect, afterEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -39,6 +42,7 @@ import {
   WalletInfo,
   WalletService,
   inscribedOutputFixture,
+  isFundingBlockedError,
   notIndexedOutputFixture,
   outpointKey,
 } from 'ordpool-sdk';
@@ -51,6 +55,7 @@ import { WalletServiceStub } from '../../../testing/wallet.fixtures';
 import {
   TEST_PAYMENT_ADDRESS,
   fundingCoin,
+  installFakeCat21Provider,
   oneAddressTestWallet,
   testWallet,
 } from '../../../testing/test-wallet.fixtures';
@@ -74,10 +79,13 @@ const text = (el: Element | null): string | null => el?.textContent?.replace(/\s
 type ScanWiring = 'scanner' | 'bare-has-assets' | 'empty-detail';
 
 let io: FundingFetch | null = null;
+let provider: ReturnType<typeof installFakeCat21Provider> | null = null;
 
 afterEach(() => {
   io?.restore();
   io = null;
+  provider?.restore();
+  provider = null;
 });
 
 async function mount(opts: { coins: TxnOutput[]; scan?: ScanWiring }) {
@@ -141,7 +149,7 @@ async function mount(opts: { coins: TxnOutput[]; scan?: ScanWiring }) {
   const cta = () => el.querySelector('button[data-testid="make-offer-cta"]') as HTMLButtonElement;
   const star = () => el.querySelector('[data-testid="utxo-recommended"]');
 
-  return { fixture, component, el, until, connect, q, cta, star };
+  return { fixture, component, el, orch, until, connect, q, cta, star };
 }
 
 describe('MakeOffer: the expert-required warning names its cause', () => {
@@ -260,5 +268,63 @@ describe('MakeOffer: the asset notice (separate-address wallet, named assets) st
     await t.until(() => !t.cta().disabled, 'CTA enabled');
     const row = t.q(`utxo-row-${coin.txid}-${coin.vout}`);
     expect(row?.querySelector('[data-testid="utxo-recommended"]')).not.toBeNull();
+  });
+});
+
+describe('MakeOffer: a blocked offer renders the facts the FundingBlockedError carries', () => {
+
+  it('named-assets: an offer that reaches the orchestrator is refused with the cause and coin the warning shows; nothing is signed', async () => {
+    const coin = fundingCoin(60_000, 0x8a);
+    const t = await mount({ coins: [coin] });
+    io!.setOutput(outpointKey(coin), inscribedOutputFixture(INSCRIPTION_ID));
+    provider = installFakeCat21Provider();
+    await t.connect(oneAddressTestWallet(), 'expert-required');
+    const createSpy = jest.spyOn(t.orch, 'createOffer');
+
+    // The disabled CTA keeps a person out; a stale click reaches the handler directly.
+    await expect(t.component.onCreateOfferClick()).resolves.toBeUndefined();
+    t.fixture.detectChanges();
+
+    const err: unknown = await (createSpy.mock.results[0]!.value as Promise<unknown>).catch((e: unknown) => e);
+    expect(isFundingBlockedError(err)).toBe(true);
+    if (!isFundingBlockedError(err)) return;
+    expect(err.cause).toBe('named-assets');
+    expect(t.q('make-offer-funding-expert-required')?.getAttribute('data-cause')).toBe(err.cause);
+    expect(err.recommendation.recommended).toEqual({
+      txid: coin.txid,
+      vout: coin.vout,
+      value: 60_000,
+      bucket: 'assets',
+      assets: { inscriptionIds: [INSCRIPTION_ID], runeNames: [], catIds: [], rareSat: null },
+    });
+    expect(text(t.q('make-offer-funding-expert-required-inscription'))).toBe(err.recommendation.recommended.assets?.inscriptionIds[0]);
+    expect(t.cta().disabled).toBe(true);
+    expect(provider.requests).toEqual([]);
+    expect(t.orch.getSnapshot().bid).toBeNull();
+  });
+});
+
+describe('MakeOffer: the asset notice proceeds to an offer funded by the noticed coin', () => {
+
+  it('a separate-address wallet whose only cover carries a named inscription builds the offer after the notice, funded by that coin', async () => {
+    const coin = fundingCoin(60_000, 0x8b);
+    const t = await mount({ coins: [coin] });
+    io!.setOutput(outpointKey(coin), inscribedOutputFixture(INSCRIPTION_ID));
+    provider = installFakeCat21Provider();
+    await t.connect(testWallet(), 'asset-notice');
+    await t.until(() => t.q('make-offer-asset-notice') !== null && !t.cta().disabled, 'notice beside an enabled CTA');
+    expect(text(t.q('make-offer-asset-notice-inscription'))).toBe(INSCRIPTION_ID);
+
+    t.cta().click();
+    await t.until(() => t.q('make-offer-success') !== null, 'offer built');
+
+    const bid = t.orch.getSnapshot().bid;
+    expect(bid).not.toBeNull();
+    if (!bid) return;
+    const tx = btc.Transaction.fromPSBT(hex.decode(bid.hex), { allowUnknownInputs: true, allowUnknownOutputs: true });
+    const inputs = Array.from({ length: tx.inputsLength }, (_, i) => `${hex.encode(tx.getInput(i).txid!)}:${tx.getInput(i).index}`);
+    expect(inputs).toEqual([`${TARGET.txid}:${TARGET.vout}`, outpointKey(coin)]);
+    expect(provider.requests.map((r) => r.signAtIndex)).toEqual([[1]]);
+    expect(io!.unexpected).toEqual([]);
   });
 });

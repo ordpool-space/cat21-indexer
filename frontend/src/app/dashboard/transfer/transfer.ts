@@ -2,7 +2,6 @@ import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { EMPTY, firstValueFrom } from 'rxjs';
-import { RouterLink } from '@angular/router';
 import * as btc from '@scure/btc-signer';
 import {
   CandidateFeeRow,
@@ -37,7 +36,7 @@ const TXID_RE = /^[0-9a-f]{64}$/i;
   selector: 'app-transfer',
   templateUrl: './transfer.html',
   styleUrl: './transfer.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect, FundingAssetList],
+  imports: [DecimalPipe, FeesPicker, UtxoPicker, WalletConnect, FundingAssetList],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Transfer {
@@ -438,7 +437,12 @@ export class Transfer {
     try {
       await this.orch.transfer((unsigned) => firstValueFrom(this.psbtBridge.promptForSignedPsbt(unsigned)));
     } catch {
-      // Error fields are already populated in the orchestrator snapshot.
+      // A sign failure lands in the snapshot (state 'error', errorMessage),
+      // which the error line renders. A FundingBlockedError is thrown before
+      // the snapshot changes, and only while its fundingRecommendation is
+      // `expert-required`: the expert-required warning already renders that
+      // recommendation's cause and named assets, the same facts the error
+      // carries, and the CTA is disabled.
     }
   }
 

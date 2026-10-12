@@ -1,3 +1,5 @@
+import { hex } from '@scure/base';
+import * as btc from '@scure/btc-signer';
 import {
   Cat21SdkConfig,
   OutputFixture,
@@ -8,13 +10,16 @@ import {
 /**
  * The network boundary of the SDK's `Cat21Service` and `UtxoContentScanner`,
  * faked at `fetch`, so a spec runs both classes for real: electrs' UTXO list
- * (`GET <mempool>/api/address/<a>/utxo`, `TxnOutput[]`), the fee tiers
- * (`GET <mempool>/api/v1/fees/recommended`, the SDK's `recommendedFeesFixture`)
- * and the per-outpoint `/output` answers of ord and cat21-ord (the SDK's
- * `OutputFixture` builders: `cleanOutputFixture`, `inscribedOutputFixture`,
- * `notIndexedOutputFixture`, ...). A URL nothing here answers is recorded in
- * `unexpected` and fails with 404, so a spec can assert the page asked for
- * nothing else.
+ * (`GET <mempool>/api/address/<a>/utxo`, `TxnOutput[]`, rows built from the
+ * SDK's captured `electrsConfirmedUtxoFixture` / `electrsUnconfirmedUtxoFixture`,
+ * as `fundingCoin` does), the fee tiers (`GET <mempool>/api/v1/fees/recommended`,
+ * the SDK's `recommendedFeesFixture`), the per-outpoint `/output` answers of ord
+ * and cat21-ord (the SDK's `OutputFixture` builders: `cleanOutputFixture`,
+ * `inscribedOutputFixture`, `notIndexedOutputFixture`, ...) and the broadcast
+ * (`POST <mempool>/api/tx` with the raw tx hex as the body, answered with the
+ * txid as plain text, as esplora's `POST /tx` does). A URL nothing here answers
+ * is recorded in `unexpected` and fails with 404, so a spec can assert the page
+ * asked for nothing else.
  */
 export const FUNDING_TEST_CONFIG: Cat21SdkConfig = {
   mempoolApiUrl: 'http://electrs.test',
@@ -32,6 +37,8 @@ export interface FundingFetch {
   readonly calls: string[];
   /** URLs nothing here answers. */
   readonly unexpected: string[];
+  /** Raw tx hex of every `POST <mempool>/api/tx`, in order. */
+  readonly broadcasts: string[];
   restore(): void;
 }
 
@@ -50,6 +57,7 @@ export function installFundingFetch(config: Cat21SdkConfig = FUNDING_TEST_CONFIG
   const outputs = new Map<string, OutputFixture>();
   const calls: string[] = [];
   const unexpected: string[] = [];
+  const broadcasts: string[] = [];
 
   function answer(url: string): unknown {
     if (url === `${config.mempoolApiUrl}/api/v1/fees/recommended`) {
@@ -72,9 +80,14 @@ export function installFundingFetch(config: Cat21SdkConfig = FUNDING_TEST_CONFIG
 
   const g = globalThis as { fetch?: typeof fetch };
   const original = g.fetch;
-  g.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+  g.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     calls.push(url);
+    if (init?.method === 'POST' && url === `${config.mempoolApiUrl}/api/tx`) {
+      const txHex = String(init.body);
+      broadcasts.push(txHex);
+      return reply(200, btc.Transaction.fromRaw(hex.decode(txHex), { allowUnknownOutputs: true }).id);
+    }
     const body = answer(url);
     if (body === undefined) {
       unexpected.push(url);
@@ -88,6 +101,7 @@ export function installFundingFetch(config: Cat21SdkConfig = FUNDING_TEST_CONFIG
     setOutput: (outpoint, fixture) => outputs.set(outpoint, fixture),
     calls,
     unexpected,
+    broadcasts,
     restore: () => {
       g.fetch = original;
     },

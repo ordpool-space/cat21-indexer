@@ -8,11 +8,15 @@ import {
   outpointKey,
 } from 'ordpool-sdk';
 
+import { electrsConfirmedUtxoFixture, electrsUnconfirmedUtxoFixture } from 'ordpool-sdk/testing';
+
 import { UtxoPicker } from './utxo-picker';
 import { ScannerStub } from '../../testing/scanner.fixtures';
 
+/** An electrs `/address/<a>/utxo` row (captured from regtest, ordpool-sdk/testing) with this outpoint and value. */
 function utxo(txid: string, vout: number, value: number, confirmed = true): TxnOutput {
-  return { txid, vout, value, status: { confirmed } };
+  const row = confirmed ? electrsConfirmedUtxoFixture : electrsUnconfirmedUtxoFixture;
+  return row({ txid, vout, value });
 }
 
 function feeRow(
