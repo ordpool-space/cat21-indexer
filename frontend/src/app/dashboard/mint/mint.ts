@@ -19,8 +19,10 @@ import {
   UtxoScanState,
   UtxoSimulationRow,
   WalletService,
+  ExpertRequiredCause,
   bucketOf,
   calculateRecommendedFundingSats,
+  expertRequiredCause,
   outpointKey,
   runeNamesFromContent,
   usesSingleAddress,
@@ -29,6 +31,7 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
+import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-list';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
@@ -50,7 +53,7 @@ interface ViableUtxoRow {
   selector: 'app-mint',
   templateUrl: './mint.html',
   styleUrl: './mint.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect, SingleAddressNote, UtxoPicker],
+  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect, SingleAddressNote, UtxoPicker, FundingAssetList],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Mint {
@@ -75,11 +78,12 @@ export class Mint {
    */
   private orch = inject(Cat21MintOrchestrator, { optional: true })
     ?? new Cat21MintOrchestrator(
-      // `'derive'` opts mint into the asset-to-miner safeguard: on a
-      // separate-address wallet a dirty-only funding pool NOTICEs and proceeds;
-      // on a one-address wallet it WARNs and blocks. The orchestrator resolves
-      // the topology from the wallet context it holds (setWallet), so this page
-      // never computes it.
+      // `'derive'` opts mint into the asset-to-miner safeguard: when only a
+      // coin with NAMED assets covers, a separate-address wallet NOTICEs and
+      // proceeds and a one-address wallet WARNs and blocks; a coin whose assets
+      // are unnamed or whose content is unknown blocks on every wallet. The
+      // orchestrator resolves the topology from the wallet context it holds
+      // (setWallet), so this page never computes it.
       cat21OrchestratorPorts(inject(Cat21Service), this.config, inject(bitcoinNetwork), 'derive'),
     );
 
@@ -145,26 +149,43 @@ export class Mint {
 
   /**
    * The SDK's safe-auto funding recommendation: a content-clean covering coin
-   * (`status: 'auto'`), or a non-auto status when only asset-bearing / still-
-   * scanning / insufficient coins cover. This is the single source of the
-   * mint's auto-pick, replacing the old raw value-based pre-pick (which would
-   * auto-adopt an unscanned or scan-failed coin). One implementation in the
-   * SDK so ordpool + cat21.space + the wallet can't drift.
+   * (`status: 'auto'`), or a non-auto status when only asset-bearing /
+   * unknown-content / still-scanning / insufficient coins cover. It is the
+   * single source of the mint's auto-pick, never a raw value-based pre-pick
+   * (which would adopt an unscanned or scan-failed coin). One implementation in
+   * the SDK so ordpool + cat21.space + the wallet can't drift.
    */
   private readonly fundingRecommendation = computed(() => this.snap().fundingRecommendation);
 
-  /** True when no content-clean coin covers the mint (only asset / scan-failed
-   *  coins do), so the picker must surface for a deliberate override. */
+  /** True when no content-clean coin covers the mint and the SDK blocks, so
+   *  the picker must surface for a deliberate override. */
   readonly fundingExpertRequired = computed(() => this.fundingRecommendation()?.status === 'expert-required');
 
   /**
-   * `asset-notice`: no clean coin covers, but a dirty one does AND the wallet
-   * keeps a SEPARATE payment address, so the SDK auto-selects the dirty coin and
-   * we INFORM rather than block (the maintainer's asset-to-miner ruling). The CTA
-   * stays enabled — the proceed-vs-block decision is the SDK's (`resolveFundingPick`
-   * returns the coin here, null for a one-address wallet's `expert-required`), not
-   * this template's. The notice obligation is ours: name what sits on the coin,
-   * visibly, before the click.
+   * Why the SDK blocks, read off its recommendation (`expertRequiredCause`),
+   * null unless the status is `expert-required`. The warning copy branches on
+   * it: `named-assets` names what the covering coin carries (a one-address
+   * wallet), `unnamed-assets` says the scan found assets it could not name,
+   * `unknown-content` says the covering coins could not be checked.
+   */
+  readonly expertCause = computed<ExpertRequiredCause | null>(() => {
+    const rec = this.fundingRecommendation();
+    return rec?.status === 'expert-required' ? expertRequiredCause(rec) : null;
+  });
+
+  /** The assets the `named-assets` warning names, from the recommended coin. */
+  readonly expertAssets = computed<UtxoAssetDetail | null>(() =>
+    this.expertCause() === 'named-assets' ? (this.fundingRecommendation()?.recommended?.assets ?? null) : null,
+  );
+
+  /**
+   * `asset-notice`: no clean coin covers, but a coin whose assets the scan
+   * NAMED does AND the wallet keeps a SEPARATE payment address, so the SDK
+   * auto-selects that coin and we INFORM rather than block (the maintainer's
+   * asset-to-miner ruling). The CTA stays enabled: the proceed-vs-block decision
+   * is the SDK's (`resolveFundingPick` returns the coin here, null on
+   * `expert-required`), not this template's. The notice obligation is ours:
+   * name what sits on the coin, visibly, before the click.
    */
   readonly assetNotice = computed(() => this.fundingRecommendation()?.status === 'asset-notice');
 
@@ -190,8 +211,9 @@ export class Mint {
 
   /**
    * The asset detail the notice must name, taken from the RECOMMENDATION itself
-   * (single source: the coin selection would have taken had it been clean), never
-   * from a second scan of the coin. Null unless the status is `asset-notice`.
+   * (the coin the SDK picked), never from a second scan of the coin. Null unless
+   * the status is `asset-notice`, where the SDK guarantees it names at least one
+   * asset (`namesAssets`).
    */
   readonly noticeAssets = computed<UtxoAssetDetail | null>(() => {
     const rec = this.fundingRecommendation();
@@ -247,11 +269,17 @@ export class Mint {
    *  the picker skips scanning them. */
   readonly fundingRequirementSats = computed(() => this.snap().fundingRequirementSats);
 
-  /** `outpointKey` of the SDK-recommended coin, for the picker's mark-in-place
-   *  recommendation (never a re-sort). Null when the SDK returns no pick. */
+  /**
+   * `outpointKey` of the coin the picker marks ★ recommended, in place (never a
+   * re-sort). Only on `auto` and `asset-notice`, the two statuses where the SDK
+   * itself would spend that coin. On `expert-required` the SDK still names a
+   * best-fit coin, but it is the one it refuses to spend: a star on it would
+   * recommend exactly what the warning above it advises against.
+   */
   readonly recommendedOutpoint = computed<string | null>(() => {
-    const r = this.fundingRecommendation()?.recommended;
-    return r ? outpointKey(r) : null;
+    const rec = this.fundingRecommendation();
+    if (rec?.status !== 'auto' && rec?.status !== 'asset-notice') return null;
+    return rec.recommended ? outpointKey(rec.recommended) : null;
   });
 
   /** Whether the form has at least one viable UTXO + a fee rate set. */
@@ -388,11 +416,12 @@ export class Mint {
 
     // Auto-select the SDK's recommendation for the two statuses where the SDK
     // ITSELF picks a coin: 'auto' (a content-clean covering coin) and
-    // 'asset-notice' (no clean coin covers, but a dirty one does AND the wallet
-    // keeps a separate payment address, so the SDK proceeds and the UI NOTICEs).
-    // Never a raw value-based pre-pick. For 'expert-required' (a one-address
-    // wallet's dirty-only pool), 'scanning', and 'insufficient', the SDK returns
-    // no pick, so the selection is left null: the button blocks and the expert
+    // 'asset-notice' (no clean coin covers, but a coin with NAMED assets does
+    // AND the wallet keeps a separate payment address, so the SDK proceeds and
+    // the UI NOTICEs). Never a raw value-based pre-pick. For 'expert-required'
+    // (named assets on a one-address wallet, or unnamed assets or unknown
+    // content on any wallet), 'scanning', and 'insufficient', the SDK returns no
+    // pick, so the selection is left null: the button blocks and the expert
     // picker surfaces for a deliberate override.
     effect(() => {
       const rows = this.allViableRows();
@@ -442,6 +471,20 @@ export class Mint {
 
   scanRow(row: ViableUtxoRow): void {
     this.scanner.scan(`${row.utxo.txid}:${row.utxo.vout}`).subscribe();
+  }
+
+  /**
+   * "Retry scan" on the `unknown-content` warning. The recommendation comes from
+   * the orchestrator's own scan port, so the retry re-reads the wallet's coins
+   * through the orchestrator (a failed scan is never cached, so the covering
+   * coins are scanned again), and re-scans the recommended coin's row badge.
+   */
+  retryFundingScan(): void {
+    const r = this.fundingRecommendation()?.recommended;
+    if (r) {
+      this.scanner.scan(outpointKey(r)).subscribe();
+    }
+    void this.orch.refreshUtxos();
   }
 
   async mint(): Promise<void> {

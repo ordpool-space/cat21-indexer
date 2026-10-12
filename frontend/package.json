@@ -33,7 +33,7 @@
     "@scure/base": "1.2.6",
     "@scure/btc-signer": "1.6.0",
     "bootstrap": "^5.3.1",
-    "ordpool-sdk": "github:ordpool-space/ordpool-sdk#46ea9bcea62f6d1243884b89d2f3219c740ed60c",
+    "ordpool-sdk": "github:ordpool-space/ordpool-sdk#c10f67efa88deab03ff182e7ad59e25cefbafb9c",
     "rxjs": "~7.8.0",
     "sats-connect": "^4.0.0",
     "tslib": "^2.3.0"

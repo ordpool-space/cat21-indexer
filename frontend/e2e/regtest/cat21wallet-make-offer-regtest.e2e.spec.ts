@@ -110,8 +110,11 @@ async function shot(p: Page, name: string): Promise<void> {
  * substring only matches index 0 exactly — integer indices are `=`-delimited, so
  * `signAtIndex=10` does not contain `signAtIndex=0`. If the builder ever asked
  * the buyer to sign the seller's input, the second assertion goes red.
+ *
+ * Takes the popup page `approveCat21WalletSignPopup` returns. The popup has
+ * closed by then; a closed Playwright page keeps the URL it last showed.
  */
-async function assertBuyerNeverSignsSellerInput0(signPopup: Page): Promise<void> {
+function assertBuyerNeverSignsSellerInput0(signPopup: Page): void {
   const url = signPopup.url();
   expect(url, 'buyer sign popup must be the sign-psbt route').toContain('sign-psbt');
   expect(url, 'buyer sign popup must carry at least one signAtIndex (else the check is vacuous)')
@@ -275,11 +278,12 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   // ─── 6. Build the offer → cat21-wallet buyer-signs in a popup ───
   const knownBeforeSign = new Set(context.pages());
   await buildBtn.click();
-  await approveCat21WalletSignPopup({
+  const signPopup = await approveCat21WalletSignPopup({
     context,
     knownPages: knownBeforeSign,
-    screenshot: async (p) => { await shot(p, `${valueSats}-02-sign-popup`); await assertBuyerNeverSignsSellerInput0(p); },
+    screenshot: async (p) => { await shot(p, `${valueSats}-02-sign-popup`); },
   });
+  assertBuyerNeverSignsSellerInput0(signPopup);
 
   // ─── 7. Read the PAGE-BUILT, buyer-signed PSBT ──────────────────
   await expect(page.getByTestId('make-offer-success')).toBeVisible();
@@ -402,11 +406,8 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
 
   const knownBeforeSign = new Set(context.pages());
   await buildBtn.click();
-  await approveCat21WalletSignPopup({
-    context,
-    knownPages: knownBeforeSign,
-    screenshot: async (p) => { await assertBuyerNeverSignsSellerInput0(p); },
-  });
+  const signPopup = await approveCat21WalletSignPopup({ context, knownPages: knownBeforeSign });
+  assertBuyerNeverSignsSellerInput0(signPopup);
 
   // ─── 5. Read the page-built PSBT, seller settles on-chain ───────
   await expect(page.getByTestId('make-offer-success')).toBeVisible();

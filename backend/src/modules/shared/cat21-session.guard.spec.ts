@@ -1,59 +1,34 @@
 /**
  * @test-kind unit
  * Real:   Cat21SessionGuard, buildCat21SessionMessage + checkSessionValidity (ordpool-sdk/cat21-session),
- *         verifyBip322Signature (ordpool-sdk/cat21-validation); BIP-322 "simple" signatures made in the spec by
- *         @scure/btc-signer with a fixed test key (taproot key path, SIGHASH_DEFAULT)
+ *         verifyBip322Signature (ordpool-sdk/cat21-validation); BIP-322 "simple" signatures from the SDK's
+ *         signTestBip322Message (ordpool-sdk/testing) with a fixed test key (taproot key path, SIGHASH_DEFAULT)
  * Faked:  nothing
  * Proves: the guard rejects a malformed, expired or over-dated session and a signature that does not verify over
  *         the canonical message it rebuilds, accepts a valid one and stashes its address; the param decorator returns it
  */
 import { UnauthorizedException, type ExecutionContext } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
-import { schnorr } from '@noble/curves/secp256k1';
-import { base64, hex } from '@scure/base';
-import * as btc from '@scure/btc-signer';
+import { hex } from '@scure/base';
 import { buildCat21SessionMessage } from 'ordpool-sdk/cat21-session';
+import { signTestBip322Message, testTaprootAddress } from 'ordpool-sdk/testing';
 
 import { Cat21SessionAddress, Cat21SessionGuard } from './cat21-session.guard';
 
 /** Fixed test key; the spec holds it, so it can sign for ADDR. */
 const SESSION_KEY = hex.decode('07'.repeat(32));
-const sessionP2tr = btc.p2tr(schnorr.getPublicKey(SESSION_KEY), undefined, btc.NETWORK);
-const ADDR = sessionP2tr.address!;
+const ADDR = testTaprootAddress(SESSION_KEY);
 /** A valid P2TR address whose key the spec does not use to sign. */
-const OTHER_ADDR = btc.p2tr(schnorr.getPublicKey(hex.decode('08'.repeat(32))), undefined, btc.NETWORK).address!;
+const OTHER_ADDR = testTaprootAddress(hex.decode('08'.repeat(32)));
 
 /**
- * BIP-322 "simple" signature over `message` for ADDR, as a wallet returns it:
- * the serialized to_sign witness (one 64-byte schnorr signature), base64.
- * Built from the BIP's own recipe (to_spend commits the tagged message hash,
- * to_sign spends it to OP_RETURN), independent of the verifier under test.
+ * BIP-322 "simple" signature over `message` for ADDR, as a wallet returns it.
+ * `signTestBip322Message` builds it from the BIP's own recipe (to_spend commits
+ * the tagged message hash, to_sign spends it to OP_RETURN), independent of the
+ * verifier under test.
  */
 function signSession(message: string): string {
-  const messageHash = schnorr.utils.taggedHash('BIP0322-signed-message', new TextEncoder().encode(message));
-  const toSpend = new btc.Transaction({ version: 0, lockTime: 0, allowUnknownInputs: true, allowUnknownOutputs: true });
-  // Output first: @scure treats an input carrying finalScriptSig as signed and
-  // refuses outputs added after it.
-  toSpend.addOutput({ script: sessionP2tr.script, amount: 0n });
-  toSpend.addInput({
-    txid: new Uint8Array(32),
-    index: 0xffffffff,
-    sequence: 0,
-    finalScriptSig: btc.Script.encode(['OP_0', messageHash]),
-  });
-
-  const toSign = new btc.Transaction({ version: 0, lockTime: 0, allowUnknownOutputs: true });
-  toSign.addInput({
-    txid: toSpend.id,
-    index: 0,
-    sequence: 0,
-    witnessUtxo: { script: sessionP2tr.script, amount: 0n },
-    tapInternalKey: schnorr.getPublicKey(SESSION_KEY),
-  });
-  toSign.addOutput({ script: btc.Script.encode(['RETURN']), amount: 0n });
-  toSign.signIdx(SESSION_KEY, 0);
-  const sig = toSign.getInput(0).tapKeySig!;
-  return base64.encode(new Uint8Array([0x01, sig.length, ...sig]));
+  return signTestBip322Message({ privateKey: SESSION_KEY, message });
 }
 
 function ctxWith(headers: Record<string, string | string[] | undefined>): {

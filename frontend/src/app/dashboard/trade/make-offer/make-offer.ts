@@ -10,10 +10,12 @@ import {
   Cat21CreateOfferOrchestrator,
   Cat21Service,
   CreateOfferSnapshot,
+  ExpertRequiredCause,
   UtxoAssetDetail,
   WalletCapability,
   WalletService,
   capabilityOf,
+  expertRequiredCause,
   outpointKey,
   parseBuyOfferQueryParams,
   toPaymentAddress,
@@ -23,9 +25,7 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../../shared/cat21-orchestrator-ports';
-import { inscriptionReviewLink, runeEtchingReviewLink } from '../../../shared/funding-asset-links';
-import { rareSatLabel } from '../../../shared/rare-sat-label';
-import { RuneEtchingService } from '../../../shared/rune-etching.service';
+import { FundingAssetList } from '../../../shared/funding-asset-list/funding-asset-list';
 import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
 import { PsbtExportBridgeService } from '../../../shared/psbt-export-bridge/psbt-export-bridge.service';
@@ -48,7 +48,7 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
   selector: 'app-make-offer',
   templateUrl: './make-offer.html',
   styleUrl: './make-offer.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect, WalletCapabilityNotice, SingleAddressNote],
+  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect, WalletCapabilityNotice, SingleAddressNote, FundingAssetList],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MakeOffer {
@@ -71,9 +71,10 @@ export class MakeOffer {
       const cfg = inject(cat21Config);
       return new Cat21CreateOfferOrchestrator(
         // `'derive'` opts create-offer into the asset-to-miner safeguard, same as
-        // mint + transfer: a separate-address wallet with a dirty-only funding pool
-        // NOTICEs and proceeds (asset-notice); a one-address wallet WARNs and blocks
-        // (expert-required). MUST ship together with the notice UI below.
+        // mint + transfer: when only a coin with NAMED assets covers, a
+        // separate-address wallet NOTICEs and proceeds (asset-notice) and a
+        // one-address wallet WARNs and blocks (expert-required); a coin whose
+        // assets are unnamed or whose content is unknown blocks on every wallet.
         cat21OrchestratorPorts(inject(Cat21Service), cfg, inject(bitcoinNetwork), 'derive'),
       );
     })();
@@ -171,8 +172,8 @@ export class MakeOffer {
   /**
    * The SDK's safe-auto funding recommendation for the buyer's side.
    * `expert-required` means no content-clean coin covers `price + cat
-   * value + fee`; only asset-bearing coins do, so the orchestrator
-   * refuses to auto-spend one and yields no simulation. The template
+   * value + fee` and the orchestrator refuses to auto-spend the covering
+   * one, so it yields no simulation. The template
    * surfaces the funding picker (auto-opened + a warning) in that state
    * so the form isn't silently stuck. `auto`/`scanning`/`insufficient`
    * need no special picker treatment (the picker's own safe auto-pick +
@@ -194,21 +195,38 @@ export class MakeOffer {
     () => this.buyerFundingRecommendation().status === 'expert-required',
   );
 
-  private runeEtching = inject(RuneEtchingService);
+  /**
+   * Why the SDK blocks (`expertRequiredCause`), null unless `expert-required`.
+   * The warning copy branches on it: `named-assets` names what the covering
+   * coin carries (a one-address wallet), `unnamed-assets` says the scan found
+   * assets it could not name, `unknown-content` says the covering coins could
+   * not be checked.
+   */
+  readonly buyerExpertCause = computed<ExpertRequiredCause | null>(() => {
+    const rec = this.buyerFundingRecommendation();
+    return rec.status === 'expert-required' ? expertRequiredCause(rec) : null;
+  });
+
+  /** The assets the `named-assets` warning names, from the recommended coin. */
+  readonly buyerExpertAssets = computed<UtxoAssetDetail | null>(() =>
+    this.buyerExpertCause() === 'named-assets' ? (this.buyerFundingRecommendation().recommended?.assets ?? null) : null,
+  );
 
   /**
-   * `asset-notice`: no clean coin covers the fee, but a dirty one does AND the
-   * wallet keeps a SEPARATE payment address, so the SDK auto-selects the dirty
-   * coin and we INFORM rather than block (the asset-to-miner ruling). CTA stays
-   * enabled; the obligation is to NAME what sits on the coin before the click.
-   * The recommended coin can itself over-pay here (dirty-branch best-fit against
-   * the requirement) — that ★+over-pay pair is intended, rendered by the picker.
+   * `asset-notice`: no clean coin covers, but a coin whose assets the scan
+   * NAMED does AND the wallet keeps a SEPARATE payment address, so the SDK
+   * auto-selects that coin and we INFORM rather than block (the asset-to-miner
+   * ruling). CTA stays enabled; the obligation is to NAME what sits on the coin
+   * before the click. The recommended coin can itself over-pay here
+   * (dirty-branch best-fit against the requirement): that ★+over-pay pair is
+   * intended, rendered by the picker.
    */
   readonly buyerAssetNotice = computed(() => this.buyerFundingRecommendation().status === 'asset-notice');
 
   /**
    * The asset detail the notice must name, from the RECOMMENDATION itself (the
-   * coin the selection would have taken had it been clean). Null unless `asset-notice`.
+   * coin the SDK picked). Null unless `asset-notice`, where the SDK guarantees
+   * it names at least one asset (`namesAssets`).
    */
   readonly buyerNoticeAssets = computed<UtxoAssetDetail | null>(() => {
     const rec = this.buyerFundingRecommendation();
@@ -225,24 +243,17 @@ export class MakeOffer {
    *  the picker skips scanning them. */
   readonly fundingRequirementSats = computed(() => this.snap().fundingRequirementSats);
 
-  /** `outpointKey` of the SDK-recommended coin, for the picker's mark-in-place
-   *  recommendation (never a re-sort). Null when the SDK returns no pick. */
+  /**
+   * `outpointKey` of the coin the picker marks ★ recommended, in place (never a
+   * re-sort). Only on `auto` and `asset-notice`, the two statuses where the SDK
+   * itself would spend that coin; on `expert-required` its best-fit coin is the
+   * one it refuses to spend, and a star there would contradict the warning.
+   */
   readonly recommendedOutpoint = computed<string | null>(() => {
-    const r = this.buyerFundingRecommendation().recommended;
-    return r ? outpointKey(r) : null;
+    const rec = this.buyerFundingRecommendation();
+    if (rec.status !== 'auto' && rec.status !== 'asset-notice') return null;
+    return rec.recommended ? outpointKey(rec.recommended) : null;
   });
-
-  /** In-family review link for an inscription/cat found on a funding UTXO. */
-  readonly inscriptionReviewLink = inscriptionReviewLink;
-
-  /** Shared rare-sat identity line; same on the picker. */
-  readonly rareSatLabel = rareSatLabel;
-
-  /** In-family etching-tx link for a rune once resolved, else null (plain text). */
-  runeEtchingHref(name: string): string | null {
-    const txid = this.runeEtching.etchings().get(name);
-    return txid ? runeEtchingReviewLink(txid, name) : null;
-  }
 
   /**
    * What the seller actually receives if this offer is accepted: the
@@ -324,15 +335,6 @@ export class MakeOffer {
   constructor() {
     // Bind the orchestrator snapshot to a signal; unsubscribe on destroy.
     this.destroyRef.onDestroy(this.orch.subscribe((s) => this.snap.set(s)));
-
-    // Resolve rune etchings named in the asset-notice so the notice links them,
-    // when the notice appears (not per render). The service is idempotent + caches.
-    effect(() => {
-      const assets = this.buyerNoticeAssets();
-      if (assets && assets.runeNames.length > 0) {
-        this.runeEtching.resolve(assets.runeNames);
-      }
-    });
 
     // Push the connected wallet into the orchestrator (it fetches funding UTXOs,
     // recomputes, and seeds buyerReceiveAddress from the ordinals address). Async.

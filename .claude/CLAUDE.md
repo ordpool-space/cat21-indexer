@@ -116,10 +116,11 @@ Why: a "cleanup" swapping panels for `var(--bs-tertiary-bg)` reintroduces the ne
 
 ## RULE: Never spend an asset to the miners by accident (funding safety)
 
-- Separate-address wallet + no clean coin covers: `asset-notice` (notice names the asset, CTA enabled, proceed). One-address wallet: `expert-required` (CTA disabled + coin picker). Clean coin covers: silent auto-pick.
+- The SDK decides, the page renders its status. Clean coin covers: `auto`, silent auto-pick. Only a coin whose assets the scan NAMED covers, separate-address wallet: `asset-notice` (notice names the assets, CTA enabled, proceed). Otherwise `expert-required` (CTA disabled, picker open), worded by `expertRequiredCause`: `named-assets` (one-address wallet) lists the assets via `FundingAssetList`; `unnamed-assets` and `unknown-content` (any wallet) say the scan could not name, or could not check, what the covering coins hold.
 - The component adopts the recommendation for BOTH `auto` and `asset-notice` (adopting only `auto` makes the notice never render). Topology is `'derive'`d from the wallet, never a hardcoded wallet list.
+- The picker's ★ recommended marks the SDK's coin only on `auto` and `asset-notice`; on `expert-required` `recommendedOutpoint` is null, because that coin is the one the SDK refuses to spend.
 - What cat21.space's own picker must offer (a DELIBERATE duplicate of HQ's clause, not a copy to dedupe: HQ answers "what every surface must do", this answers "what cat21.space must do", so a future divergence is a decision, not drift): the coin picker stays REACHABLE at all times, including the clean-covers happy path where the user is just not pushed through it. It NAMES the assets exactly (inscription, rune, cat number, rare sat, each linked), marks the RECOMMENDED coin, and lets the user override.
-Ref: workspace HQ HARD RULE "Never let a user spend an asset to the miners by accident"; SDK `funding-safety.ts`. Lanes: `cat21wallet-mint-assetnotice-regtest.e2e.spec.ts`, `cat21wallet-transfer-offer-assetnotice-regtest.e2e.spec.ts`, `funding-guard-inscription-regtest.e2e.spec.ts`.
+Ref: workspace HQ HARD RULE "Never let a user spend an asset to the miners by accident"; SDK `funding-safety.ts`. Unit: `mint-funding-warnings.spec.ts`, `transfer-funding-warnings.spec.ts`, `make-offer-funding-warnings.spec.ts` (one cause per case, text and CTA asserted separately). Lanes: `cat21wallet-mint-assetnotice-regtest.e2e.spec.ts`, `cat21wallet-transfer-offer-assetnotice-regtest.e2e.spec.ts`, `funding-guard-inscription-regtest.e2e.spec.ts`.
 
 ## RULE: The funding-coin fee column is mandatory on every picker surface
 

@@ -1,7 +1,7 @@
 /**
  * @test-kind unit
  * Real:   AcceptOffer component; the SDK Cat21AcceptOfferOrchestrator (validates and signs for real);
- *         buy-offer PSBTs built and buyer-signed by @scure/btc-signer (testing/buy-offer-psbt.fixtures)
+ *         buy-offer PSBTs built and buyer-signed by the SDK's buildSignedTestBuyOffer (ordpool-sdk/testing)
  * Faked:  orchestrator broadcast port -> jest.fn answering the txid of the tx it is handed (electrs POST /tx shape)
  *         window.Cat21Provider (the wallet API) -> installFakeCat21Provider, signing with the test wallet's keys
  *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
@@ -24,15 +24,16 @@ import {
   Network,
   WalletService,
 } from 'ordpool-sdk';
+import { TEST_OFFER_BUYER_PAYMENT_ADDRESS, TestBuyOfferOptions, buildSignedTestBuyOffer } from 'ordpool-sdk/testing';
 
 import { cat21Config } from '../../../shared/sdk-tokens';
 
 import { AcceptOffer, rejectionToHuman } from './accept-offer';
 import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';
 import { WalletServiceStub } from '../../../testing/wallet.fixtures';
-import { BUYER_PAYMENT_ADDRESS, buildOfferPsbt } from '../../../testing/buy-offer-psbt.fixtures';
 import {
   TEST_ORDINALS_ADDRESS,
+  TEST_ORDINALS_SCRIPT,
   TEST_PAYMENT_ADDRESS,
   installFakeCat21Provider,
   testWallet,
@@ -41,6 +42,21 @@ import {
 const CAT_TXID = 'b'.repeat(64);
 const CAT = { txid: CAT_TXID, vout: 1, value: 546 };
 const PRICE = 21_000;
+
+/**
+ * A buyer-signed offer for the test wallet's cat: the test wallet is the
+ * seller, so input 0 spends its ordinals script and output 1 pays its payment
+ * address unless a case says otherwise.
+ */
+function buildOfferPsbt(over: Partial<TestBuyOfferOptions> = {}): string {
+  return buildSignedTestBuyOffer({
+    sellerUtxo: CAT,
+    sellerOrdinalsScript: TEST_ORDINALS_SCRIPT,
+    priceSats: PRICE,
+    sellerPaymentAddress: TEST_PAYMENT_ADDRESS,
+    ...over,
+  }).base64;
+}
 
 class LookupStub {
   readonly getMyHoldingsImpl = jest.fn((_: string) => of([] as MyCatHolding[]));
@@ -131,12 +147,12 @@ describe('AcceptOffer: the orchestrator verdict surfaces to the UI', () => {
   it('payment-output-wrong-address (the regression class we care about) → specific human string + canAccept stays false', async () => {
     const { component, settle } = await sellerReady();
     // The buyer's offer pays the seller's price to the buyer's own address.
-    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE, sellerPaymentAddress: BUYER_PAYMENT_ADDRESS }));
+    component.onPasteChange(buildOfferPsbt({ sellerPaymentAddress: TEST_OFFER_BUYER_PAYMENT_ADDRESS }));
     await settle();
 
     expect(component.humanRejection()).toBe(
       'The seller-payment output is going to a different address than expected. ' +
-        `expected ${TEST_PAYMENT_ADDRESS}, got ${BUYER_PAYMENT_ADDRESS}`,
+        `expected ${TEST_PAYMENT_ADDRESS}, got ${TEST_OFFER_BUYER_PAYMENT_ADDRESS}`,
     );
     expect(component.state()).toBe('invalid');
     expect(component.canAccept()).toBe(false);
@@ -144,7 +160,7 @@ describe('AcceptOffer: the orchestrator verdict surfaces to the UI', () => {
 
   it('an offer for another cat surfaces as missing-seller-input', async () => {
     const { component, settle } = await sellerReady();
-    component.onPasteChange(buildOfferPsbt({ cat: { ...CAT, txid: 'c'.repeat(64) }, priceSats: PRICE }));
+    component.onPasteChange(buildOfferPsbt({ sellerUtxo: { ...CAT, txid: 'c'.repeat(64) } }));
     await settle();
 
     expect(component.humanRejection()).toBe(`The offer's input 0 doesn't reference your cat. got ${'c'.repeat(64)}:${CAT.vout}`);
@@ -162,7 +178,7 @@ describe('AcceptOffer: the orchestrator verdict surfaces to the UI', () => {
 
   it('a valid offer for the seller\'s cat → no rejection, canAccept true', async () => {
     const { component, settle } = await sellerReady();
-    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    component.onPasteChange(buildOfferPsbt());
     await settle();
 
     expect(component.validationResult()).toEqual({ ok: true, pricePaidSats: PRICE, postageSats: CAT.value });
@@ -211,7 +227,7 @@ describe('rejectionToHuman: one sentence per SDK rejection reason', () => {
 describe('AcceptOffer — URL prefill via ?offer=&catTxid=&catVout=', () => {
 
   it('URL supplies BOTH offer + catOutpoint → orchestrator receives both', async () => {
-    const offer = buildOfferPsbt({ cat: CAT, priceSats: PRICE });
+    const offer = buildOfferPsbt();
     const { component, spies, orchestrator } = await setup({
       offer,
       catTxid: CAT.txid,
@@ -331,7 +347,7 @@ describe('AcceptOffer — form actions', () => {
 
   it('a floor above the offer\'s price rejects it as wrong-price', async () => {
     const { component, settle } = await sellerReady();
-    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    component.onPasteChange(buildOfferPsbt());
     component.onFloorPriceChange(String(PRICE + 1));
     await settle();
     expect(component.humanRejection()).toBe(`The seller-payment output is below your floor price. ${PRICE} < ${PRICE + 1}`);
@@ -354,7 +370,7 @@ describe('AcceptOffer — form actions', () => {
   it('onAcceptClick has the wallet sign input 0 and broadcasts the finished transaction', async () => {
     provider = installFakeCat21Provider();
     const { component, spies, broadcast, settle } = await sellerReady();
-    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    component.onPasteChange(buildOfferPsbt());
     await settle();
     expect(component.canAccept()).toBe(true);
 
@@ -374,7 +390,7 @@ describe('AcceptOffer — form actions', () => {
     provider = installFakeCat21Provider();
     provider.rejectWith(new Error('User rejected the request'));
     const { component, broadcast, settle } = await sellerReady();
-    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    component.onPasteChange(buildOfferPsbt());
     await settle();
 
     await component.onAcceptClick();
@@ -387,7 +403,7 @@ describe('AcceptOffer — form actions', () => {
 
   it('onResetClick calls orchestrator.reset() + clears local state', async () => {
     const { component, spies, settle } = await sellerReady();
-    component.onPasteChange(buildOfferPsbt({ cat: CAT, priceSats: PRICE }));
+    component.onPasteChange(buildOfferPsbt());
     component.onFloorPriceChange('50000');
     component.onCatPick('inscription-x-i0');
     await settle();

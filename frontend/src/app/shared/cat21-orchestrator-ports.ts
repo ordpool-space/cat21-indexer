@@ -20,17 +20,19 @@ import {
  *                    RICH `{ verdict, assets }` form, so the funding recommendation
  *                    carries the inscription ids / rune names / cat ids / rare sat
  *                    that a notice or picker names, instead of a bare
- *                    `has-assets`. Fail-closed: an unknown / still-scanning coin
- *                    maps to `has-assets` with NO detail, so a caller can never
- *                    read absent detail as "nothing on the coin".
+ *                    `has-assets`. Fail-closed: for an unknown / still-scanning
+ *                    coin `classify` rejects, so the coin is bucketed `failed`
+ *                    and never read as "nothing on the coin".
  *  - `broadcast`  -> `Cat21Service.postTransaction` (resolves to the txid)
  *  - `network`    -> the app's configured Bitcoin network
  *  - `fundingTopology` -> `'derive'` opts a flow into the asset-to-miner
  *                    safeguard: the orchestrator resolves the wallet's address
- *                    topology from its own wallet context, so a separate-address
- *                    wallet gets a NOTICE (proceed) and a one-address wallet a
- *                    WARNING (block) when only an asset-bearing coin covers. OMIT
- *                    it and the orchestrator blocks every wallet — the safe
+ *                    topology from its own wallet context, so when only a coin
+ *                    with NAMED assets covers, a separate-address wallet gets a
+ *                    NOTICE (proceed) and a one-address wallet a WARNING (block);
+ *                    a coin with unnamed assets or unknown content blocks on
+ *                    every wallet. OMIT it and the orchestrator blocks every
+ *                    wallet: the safe
  *                    default, correct for a flow whose template does not yet
  *                    render the notice.
  *

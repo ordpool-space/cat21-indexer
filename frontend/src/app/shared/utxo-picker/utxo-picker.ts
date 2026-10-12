@@ -111,6 +111,10 @@ export class UtxoPicker {
    * is cheaper for a reason, and re-sorting the recommendation first destroys
    * that comparison. The over-pay flag on the cheaper rows is the answer to
    * "why not that one?".
+   *
+   * A consumer passes it only while the SDK would spend that coin (`auto`,
+   * `asset-notice`), and null on `expert-required`, where the SDK's best-fit
+   * coin is the one it refuses to spend.
    */
   readonly recommendedOutpoint = input<string | null>(null);
 

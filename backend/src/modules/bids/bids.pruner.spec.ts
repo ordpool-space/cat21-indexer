@@ -1,14 +1,15 @@
 /**
  * @test-kind unit
- * Real:   BidsPruner, @scure/btc-signer, @scure/base; the stored PSBTs are real buy-offers built and signed by
- *         @scure/btc-signer with fixed test keys (buy-offer-psbt.test-helper.ts)
+ * Real:   BidsPruner, @scure/btc-signer, @scure/base; the stored PSBTs are real buy-offers built and buyer-signed
+ *         by the SDK's buildSignedTestBuyOffer (ordpool-sdk/testing, fixed test keys)
  * Faked:  Drizzle db -> select().from() returning hand-written rows
  *         OrdClientService.getCatsAtOutput, ElectrsClientService.getOutpointStatus / isOutpointSpent -> jest.fn() (hand-written)
  *         BidsService.deleteByOutpointAndBuyer -> jest.fn() (a sibling module)
  * Proves: a bid is dropped when the seller's cat left the outpoint or the buyer's funding input is spent, kept on an ord or electrs failure, and prune runs batch without re-entering
  */
+import { buildSignedTestBuyOffer } from 'ordpool-sdk/testing';
+
 import { BidsPruner } from './bids.pruner';
-import { buildBuyOfferPsbt } from './buy-offer-psbt.test-helper';
 
 const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';
 const BUYER_A = 'bc1p-buyer-a';
@@ -52,7 +53,7 @@ function drizzleWithRows(rows: unknown[]) {
  * checks directly: its outpoint is on the row.
  */
 function stubPsbt(buyerFundingTxids: string[]): void {
-  rowPsbt = buildBuyOfferPsbt({
+  rowPsbt = buildSignedTestBuyOffer({
     sellerUtxo: { txid: REAL_TXID, vout: 0, value: 546 },
     buyerFunding: buyerFundingTxids.map((txid, i) => ({ txid, vout: i, value: 50_000 })),
   }).base64;

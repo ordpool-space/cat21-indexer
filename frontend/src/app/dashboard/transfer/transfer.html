@@ -117,65 +117,58 @@
     </section>
 
     <section class="transfer-section" data-testid="transfer-funding-picker-section">
-      @if (fundingExpertRequired()) {
-        <p class="text-warning small" data-testid="transfer-funding-expert-required">
-          ⚠ None of your content-clean coins can cover the miner fee:
-          every covering coin carries an inscription, rune, cat, or rare
-          sat. Expand <strong>Funding source</strong> below and pick one
-          deliberately (its asset goes to the miner as fee), or add a
-          plain payment UTXO to your wallet.
-        </p>
-      }
-      @if (assetNotice()) {
-        @if (noticeAssets(); as assets) {
-          <div class="alert alert-warning small" data-testid="transfer-asset-notice">
-            <p class="mb-1">
-              <strong>Heads up.</strong> The only coin that can cover the fee
-              carries an on-chain asset. Transferring spends it as the miner fee,
-              so that asset goes to the miner. You can go ahead, or send a plain
-              payment UTXO to your wallet first to keep it.
+      @switch (expertCause()) {
+        @case ('named-assets') {
+          <div class="alert alert-warning small" data-testid="transfer-funding-expert-required"
+               data-cause="named-assets">
+            <p class="mb-1" data-testid="transfer-funding-expert-required-text">
+              ⚠ None of your content-clean coins can cover the miner fee. Your
+              wallet keeps assets and payments on one address, and the coin that
+              would cover the fee carries the assets below. Expand
+              <strong>Funding source</strong> below and pick a coin deliberately
+              (its asset goes to the miner as fee), or add a plain payment UTXO
+              to your wallet.
             </p>
-            @if (assets.inscriptionIds.length > 0) {
-              <p class="mb-1">
-                <strong>Inscription{{ assets.inscriptionIds.length === 1 ? '' : 's' }}:</strong>
-                @for (id of assets.inscriptionIds; track id) {
-                  <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
-                     data-testid="transfer-asset-notice-inscription">{{ id }}</a>
-                  @if (!$last) { , }
-                }
-              </p>
-            }
-            @if (assets.runeNames.length > 0) {
-              <p class="mb-1">
-                <strong>Rune{{ assets.runeNames.length === 1 ? '' : 's' }}:</strong>
-                @for (name of assets.runeNames; track name) {
-                  @if (runeEtchingHref(name); as href) {
-                    <a [href]="href" target="_blank" rel="noopener"
-                       data-testid="transfer-asset-notice-rune">{{ name }}</a>
-                  } @else {
-                    <span data-testid="transfer-asset-notice-rune">{{ name }}</span>
-                  }
-                  @if (!$last) { , }
-                }
-              </p>
-            }
-            @if (assets.catIds.length > 0) {
-              <p class="mb-1">
-                <strong>CAT-21 cat{{ assets.catIds.length === 1 ? '' : 's' }}:</strong>
-                @for (id of assets.catIds; track id) {
-                  <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
-                     data-testid="transfer-asset-notice-cat">{{ id }}</a>
-                  @if (!$last) { , }
-                }
-              </p>
-            }
-            @if (assets.rareSat; as rare) {
-              <p class="mb-0"><strong>Rare sat:</strong>
-                <span data-testid="transfer-asset-notice-raresat">{{ rareSatLabel(rare) }}</span>
-              </p>
+            @if (expertAssets(); as assets) {
+              <app-funding-asset-list [assets]="assets" testidPrefix="transfer-funding-expert-required" />
             }
           </div>
         }
+        @case ('unnamed-assets') {
+          <p class="alert alert-warning small" data-testid="transfer-funding-expert-required"
+             data-cause="unnamed-assets">
+            <span data-testid="transfer-funding-expert-required-text">
+              ⚠ None of your content-clean coins can cover the miner fee. The
+              coins that can carry assets the scan could not name, so we can't
+              tell you what the transfer would give away. Expand
+              <strong>Funding source</strong> below and pick a coin only if you
+              know what it holds (its asset goes to the miner as fee), or add a
+              plain payment UTXO to your wallet.
+            </span>
+          </p>
+        }
+        @case ('unknown-content') {
+          <p class="alert alert-warning small" data-testid="transfer-funding-expert-required"
+             data-cause="unknown-content">
+            <span data-testid="transfer-funding-expert-required-text">
+              ⚠ None of your content-clean coins can cover the miner fee, and we
+              couldn't check the coins that can for ordinal-bound assets. Expand
+              <strong>Funding source</strong> below and pick a coin deliberately,
+              or add a plain payment UTXO to your wallet.
+            </span>
+          </p>
+        }
+      }
+      @if (noticeAssets(); as assets) {
+        <div class="alert alert-warning small" data-testid="transfer-asset-notice">
+          <p class="mb-1">
+            <strong>Heads up.</strong> The only coin that can cover the fee
+            carries an on-chain asset. Transferring spends it as the miner fee,
+            so that asset goes to the miner. You can go ahead, or send a plain
+            payment UTXO to your wallet first to keep it.
+          </p>
+          <app-funding-asset-list [assets]="assets" testidPrefix="transfer-asset-notice" />
+        </div>
       }
       <details [open]="fundingExpertRequired() || assetNotice()">
         <summary class="transfer-section-heading" style="cursor: pointer;">

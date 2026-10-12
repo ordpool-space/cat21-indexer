@@ -1,0 +1,41 @@
+@let a = assets();
+@if (a.inscriptionIds.length > 0) {
+  <p>
+    <strong>Inscription{{ a.inscriptionIds.length === 1 ? '' : 's' }}:</strong>&ngsp;
+    @for (id of a.inscriptionIds; track id) {
+      <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
+         [attr.data-testid]="testidPrefix() + '-inscription'">{{ id }}</a>
+      @if (!$last) { , }
+    }
+  </p>
+}
+@if (a.runeNames.length > 0) {
+  <p>
+    <strong>Rune{{ a.runeNames.length === 1 ? '' : 's' }}:</strong>&ngsp;
+    @for (name of a.runeNames; track name) {
+      @if (runeEtchingHref(name); as href) {
+        <a [href]="href" target="_blank" rel="noopener"
+           [attr.data-testid]="testidPrefix() + '-rune'">{{ name }}</a>
+      } @else {
+        <span [attr.data-testid]="testidPrefix() + '-rune'">{{ name }}</span>
+      }
+      @if (!$last) { , }
+    }
+  </p>
+}
+@if (a.catIds.length > 0) {
+  <p>
+    <strong>CAT-21 cat{{ a.catIds.length === 1 ? '' : 's' }}:</strong>&ngsp;
+    @for (id of a.catIds; track id) {
+      <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
+         [attr.data-testid]="testidPrefix() + '-cat'">{{ id }}</a>
+      @if (!$last) { , }
+    }
+  </p>
+}
+@if (a.rareSat; as rare) {
+  <p>
+    <strong>Rare sat:</strong>&ngsp;
+    <span [attr.data-testid]="testidPrefix() + '-raresat'">{{ rareSatLabel(rare) }}</span>
+  </p>
+}

@@ -37,13 +37,37 @@
       <app-fees-picker [feeRate]="feeRate()" (feeRateChange)="onFeeRateChange($event)" />
     </section>
 
-    @if (fundingExpertRequired()) {
-      <p class="mint-alert mint-alert-warning" data-testid="mint-funding-expert-required">
-        ⚠ None of your content-clean coins can cover the mint. Every covering
-        coin carries an inscription, rune, cat, or rare sat. Pick one below to
-        spend it deliberately (its asset goes to the miner as fee), or add a
-        plain payment UTXO to your wallet.
-      </p>
+    @switch (expertCause()) {
+      @case ('named-assets') {
+        <div class="mint-alert mint-alert-warning" data-testid="mint-funding-expert-required"
+             data-cause="named-assets">
+          <p data-testid="mint-funding-expert-required-text">
+            ⚠ None of your content-clean coins can cover the mint. Your wallet
+            keeps assets and payments on one address, and the coin that would
+            cover the mint carries the assets below. Pick a coin below to spend
+            it deliberately (its asset goes to the miner as fee), or add a plain
+            payment UTXO to your wallet.
+          </p>
+          @if (expertAssets(); as assets) {
+            <app-funding-asset-list [assets]="assets" testidPrefix="mint-funding-expert-required" />
+          }
+        </div>
+      }
+      @case ('unnamed-assets') {
+        <p class="mint-alert mint-alert-warning" data-testid="mint-funding-expert-required"
+           data-cause="unnamed-assets">
+          <span data-testid="mint-funding-expert-required-text">⚠ None of your content-clean coins can cover the mint. The coins that can carry assets the scan could not name, so we can't tell you what minting would give away. Pick a coin below only if you know what it holds (its asset goes to the miner as fee), or add a plain payment UTXO to your wallet.</span>
+        </p>
+      }
+      @case ('unknown-content') {
+        <p class="mint-alert mint-alert-warning" data-testid="mint-funding-expert-required"
+           data-cause="unknown-content">
+          <span data-testid="mint-funding-expert-required-text">⚠ None of your content-clean coins can cover the mint. Couldn't check these funds for ordinal-bound assets.</span>&ngsp;
+          <button type="button" class="link-button" (click)="retryFundingScan()"
+                  data-testid="mint-funding-retry-scan">Retry scan</button>&ngsp;
+          <span>Or pick a coin below to spend it deliberately, or add a plain payment UTXO to your wallet.</span>
+        </p>
+      }
     }
 
     @if (viableRows().length === 0 && state() === 'ready') {
@@ -102,10 +126,11 @@
       </section>
 
       @if (noticeAssets(); as assets) {
-        <!-- asset-notice: the SDK auto-selected a dirty coin because it is the
-             ONLY cover and the wallet keeps a separate payment address. Proceed
-             is allowed (CTA stays enabled); the obligation is to name what sits
-             on the coin, from the recommendation itself. -->
+        <!-- asset-notice: the SDK auto-selected a coin whose assets the scan
+             named, because it is the ONLY cover and the wallet keeps a separate
+             payment address. Proceed is allowed (CTA stays enabled); the
+             obligation is to name what sits on the coin, from the
+             recommendation itself. -->
         <div class="mint-alert mint-alert-warning" data-testid="mint-asset-notice">
           <p>
             <strong>Heads up.</strong> The only coin that can cover this mint
@@ -113,45 +138,7 @@
             that asset goes to the miner. You can go ahead, or send a plain
             payment UTXO to your wallet first to keep it.
           </p>
-          @if (assets.inscriptionIds.length > 0) {
-            <p>
-              <strong>Inscription{{ assets.inscriptionIds.length === 1 ? '' : 's' }}:</strong>
-              @for (id of assets.inscriptionIds; track id) {
-                <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
-                   data-testid="mint-asset-notice-inscription">{{ id }}</a>
-                @if (!$last) { , }
-              }
-            </p>
-          }
-          @if (assets.runeNames.length > 0) {
-            <p>
-              <strong>Rune{{ assets.runeNames.length === 1 ? '' : 's' }}:</strong>
-              @for (name of assets.runeNames; track name) {
-                @if (runeEtchingHref(name); as href) {
-                  <a [href]="href" target="_blank" rel="noopener"
-                     data-testid="mint-asset-notice-rune">{{ name }}</a>
-                } @else {
-                  <span data-testid="mint-asset-notice-rune">{{ name }}</span>
-                }
-                @if (!$last) { , }
-              }
-            </p>
-          }
-          @if (assets.catIds.length > 0) {
-            <p>
-              <strong>CAT-21 cat{{ assets.catIds.length === 1 ? '' : 's' }}:</strong>
-              @for (id of assets.catIds; track id) {
-                <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
-                   data-testid="mint-asset-notice-cat">{{ id }}</a>
-                @if (!$last) { , }
-              }
-            </p>
-          }
-          @if (assets.rareSat; as rare) {
-            <p><strong>Rare sat:</strong>
-              <span data-testid="mint-asset-notice-raresat">{{ rareSatLabel(rare) }}</span>
-            </p>
-          }
+          <app-funding-asset-list [assets]="assets" testidPrefix="mint-asset-notice" />
         </div>
       } @else if (sel.bucket === 'assets' && sel.scan.kind === 'scanned-with-assets') {
         <div class="mint-alert mint-alert-danger" data-testid="asset-found-warning">

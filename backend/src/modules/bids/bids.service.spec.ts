@@ -1,7 +1,7 @@
 /**
  * @test-kind unit
  * Real:   BidsService, the SDK's validateCat21BuyOfferPsbt (ordpool-sdk/cat21-validation), @scure/btc-signer, @scure/base;
- *         buy-offer PSBTs built and signed by @scure/btc-signer with fixed test keys (buy-offer-psbt.test-helper.ts)
+ *         buy-offer PSBTs built and buyer-signed by the SDK's buildSignedTestBuyOffer (ordpool-sdk/testing, fixed test keys)
  * Faked:  Drizzle db -> chainable jest.fn() query builder (hand-written)
  *         OrdClientService.getCatsAtOutput, ElectrsClientService -> jest.fn() (hand-written)
  * Proves: create runs the cheap pre-checks before parsing, gates the PSBT shape, hands every DTO field to the SDK
@@ -10,16 +10,16 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import * as btc from '@scure/btc-signer';
+import {
+  TEST_OFFER_BUYER_ORDINALS_ADDRESS,
+  TEST_OFFER_BUYER_PAYMENT_ADDRESS,
+  TEST_OFFER_SELLER_PAYMENT_ADDRESS,
+  TEST_OFFER_STRANGER_ADDRESS,
+  buildSignedTestBuyOffer,
+  testFundingTxid,
+} from 'ordpool-sdk/testing';
 
 import { BidsService } from './bids.service';
-import {
-  BUYER_ORDINALS_ADDRESS,
-  BUYER_PAYMENT_ADDRESS,
-  SELLER_PAYMENT_ADDRESS,
-  STRANGER_ADDRESS,
-  buildBuyOfferPsbt,
-  fundingTxid,
-} from './buy-offer-psbt.test-helper';
 
 // ---------------------------------------------------------------------------
 // This spec exercises the service's flow-control layer against real PSBT
@@ -36,9 +36,9 @@ import {
 
 const REAL_TXID = 'ab49227cce490e2137872f7d08924187ee4f4bc7e8b3bda7ac63d7bba1d897df';
 const OTHER_TXID = 'ff'.repeat(32);
-const BUYER_ORD_ADDR = BUYER_ORDINALS_ADDRESS;
-const BUYER_PAY_ADDR = BUYER_PAYMENT_ADDRESS;
-const SELLER_PAY_ADDR = SELLER_PAYMENT_ADDRESS;
+const BUYER_ORD_ADDR = TEST_OFFER_BUYER_ORDINALS_ADDRESS;
+const BUYER_PAY_ADDR = TEST_OFFER_BUYER_PAYMENT_ADDRESS;
+const SELLER_PAY_ADDR = TEST_OFFER_SELLER_PAYMENT_ADDRESS;
 const CAT_VALUE_SATS = 546;
 const BID_SATS = 21_000;
 
@@ -46,7 +46,7 @@ const BID_SATS = 21_000;
 const NOT_A_PSBT = 'AAECAw==';
 
 /** The bid the default DTO describes, signed for real. */
-const VALID_PSBT = buildBuyOfferPsbt({
+const VALID_PSBT = buildSignedTestBuyOffer({
   sellerUtxo: { txid: REAL_TXID, vout: 0, value: CAT_VALUE_SATS },
   priceSats: BID_SATS,
 }).base64;
@@ -82,8 +82,8 @@ const persistedRow = (over: Record<string, unknown> = {}) => ({
 });
 
 /** The default bid's PSBT with some of its parts replaced. */
-function psbtWith(opts: Partial<Parameters<typeof buildBuyOfferPsbt>[0]>): string {
-  return buildBuyOfferPsbt({
+function psbtWith(opts: Partial<Parameters<typeof buildSignedTestBuyOffer>[0]>): string {
+  return buildSignedTestBuyOffer({
     sellerUtxo: { txid: REAL_TXID, vout: 0, value: CAT_VALUE_SATS },
     priceSats: BID_SATS,
     ...opts,
@@ -230,9 +230,9 @@ describe('BidsService.create: SDK validator wiring (every DTO field reaches it)'
   // reason.
   it.each([
     ['expectedSellerUtxo', 'missing-seller-input', () => validDto({ psbtBase64: psbtWith({ sellerUtxo: { txid: OTHER_TXID, vout: 0, value: CAT_VALUE_SATS } }) })],
-    ['expectedSellerPaymentAddress', 'payment-output-wrong-address', () => validDto({ sellerPaymentAddress: STRANGER_ADDRESS })],
-    ['expectedBuyerReceiveAddress', 'cat-output-wrong-address', () => validDto({ buyerOrdinalsAddress: STRANGER_ADDRESS })],
-    ['expectedBuyerChangeAddress', 'change-output-wrong-address', () => validDto({ buyerPaymentAddress: STRANGER_ADDRESS })],
+    ['expectedSellerPaymentAddress', 'payment-output-wrong-address', () => validDto({ sellerPaymentAddress: TEST_OFFER_STRANGER_ADDRESS })],
+    ['expectedBuyerReceiveAddress', 'cat-output-wrong-address', () => validDto({ buyerOrdinalsAddress: TEST_OFFER_STRANGER_ADDRESS })],
+    ['expectedBuyerChangeAddress', 'change-output-wrong-address', () => validDto({ buyerPaymentAddress: TEST_OFFER_STRANGER_ADDRESS })],
     ['expectedExactPrice', 'wrong-price-exact', () => validDto({ bidSats: BID_SATS + 1 })],
   ])('%s: a mismatch surfaces as psbt-%s', async (_field, reason, dto) => {
     const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, createElectrsMock() as never);
@@ -277,15 +277,15 @@ describe('BidsService.create: electrs + ord', () => {
     const drizzle = createDrizzleMock({ limit: jest.fn().mockResolvedValue([persistedRow()]) });
     const psbt = psbtWith({
       buyerFunding: [
-        { txid: fundingTxid(0xaa), vout: 1, value: 60_000 },
-        { txid: fundingTxid(0xbb), vout: 3, value: 40_000 },
+        { txid: testFundingTxid(0xaa), vout: 1, value: 60_000 },
+        { txid: testFundingTxid(0xbb), vout: 3, value: 40_000 },
       ],
     });
     const service = new BidsService(drizzle as never, createOrdMock() as never, electrs as never);
     await service.create(validDto({ psbtBase64: psbt }));
     expect(electrs.getOutpointStatus.mock.calls).toEqual([
-      [fundingTxid(0xaa), 1],
-      [fundingTxid(0xbb), 3],
+      [testFundingTxid(0xaa), 1],
+      [testFundingTxid(0xbb), 3],
     ]);
   });
 

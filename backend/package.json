@@ -38,7 +38,7 @@
     "drizzle-orm": "^0.44.4",
     "mysql2": "^3.11.5",
     "ordpool-parser": "github:ordpool-space/ordpool-parser#8f2dbd6",
-    "ordpool-sdk": "github:ordpool-space/ordpool-sdk#46ea9bcea62f6d1243884b89d2f3219c740ed60c",
+    "ordpool-sdk": "github:ordpool-space/ordpool-sdk#c10f67efa88deab03ff182e7ad59e25cefbafb9c",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5"

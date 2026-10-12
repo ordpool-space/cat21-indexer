@@ -36,7 +36,7 @@
         <span class="utxo-val">{{ d.row.utxo.value | number }} sat</span>
         @if (d.isRecommended) {
           <span class="utxo-recommended" data-testid="utxo-recommended"
-                title="The best-fit clean coin. We would pick this one for you.">★ recommended</span>
+                title="The smallest coin that covers, clean whenever a clean coin covers. We would pick this one for you.">★ recommended</span>
         }
         @if (d.fee; as fee) {
           @switch (fee.state) {
