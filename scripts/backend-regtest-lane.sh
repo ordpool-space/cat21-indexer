@@ -36,7 +36,7 @@ bash "$SDK_PKG/e2e/consumer-environment-bootstrap.sh" "${BOOTSTRAP_ARGS[@]}" > "
 cat "$LANE/stack.json"
 
 for i in $(seq 1 240); do
-  code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$ORD_URL/status" 2>/dev/null || echo 000)
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$ORD_URL/status" 2>/dev/null || true)
   if [ "$code" = 200 ]; then echo "cat21-ord up"; break; fi
   if [ "$i" = 240 ]; then echo "cat21-ord never came up (last HTTP $code)" >&2; exit 1; fi
   sleep 1
@@ -105,7 +105,7 @@ for i in $(seq 1 120); do
 done
 
 for i in $(seq 1 60); do
-  code=$(curl -s -o /dev/null -w '%{http_code}' "$ELECTRS_URL/tx/$TXID" 2>/dev/null || echo 000)
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$ELECTRS_URL/tx/$TXID" 2>/dev/null || true)
   if [ "$code" = 200 ]; then echo "electrs indexed the seed mint tx"; break; fi
   if [ "$i" = 60 ]; then echo "electrs never indexed the seed mint tx (last HTTP $code)" >&2; exit 1; fi
   sleep 2

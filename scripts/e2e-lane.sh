@@ -113,7 +113,7 @@ trap cleanup EXIT
 wait_http() {
   local what="$1" target="$2" accept="$3" seconds="$4" log="${5:-}" code=000 i
   for i in $(seq 1 "$seconds"); do
-    code=$(curl -s -o /dev/null -w '%{http_code}' -H "Accept: $accept" "$target" 2>/dev/null || echo 000)
+    code=$(curl -s -o /dev/null -w '%{http_code}' -H "Accept: $accept" "$target" 2>/dev/null || true)
     if [ "$code" = 200 ]; then
       echo "e2e-lane: $what up ($target)"
       return 0
