@@ -25,6 +25,7 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../../shared/cat21-orchestrator-ports';
+import { DroppedSelectionNotice } from '../../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../../shared/funding-asset-list/funding-asset-list';
 import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
 import { CatUtxoLookupService } from '../../../shared/cat-utxo-lookup.service';
@@ -48,7 +49,7 @@ type LookupState = 'idle' | 'loading' | 'ready' | 'error';
   selector: 'app-make-offer',
   templateUrl: './make-offer.html',
   styleUrl: './make-offer.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect, WalletCapabilityNotice, SingleAddressNote, FundingAssetList],
+  imports: [DecimalPipe, RouterLink, FeesPicker, UtxoPicker, WalletConnect, WalletCapabilityNotice, SingleAddressNote, FundingAssetList, DroppedSelectionNotice],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MakeOffer {
@@ -167,7 +168,23 @@ export class MakeOffer {
   readonly sellerPaymentAddress = computed(() => this.snap().sellerPaymentAddress);
   readonly priceSats = computed(() => this.snap().priceSats);
   readonly buyerReceiveAddress = computed(() => this.snap().buyerReceiveAddress);
-  readonly selectedFundingUtxo = computed(() => this.snap().selectedFundingUtxo);
+
+  /**
+   * The buyer coin the offer spends: the person's pick while it still covers,
+   * the SDK's recommendation otherwise. Read from the snapshot, never matched up
+   * locally, so the coin shown is the coin the offer PSBT is built on.
+   */
+  readonly resolvedFundingUtxo = computed(() => this.snap().resolvedFundingUtxo);
+
+  /**
+   * The verdict that goes with `resolvedFundingUtxo`: `scanning` while a
+   * recompute is in flight, `null` after a failed one. The CTA proceeds only on
+   * `ready` and `asset-notice`.
+   */
+  readonly resolvedFundingStatus = computed(() => this.snap().resolvedFundingStatus);
+
+  /** Set when the coin the person picked is not the coin the offer spends, with the reason. */
+  readonly droppedSelection = computed(() => this.snap().droppedSelection);
 
   /**
    * The SDK's safe-auto funding recommendation for the buyer's side.
@@ -297,7 +314,8 @@ export class MakeOffer {
     if (!this.sellerPaymentAddress()) return false;
     if (!this.priceSats()) return false;
     if (!this.feeRate()) return false;
-    return !!this.simulation() && !this.insufficient();
+    const status = this.resolvedFundingStatus();
+    return !!this.resolvedFundingUtxo() && (status === 'ready' || status === 'asset-notice');
   });
 
   /**

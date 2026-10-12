@@ -170,7 +170,13 @@
           <app-funding-asset-list [assets]="assets" testidPrefix="transfer-asset-notice" />
         </div>
       }
-      <details [open]="fundingExpertRequired() || assetNotice()">
+      @if (droppedSelection(); as dropped) {
+        <p class="alert alert-warning small" role="status" data-testid="transfer-dropped-selection"
+           [attr.data-reason]="dropped.reason">
+          <app-dropped-selection-notice [dropped]="dropped" [feeRate]="feeRate()" />
+        </p>
+      }
+      <details [open]="fundingExpertRequired() || assetNotice() || !!droppedSelection()">
         <summary class="transfer-section-heading" style="cursor: pointer;">
           Funding source <small class="text-muted">— we auto-pick the safest; expand to review or override</small>
         </summary>
@@ -183,7 +189,7 @@
         </p>
         <app-utxo-picker
           [utxos]="fundingUtxos()"
-          [selected]="selectedFundingUtxo()"
+          [selected]="resolvedFundingUtxo()"
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
           [minScanValueSat]="fundingRequirementSats()"
@@ -206,10 +212,12 @@
             <span class="lbl">Recipient</span>
             <code class="val">{{ recipientAddress() }}</code>
           </div>
-          <div class="transfer-summary-row">
-            <span class="lbl">Funding UTXO</span>
-            <code class="val">{{ sim.fundingUtxo.txid }}:{{ sim.fundingUtxo.vout }}</code>
-          </div>
+          @if (resolvedFundingUtxo(); as funding) {
+            <div class="transfer-summary-row">
+              <span class="lbl">Funding UTXO</span>
+              <code class="val" data-testid="transfer-summary-funding">{{ funding.txid }}:{{ funding.vout }}</code>
+            </div>
+          }
           <div class="transfer-summary-row">
             <span class="lbl">Miner fee</span>
             <span class="val">{{ sim.feeSats | number }} sat</span>

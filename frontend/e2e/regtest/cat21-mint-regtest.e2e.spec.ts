@@ -1,8 +1,8 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-indexer backend (:9998, syncing
- *         from the :8999 stub), Xverse 2.3.2 (.crx, seeded user-data-dir)
- * Faked:  fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest), written in the stub, not captured:
+ * Real:   built frontend (E2E_APP_PORT), bitcoind regtest, ordpool-electrs, cat21-indexer backend (E2E_APP_BACKEND_PORT, syncing
+ *         from the fees stub), Xverse 2.3.2 (.crx, seeded user-data-dir)
+ * Faked:  fees-electrs-stub on E2E_FEES_STUB_PORT (ordpool-sdk/e2e/regtest), written in the stub, not captured:
  *         /api/v1/fees/recommended (static DEFAULT_FEES) and ord /output for both ord URLs; every other
  *         /api/* path is proxied to the real electrs
  *         context route on every /output/<outpoint> -> cleanOutputFixture (ordpool-sdk/core)
@@ -36,7 +36,10 @@ import {
   unlockXverse,
   approveXverseConnect,
   approveXverseSignPopup,
+  regtestServiceUrls,
 } from 'ordpool-sdk/e2e';
+
+import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
 // Canonical clean `/output` body (indexed, carries nothing), merged across the
@@ -65,13 +68,13 @@ const CAT_OUTPUT_BODY = { ...catOutputFixture().ord, ...catOutputFixture().cat21
  *
  * Pre-conditions the workflow guarantees:
  *   - bitcoind regtest is up with ≥101 mined blocks (coinbase maturity)
- *   - ordpool-electrs is up on :3010
- *   - the SDK's fees-electrs-stub is up on :8999: a static
+ *   - ordpool-electrs is up on E2E_ELECTRS_HOST_PORT
+ *   - the SDK's fees-electrs-stub is up on E2E_FEES_STUB_PORT: a static
  *     /api/v1/fees/recommended, a static ord /output body, and a
  *     path-for-path /api/* proxy to electrs
  *   - cat21-indexer/frontend is served at FRONTEND_URL with the regtest
- *     cat21Config: mempoolApiUrl and both ord URLs -> :8999,
- *     cat21ApiUrl -> :9998, the cat21-indexer backend the lane boots
+ *     cat21Config: mempoolApiUrl and both ord URLs -> the fees stub,
+ *     cat21ApiUrl -> E2E_APP_BACKEND_PORT, the cat21-indexer backend the lane boots
  *   - the Xverse `.crx` is unpacked at XVERSE_EXT_PATH
  *   - a seeded user-data-dir is at XVERSE_SEED_USER_DATA_DIR (the
  *     SDK's globalSetup produced it during the workflow's earlier
@@ -81,7 +84,7 @@ const CAT_OUTPUT_BODY = { ...catOutputFixture().ord, ...catOutputFixture().cat21
  * workflow.
  */
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
+const FRONTEND_URL = regtestServiceUrls().app;
 const MINT_PATH = '/dashboard/mint';
 
 const FUND_AMOUNT_BTC = 0.001;
@@ -166,7 +169,7 @@ test.beforeAll(async () => {
 
   // Default every BROWSER-side ord `/output/<outpoint>` scan to a clean body.
   // The SDK's safe-auto funding recommendation force-scans the funding UTXO
-  // regardless of size, and the :8999 stub answers /output with a static
+  // regardless of size, and the fees stub answers /output with a static
   // `cats:[0]` (correct only for the bid flow's real cat outpoint), which would
   // falsely flag a plain funding coin as carrying cat #0 and hide
   // `mint-found-funds`. The asset-scanner test overrides this per page with its
@@ -245,7 +248,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   sharedPaymentAddress = paymentAddress;
 
   // ─── 4. Fund the payment address, mine, wait for electrs ──────
-  const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', wallet.paymentAddress, String(FUND_AMOUNT_BTC)).trim();
+  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', wallet.paymentAddress, String(FUND_AMOUNT_BTC)).trim();
   console.log(`[cat21-mint-page] funded ${wallet.paymentAddress} with ${FUND_AMOUNT_BTC} BTC tx=${fundTxid}`);
   const fundedTip = mineBlocks(1);
   await waitForElectrsSync(fundedTip);
@@ -399,7 +402,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
 
   const SMALL_FUND_BTC = 0.00015;
   const SMALL_FUND_SATS = Math.round(SMALL_FUND_BTC * 1e8);
-  const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', paymentAddress, String(SMALL_FUND_BTC)).trim();
+  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', paymentAddress, String(SMALL_FUND_BTC)).trim();
   console.log(`[asset-scanner] cat-mock target txid=${fundTxid} (small UTXO ${SMALL_FUND_SATS} sat)`);
   const tip = mineBlocks(1);
   await waitForElectrsSync(tip);
@@ -693,7 +696,7 @@ async function mintAtRateAndVerify(opts: {
 
   // ─── Fund a fresh UTXO ───────────────────────────────────────
   const FUND_BTC = 0.001;
-  const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC)).trim();
+  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC)).trim();
   console.log(`[${opts.scenarioLabel}] funded ${sharedPaymentAddress} +${FUND_BTC} BTC tx=${fundTxid}`);
   const tip = mineBlocks(1);
   await waitForElectrsSync(tip);
@@ -789,7 +792,7 @@ test('sign-popup cancel keeps state coherent', async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const FUND_BTC = 0.0003;
-  rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
+  rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();
@@ -837,7 +840,7 @@ test('broadcast failure surfaces as an error, not a fake success', async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const FUND_BTC = 0.0003;
-  rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
+  rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();

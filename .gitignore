@@ -33,3 +33,6 @@ Thumbs.db
 
 frontend/playwright-report*/
 frontend/test-results/
+
+# scripts/e2e-lane.sh and scripts/backend-regtest-lane.sh output
+.e2e-lane/

@@ -1,9 +1,9 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
- *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Real:   built frontend (E2E_APP_PORT), bitcoind regtest, ordpool-electrs, cat21-ord (E2E_ORD_HOST_PORT), ord-stock (E2E_ORD_STOCK_HOST_PORT),
+ *         cat21-indexer backend (E2E_APP_BACKEND_PORT, synced from cat21-ord), cat21-wallet (.crx)
  * Faked:
- *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         /api/v1/fees/recommended -> fees-electrs-stub on E2E_FEES_STUB_PORT (ordpool-sdk/e2e/regtest; static
  *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
  * Proves: the address, block and sat pages list the cats cat21-ord indexed there, say so when there
  *         are none, and link to each other and to the cat detail page; browser errors on our pages
@@ -24,7 +24,10 @@ import {
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
   SeededListedCat,
+  regtestServiceUrls,
 } from 'ordpool-sdk/e2e';
+
+import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 
 /**
  * The gallery pages read cat21-ord directly (`/address/<a>`,
@@ -37,9 +40,9 @@ import {
  * e2e lane launches through launchWalletContext, which keeps it off the network.
  */
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:9998';
-const CAT21_ORD_URL = process.env.REGTEST_ORD_URL ?? 'http://localhost:8080';
+const FRONTEND_URL = regtestServiceUrls().app;
+const BACKEND_URL = regtestServiceUrls().appBackend;
+const CAT21_ORD_URL = regtestServiceUrls().ord;
 
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
 const EXT_PATH = process.env.CAT21WALLET_EXT_PATH ?? path.join(SDK_E2E_DIR, 'extensions/cat21wallet');
@@ -96,7 +99,7 @@ test.beforeAll(async () => {
   await onboardCat21Wallet(primer, extensionId);
   await closeCat21WalletPage(primer);
 
-  const owner = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
+  const owner = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
   const cat = await seedListedCat({ ordinalsAddress: owner });
   const blockHash = (JSON.parse(rpc('getrawtransaction', cat.txid, '1')) as { blockhash: string }).blockhash;
   const blockHeight = (JSON.parse(rpc('getblockheader', blockHash)) as { height: number }).height;
@@ -146,7 +149,7 @@ test.describe('Address page', () => {
   });
 
   test('says so when an address holds no cats', async () => {
-    const empty = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
+    const empty = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
     const page = await context.newPage();
     await page.goto(`${FRONTEND_URL}/address/${empty}`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('gallery-empty')).toHaveText('This address has no cats.');

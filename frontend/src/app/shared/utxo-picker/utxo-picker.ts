@@ -66,14 +66,13 @@ export interface UtxoDisplayRow {
  * The consumer owns:
  *   - the *input* list of candidate UTXOs (from an orchestrator's
  *     `fundingUtxos$` observable),
- *   - the *output* selection (bubble via `selectionChange` and store
- *     back in the orchestrator's `selectedFundingUtxo` signal).
+ *   - the *output* selection (bubble via `selectionChange` into the
+ *     orchestrator's explicit pick), and the coin marked ✓ (`selected`,
+ *     the orchestrator's `resolvedFundingUtxo`).
  *
  * The picker owns:
  *   - triggering `scanner.autoScan` on every input change,
  *   - annotating each UTXO with its bucket,
- *   - the auto-pick decision (`clean → unscanned → failed`, never
- *     `assets`) when the consumer hasn't selected one,
  *   - the "Scan" affordance for above-threshold UTXOs,
  *   - the "Use anyway" affordance for asset-carrying rows.
  */
@@ -92,8 +91,12 @@ export class UtxoPicker {
   /** Candidate funding UTXOs to enumerate + scan. */
   readonly utxos = input.required<readonly TxnOutput[]>();
 
-  /** Consumer's currently-selected UTXO. Null = auto-pick. */
-  readonly selected = input<TxnOutput | null>(null);
+  /**
+   * The coin the action will spend, marked ✓: the orchestrator snapshot's
+   * `resolvedFundingUtxo`, which is the person's pick while it still covers and
+   * the SDK's recommendation otherwise. Null = nothing will be spent yet.
+   */
+  readonly selected = input<{ txid: string; vout: number } | null>(null);
 
   /**
    * Per-coin fee, keyed by `outpointKey`, from the orchestrator's
@@ -153,9 +156,8 @@ export class UtxoPicker {
       });
   });
 
-  /** Row corresponding to the consumer's `selected` signal. Null when
-   *  the consumer hasn't picked one; the effect below auto-picks in
-   *  that case. */
+  /** Row of the coin `selected` names. Null when nothing will be spent, or
+   *  the coin is not among `utxos`. */
   readonly selectedRow = computed<UtxoPickerRow | null>(() => {
     const s = this.selected();
     if (!s) return null;

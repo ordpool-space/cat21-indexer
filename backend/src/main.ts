@@ -8,6 +8,7 @@ import helmet from '@fastify/helmet';
 import { ConfigService } from '@nestjs/config';
 import * as sharp from 'sharp';
 import { AppModule } from './app.module';
+import { corsAllowedOrigins } from './cors-origins';
 import { NoStoreOnErrorFilter } from './modules/shared/no-store-on-error.filter';
 import { setupSwagger } from './swagger';
 
@@ -32,20 +33,11 @@ async function bootstrap() {
     contentSecurityPolicy: false,
   });
 
-  // Explicit origin allowlist — wildcard CORS combined with the
-  // capability-mutating routes (POST /listings, DELETE /listings,
-  // DELETE /bids) means a hostile web page can drive any visitor's
-  // browser to make cross-origin requests to our backend as that
-  // visitor. Session tokens (X-Cat21-Session-*) authenticate the
-  // action, so the practical damage window is narrow — but there's
-  // no reason to allow drive-by cross-origin from arbitrary sites.
-  const allowedOrigins = [
-    'https://cat21.space',
-    'https://ordpool.space',
-    // Dev origins for `ng serve` on the frontend.
-    'http://localhost:4200',
-    'http://localhost:4221',
-  ];
+  // Exact-match origin allowlist (see cors-origins.ts): the production sites,
+  // the dev servers, and CORS_EXTRA_ORIGINS when a deployment serves the
+  // frontend elsewhere.
+  const cfg = app.get(ConfigService);
+  const allowedOrigins = corsAllowedOrigins(cfg.get<string>('CORS_EXTRA_ORIGINS'));
   app.enableCors({
     origin: (origin, cb) => {
       // Same-origin, curl / Postman / server-to-server requests carry
@@ -81,7 +73,6 @@ async function bootstrap() {
 
   setupSwagger(app);
 
-  const cfg = app.get(ConfigService);
   const port = cfg.get<number>('PORT', 3333);
   const host = cfg.get<string>('HOST', '0.0.0.0');
   await app.listen(port, host);

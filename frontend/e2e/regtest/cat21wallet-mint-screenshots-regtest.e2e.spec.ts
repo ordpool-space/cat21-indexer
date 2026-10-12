@@ -1,9 +1,9 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
- *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Real:   built frontend (E2E_APP_PORT), bitcoind regtest, ordpool-electrs, cat21-ord (E2E_ORD_HOST_PORT), ord-stock (E2E_ORD_STOCK_HOST_PORT),
+ *         cat21-indexer backend (E2E_APP_BACKEND_PORT, synced from cat21-ord), cat21-wallet (.crx)
  * Faked:
- *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         /api/v1/fees/recommended -> fees-electrs-stub on E2E_FEES_STUB_PORT (ordpool-sdk/e2e/regtest; static
  *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
  * Proves: the mint notice, safe and over-pay funding states render (visibility asserted) and are
  *         captured as screenshots; browser errors on our pages fail the test
@@ -24,6 +24,7 @@ import {
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
+  regtestServiceUrls,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -52,7 +53,7 @@ import {
  * (mint-dirtycoin, mint-assetnotice).
  */
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
+const FRONTEND_URL = regtestServiceUrls().app;
 const MINT_URL = `${FRONTEND_URL}/dashboard/mint`;
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
 const EXT_PATH = process.env.CAT21WALLET_EXT_PATH ?? path.join(SDK_E2E_DIR, 'extensions/cat21wallet');

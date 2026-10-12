@@ -1,9 +1,9 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
- *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Real:   built frontend (E2E_APP_PORT), bitcoind regtest, ordpool-electrs, cat21-ord (E2E_ORD_HOST_PORT), ord-stock (E2E_ORD_STOCK_HOST_PORT),
+ *         cat21-indexer backend (E2E_APP_BACKEND_PORT, synced from cat21-ord), cat21-wallet (.crx)
  * Faked:
- *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         /api/v1/fees/recommended -> fees-electrs-stub on E2E_FEES_STUB_PORT (ordpool-sdk/e2e/regtest; static
  *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
  * Proves: with a clean coin beside an inscription, cat, rune or rare-sat coin, the transfer funds from
  *         the clean coin and the dirty coin is still unspent on-chain
@@ -29,7 +29,10 @@ import {
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
+  regtestServiceUrls,
 } from 'ordpool-sdk/e2e';
+
+import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 
 /**
  * E2E (regtest) — cat21.space TRANSFER funding guard, dirty-coin protection, END
@@ -67,7 +70,7 @@ import {
  * Needs: real cat21-wallet binary + full regtest stack.
  */
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
+const FRONTEND_URL = regtestServiceUrls().app;
 const MINT_PATH = '/dashboard/mint';
 const TRANSFER_PATH = '/dashboard/transfer';
 
@@ -199,7 +202,7 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): P
 
   // ─── 4. Drive transfer via the ?catTxid override (deterministic cat
   //        selection), fill recipient + fee. ────────────────────────
-  const recipient = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
+  const recipient = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
   expect(recipient).toMatch(/^bcrt1p/);
   const transferUrl = new URL(`${FRONTEND_URL}${TRANSFER_PATH}`);
   transferUrl.searchParams.set('catTxid', listed.txid);
@@ -237,7 +240,7 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): P
   const txout = rpc('gettxout', dirty.txid, String(dirty.vout)).trim();
   expect(txout.length, `dirty ${asset} coin ${dirty.outpoint} was SPENT — the transfer funding guard did not steer away from it`).toBeGreaterThan(0);
   const transferRaw = JSON.parse(
-    rpc('-rpcwallet=ordpool-e2e', 'getrawtransaction', transferTxid, '2'),
+    rpc(RPC_WALLET_ARG, 'getrawtransaction', transferTxid, '2'),
   ) as { vin: Array<{ txid: string; vout: number }> };
   const spentDirty = transferRaw.vin.some((v) => v.txid === dirty.txid && v.vout === dirty.vout);
   expect(spentDirty, `transfer tx spent the dirty ${asset} coin ${dirty.outpoint}`).toBe(false);

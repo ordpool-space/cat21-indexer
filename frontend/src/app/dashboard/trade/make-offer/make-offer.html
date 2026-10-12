@@ -298,7 +298,13 @@
           <app-funding-asset-list [assets]="assets" testidPrefix="make-offer-asset-notice" />
         </div>
       }
-      <details [open]="buyerFundingExpertRequired() || buyerAssetNotice()">
+      @if (droppedSelection(); as dropped) {
+        <p class="alert alert-warning small" role="status" data-testid="make-offer-dropped-selection"
+           [attr.data-reason]="dropped.reason">
+          <app-dropped-selection-notice [dropped]="dropped" [feeRate]="feeRate()" />
+        </p>
+      }
+      <details [open]="buyerFundingExpertRequired() || buyerAssetNotice() || !!droppedSelection()">
         <summary class="make-offer-section-heading" style="cursor: pointer;">
           Funding source <small class="text-muted">— we auto-pick the safest; expand to review or override</small>
         </summary>
@@ -311,7 +317,7 @@
         </p>
         <app-utxo-picker
           [utxos]="fundingUtxos()"
-          [selected]="selectedFundingUtxo()"
+          [selected]="resolvedFundingUtxo()"
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
           [minScanValueSat]="fundingRequirementSats()"
@@ -356,6 +362,12 @@
             <div class="make-offer-summary-row" data-testid="make-offer-seller-receives">
               <span class="lbl">Seller receives</span>
               <span class="val">{{ sellerGets | number }} sat <small class="text-muted">(price + cat value)</small></span>
+            </div>
+          }
+          @if (resolvedFundingUtxo(); as funding) {
+            <div class="make-offer-summary-row">
+              <span class="lbl">Funding UTXO</span>
+              <code class="val" data-testid="make-offer-summary-funding">{{ funding.txid }}:{{ funding.vout }}</code>
             </div>
           }
           <div class="make-offer-summary-row">

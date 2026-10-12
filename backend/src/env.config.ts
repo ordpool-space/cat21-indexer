@@ -36,6 +36,15 @@ export class EnvironmentVariables {
    * Prod uses `https://api.ordpool.space/api` (ordpool-backend's
    * transparent electrs proxy on happysrv). Dev + regtest override.
    */
+  /**
+   * Comma-separated exact origins allowed cross-origin on top of the
+   * production and dev-server defaults (`cors-origins.ts`). Unset in
+   * production; a regtest lane sets the origin it serves the frontend on.
+   */
+  @IsOptional()
+  @IsString()
+  CORS_EXTRA_ORIGINS: string = '';
+
   @IsString()
   ELECTRS_API_URL: string = 'https://api.ordpool.space/api';
 

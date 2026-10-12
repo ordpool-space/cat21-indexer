@@ -1,9 +1,9 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
- *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Real:   built frontend (E2E_APP_PORT), bitcoind regtest, ordpool-electrs, cat21-ord (E2E_ORD_HOST_PORT), ord-stock (E2E_ORD_STOCK_HOST_PORT),
+ *         cat21-indexer backend (E2E_APP_BACKEND_PORT, synced from cat21-ord), cat21-wallet (.crx)
  * Faked:
- *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         /api/v1/fees/recommended -> fees-electrs-stub on E2E_FEES_STUB_PORT (ordpool-sdk/e2e/regtest; static
  *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
  * Proves: the orderbook, reached by its nav link, shows the empty book and then the listing a seller
  *         published from the Sell modal, and its Buy button opens make-offer with the listing's
@@ -30,7 +30,10 @@ import {
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
+  regtestServiceUrls,
 } from 'ordpool-sdk/e2e';
+
+import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 import { buildCat21BuyOfferPsbt, KnownOrdinalWalletType, Network } from 'ordpool-sdk/core';
 
 /**
@@ -47,8 +50,8 @@ import { buildCat21BuyOfferPsbt, KnownOrdinalWalletType, Network } from 'ordpool
  * bids are posted.
  */
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:9998';
+const FRONTEND_URL = regtestServiceUrls().app;
+const BACKEND_URL = regtestServiceUrls().appBackend;
 const MINT_PATH = '/dashboard/mint';
 
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
@@ -116,9 +119,9 @@ async function openOrderbookViaNav(page: Page): Promise<void> {
  * backend. Returns the bid the backend stored.
  */
 async function postRealBid(cat: SeededListedCat, bidSats: number): Promise<{ id: string; bidSats: number }> {
-  const buyerPaymentAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
-  const buyerReceiveAddress = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
-  const fundTxid = rpc('-rpcwallet=ordpool-e2e', 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
+  const buyerPaymentAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
+  const buyerReceiveAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
+  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
   await waitForElectrsSync(mineBlocks(1));
 
   type RawTx = { vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }> };
@@ -154,7 +157,7 @@ async function postRealBid(cat: SeededListedCat, bidSats: number): Promise<{ id:
     feeSats: 2_000,
   });
   const signed = JSON.parse(rpc(
-    '-rpcwallet=ordpool-e2e', '-named', 'walletprocesspsbt',
+    RPC_WALLET_ARG, '-named', 'walletprocesspsbt',
     `psbt=${Buffer.from(built.psbt).toString('base64')}`, 'sign=true', 'finalize=false',
   )) as { psbt: string };
 

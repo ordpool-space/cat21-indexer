@@ -1,9 +1,9 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
- *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Real:   built frontend (E2E_APP_PORT), bitcoind regtest, ordpool-electrs, cat21-ord (E2E_ORD_HOST_PORT), ord-stock (E2E_ORD_STOCK_HOST_PORT),
+ *         cat21-indexer backend (E2E_APP_BACKEND_PORT, synced from cat21-ord), cat21-wallet (.crx)
  * Faked:
- *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         /api/v1/fees/recommended -> fees-electrs-stub on E2E_FEES_STUB_PORT (ordpool-sdk/e2e/regtest; static
  *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
  * Proves: a dirty-only funding pool on a separate-address wallet renders the transfer and make-offer
  *         asset notices naming the inscription with the CTA enabled, and the transfer picker shows the
@@ -25,7 +25,10 @@ import {
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
+  regtestServiceUrls,
 } from 'ordpool-sdk/e2e';
+
+import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
 /**
@@ -50,8 +53,8 @@ import { measuredTextContrast } from './lib/measured-text-contrast';
  * Needs: real cat21-wallet binary + full regtest stack.
  */
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:9998';
+const FRONTEND_URL = regtestServiceUrls().app;
+const BACKEND_URL = regtestServiceUrls().appBackend;
 const MINT_PATH = '/dashboard/mint';
 const TRANSFER_PATH = '/dashboard/transfer';
 const MAKE_OFFER_PATH = '/dashboard/trade/make';
@@ -125,7 +128,7 @@ test.beforeAll(async () => {
   }
 
   // NO `/output` mock — the funding scan must hit the real ords the workflow
-  // wired in (stock :8081 for inscriptions, cat21-ord :8080 for cats).
+  // wired in (stock ord for inscriptions, cat21-ord for cats).
   context = await launchWalletContext({ wallet: 'cat21wallet', extensionPath: EXT_PATH });
   // The wallet's vendor backends are answered locally or aborted, and its
   // cat21-ord reads go to the regtest cat21-ord.
@@ -182,7 +185,7 @@ async function runTransferNoticeCell(): Promise<void> {
     console.log(`[${tag}] dirty inscription ${sats}sat ${d.outpoint} assetId=${d.assetId}`);
   }
 
-  const recipient = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32m').trim();
+  const recipient = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
   expect(recipient).toMatch(/^bcrt1p/);
   const transferUrl = new URL(`${FRONTEND_URL}${TRANSFER_PATH}`);
   transferUrl.searchParams.set('catTxid', listed.txid);
@@ -270,8 +273,8 @@ async function runMakeOfferNoticeCell(): Promise<void> {
   const dirty = await seedDirtyCoin({ asset: 'inscription', address: buyerPayment, valueSats: DIRTY_SATS });
   console.log(`[${tag}] dirty inscription coin ${dirty.outpoint} value=${dirty.value} assetId=${dirty.assetId}`);
 
-  const O = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
-  const P = rpc('-rpcwallet=ordpool-e2e', 'getnewaddress', '', 'bech32').trim();
+  const O = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
+  const P = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
   const listed = await seedListedCat({ ordinalsAddress: O, valueSats: CAT_VALUE });
   await waitForBackendCat(listed.catNumber);
 

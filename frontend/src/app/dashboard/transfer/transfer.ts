@@ -23,6 +23,7 @@ import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
+import { DroppedSelectionNotice } from '../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-list';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
@@ -36,7 +37,7 @@ const TXID_RE = /^[0-9a-f]{64}$/i;
   selector: 'app-transfer',
   templateUrl: './transfer.html',
   styleUrl: './transfer.scss',
-  imports: [DecimalPipe, FeesPicker, UtxoPicker, WalletConnect, FundingAssetList],
+  imports: [DecimalPipe, FeesPicker, UtxoPicker, WalletConnect, FundingAssetList, DroppedSelectionNotice],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Transfer {
@@ -115,7 +116,23 @@ export class Transfer {
   readonly feeRate = computed(() => this.snap().feeRate);
   readonly catUtxo = computed(() => this.snap().catUtxo);
   readonly recipientAddress = computed(() => this.snap().recipientAddress);
-  readonly selectedFundingUtxo = computed(() => this.snap().selectedFundingUtxo);
+
+  /**
+   * The coin the transfer spends: the person's pick while it still covers, the
+   * SDK's recommendation otherwise. Read from the snapshot, never matched up
+   * locally, so the coin shown is the coin `transfer()` spends.
+   */
+  readonly resolvedFundingUtxo = computed(() => this.snap().resolvedFundingUtxo);
+
+  /**
+   * The verdict that goes with `resolvedFundingUtxo`: `scanning` while a
+   * recompute is in flight, `null` after a failed one. The CTA proceeds only on
+   * `ready` and `asset-notice`.
+   */
+  readonly resolvedFundingStatus = computed(() => this.snap().resolvedFundingStatus);
+
+  /** Set when the coin the person picked is not the coin the transfer spends, with the reason. */
+  readonly droppedSelection = computed(() => this.snap().droppedSelection);
 
   /**
    * The SDK's safe-auto funding recommendation. `expert-required` means no
@@ -267,7 +284,8 @@ export class Transfer {
     if (!this.recipientAddress()) return false;
     if (this.recipientStatus() !== 'valid') return false;
     if (!this.feeRate()) return false;
-    return !!this.simulation() && !this.insufficient();
+    const status = this.resolvedFundingStatus();
+    return !!this.resolvedFundingUtxo() && (status === 'ready' || status === 'asset-notice');
   });
 
   /**

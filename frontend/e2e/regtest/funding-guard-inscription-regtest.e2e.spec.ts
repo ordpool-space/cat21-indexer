@@ -1,8 +1,8 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
- *         cat21-indexer backend (:9998), Xverse 2.3.2 (.crx, seeded user-data-dir)
- * Faked:  /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ * Real:   built frontend (E2E_APP_PORT), bitcoind regtest, ordpool-electrs, cat21-ord (E2E_ORD_HOST_PORT), ord-stock (E2E_ORD_STOCK_HOST_PORT),
+ *         cat21-indexer backend (E2E_APP_BACKEND_PORT), Xverse 2.3.2 (.crx, seeded user-data-dir)
+ * Faked:  /api/v1/fees/recommended -> fees-electrs-stub on E2E_FEES_STUB_PORT (ordpool-sdk/e2e/regtest; static
  *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
  *         Xverse's vendor backends -> installXverseOfflineRoutes (ordpool-sdk/e2e, captured)
  * Proves: an inscribed funding coin is scanned against the real stock ord, lands in the assets bucket
@@ -21,6 +21,7 @@ import {
   launchWalletContext,
   unlockXverse,
   approveXverseConnect,
+  regtestServiceUrls,
 } from 'ordpool-sdk/e2e';
 
 /**
@@ -38,7 +39,7 @@ import {
  *     genuine funding candidate the scan is forced to rule on (a 546-sat coin
  *     might never be considered, and the guard would never be asked).
  *   - The scan reads the REAL local ords the workflow wires in: stock ord
- *     (:8081) for the `inscriptions` field, cat21-ord (:8080) for cats. No mock.
+ *     for the `inscriptions` field, cat21-ord for cats. No mock.
  *   - With a working guard the coin lands in the unsafe bucket: the row shows
  *     "⚠ asset found" and offers "Use anyway" instead of auto-selecting it, and
  *     the asset-notice panel names the inscription. (Xverse keeps a separate
@@ -54,18 +55,18 @@ import {
  * Only the inscription line depends on the stock ord's `inscriptions` field.
  *
  * THE MUTATION CHECK (run on a throwaway branch, not in CI): point the scanner's
- * `ordApiUrl` at :8080 (cat21-ord) instead of :8081 (stock ord). cat21-ord runs
+ * `ordApiUrl` at cat21-ord instead of stock ord. cat21-ord runs
  * --index-cat21 and has no `inscriptions` field, so `content.inscriptionIds` is
  * empty, the "Inscription" line never renders, and the id assertion goes RED —
  * while the badge and "Use anyway" stay green on the rare sat. Verified: at
- * :8081 GREEN on the id, at :8080 RED on the id. Deleting the stub only makes
+ * stock ord GREEN on the id, at cat21-ord RED on the id. Deleting the stub only makes
  * the scan run; the red under the mutation is what proves the guard reads the
  * inscription field.
  *
  * Needs: real Xverse binary + regtest stack.
  */
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
+const FRONTEND_URL = regtestServiceUrls().app;
 const MINT_PATH = '/dashboard/mint';
 
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
@@ -107,7 +108,7 @@ test.beforeAll(async () => {
   }
 
   // NO `/output` mock — the whole point of this spec is that the scan hits the
-  // real local ords (stock :8081 for inscriptions, cat21-ord :8080 for cats)
+  // real local ords (stock ord for inscriptions, cat21-ord for cats)
   // that the workflow wired into the frontend config.
   context = await launchWalletContext({
     wallet: 'xverse',
@@ -206,7 +207,7 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
 
   // ─── 7. THE PROOF: the inscription-specific line, full id ────────
   // Populated only from content.inscriptionIds, which only the stock ord's
-  // `inscriptions` field produces. Under the :8080 mutation this is empty and
+  // `inscriptions` field produces. Under the cat21-ord mutation this is empty and
   // the assertion goes RED, while the badge + override above stay green on the
   // coin's rare sat. That red is the guard's proof.
   await expect(notice).toContainText('Inscription');

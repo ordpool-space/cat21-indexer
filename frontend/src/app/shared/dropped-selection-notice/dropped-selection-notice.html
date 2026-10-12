@@ -1,0 +1,8 @@
+@switch (dropped().reason) {
+  @case ('gone') {
+    <span data-testid="dropped-selection-text">The coin you picked, <code>{{ dropped().txid }}:{{ dropped().vout }}</code>, is no longer available. Pick another coin below.</span>
+  }
+  @case ('below-requirement') {
+    <span data-testid="dropped-selection-text">The coin you picked, <code>{{ dropped().txid }}:{{ dropped().vout }}</code>, no longer covers this transaction at {{ rateText() }}. Lower the fee rate, or pick another coin below.</span>
+  }
+}

@@ -11,8 +11,8 @@
  *         E5 only: one snapshot pushed through the component's own subscription, the real orchestrator's
  *         with fundingRecommendation replaced by a coin that has no row (a state the SDK does not produce)
  * Proves: the mint page renders each orchestrator state (no wallet, loading, utxo error vs mint error, funding
- *         states, success), adopts the SDK recommendation (auto and asset-notice) and keeps a deliberate pick,
- *         and wires its controls
+ *         states, success), spends the SDK's resolved coin (the recommendation on auto and asset-notice, a
+ *         deliberate pick while it covers), and wires its controls
  */
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
@@ -199,7 +199,8 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     await settle();
   }
 
-  const selected = () => component.selectedUtxo();
+  /** The coin the mint spends, as the page reads it (the snapshot's `resolvedFundingUtxo`). */
+  const selected = () => component.resolvedFundingUtxo();
 
   beforeEach(async () => {
     await configure();
@@ -310,12 +311,13 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
   });
 
   // -------------------------------------------------------------------
-  // E. Auto-pick ADOPTS the SDK recommendation ('auto' and 'asset-notice'),
-  //    never a raw value-based pre-pick, and keeps only a deliberate pick.
+  // E. The coin the mint spends is the SDK's resolution: the recommendation
+  //    on 'auto' and 'asset-notice', never a raw value-based pre-pick, and a
+  //    deliberate pick while it still covers.
   // -------------------------------------------------------------------
 
-  describe('E. auto-pick ADOPTS the SDK recommendation (no raw value-based pre-pick)', () => {
-    it('E1: adopts the SDK-recommended clean coin, NOT the largest by value', async () => {
+  describe('E. the spend coin is the SDK resolution (no raw value-based pre-pick)', () => {
+    it('E1: spends the SDK-recommended clean coin, NOT the largest by value', async () => {
       // The SDK best-fit recommends the SMALLER covering coin; a raw
       // value-based pre-pick would take the 80k.
       await ready([
@@ -337,10 +339,10 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(component.canMint()).toBe(false);
     });
 
-    it('E2b: a dirty coin covers on a separate-address wallet → SDK derives asset-notice, AUTO-ADOPTS, CTA enabled', async () => {
+    it('E2b: a dirty coin covers on a separate-address wallet → SDK derives asset-notice, spends it, CTA enabled', async () => {
       // The separate-address branch: no clean coin covers, a dirty one does,
-      // so the SDK NOTICEs and returns the coin. The component must adopt it,
-      // or the notice (nested in the selected-row block) never renders.
+      // so the SDK NOTICEs and resolves to the coin. The page reads it, or the
+      // notice (nested in the selected-row block) never renders.
       const c = coin(80_000);
       await ready([{ u: c, scan: assetsScan(c) }], testWallet());
       expect(component.assetNotice()).toBe(true);
@@ -402,7 +404,7 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(selected()!.value).toBe(80_000);
     });
 
-    it('E7: user pick disappears from the list → re-adopts the current recommendation', async () => {
+    it('E7: user pick disappears from the list → spends the current recommendation, the drop is named', async () => {
       const gone = coin(20_000);
       await ready([
         { u: coin(80_000), scan: { kind: 'scanned-clean' } },
@@ -411,9 +413,10 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       await userPick(gone);
       await pushRows([{ u: coin(80_000), scan: { kind: 'scanned-clean' } }]);
       expect(selected()!.value).toBe(80_000);
+      expect(component.droppedSelection()).toEqual({ txid: gone.txid, vout: gone.vout, reason: 'gone' });
     });
 
-    it('E8: empty row list → selectedUtxo cleared', async () => {
+    it('E8: empty row list → no spend coin', async () => {
       await ready([{ u: coin(80_000), scan: { kind: 'scanned-clean' } }]);
       expect(selected()).not.toBeNull();
       await pushRows([]);
@@ -421,10 +424,10 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(selected()).toBeNull();
     });
 
-    it('E9: fee-rate change RE-ADOPTS the recommendation, never keeps a stale AUTO-pick', async () => {
+    it('E9: fee-rate change follows the recommendation when nothing was picked', async () => {
       // At rate 5 the SDK recommends the smallest headroom coin (13 689); at
       // rate 100 that coin is a dust-cliff coin and the SDK recommends a real
-      // headroom coin. The auto-pick follows; only an explicit pick survives (E6).
+      // headroom coin. The spend coin follows; only an explicit pick survives (E6).
       await ready([
         { u: coin(13_689), scan: { kind: 'scanned-clean' } },
         { u: coin(99_301), scan: { kind: 'scanned-clean' } },
@@ -516,9 +519,9 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
       expect(component.canMint()).toBe(false);
     });
 
-    it('H4: selectedUtxo null → false', async () => {
+    it('H4: no spend coin → false', async () => {
       await ready([{ u: coin(50_000), scan: assetsScan(coin(50_000)) }], oneAddressTestWallet());
-      // auto-pick refuses assets-only on a one-address wallet, so selectedUtxo stays null
+      // the SDK refuses assets-only on a one-address wallet, so no coin is spent
       expect(component.viableRows().length).toBe(1);
       expect(selected()).toBeNull();
       expect(component.canMint()).toBe(false);
@@ -676,11 +679,11 @@ describe('Mint component (cat21.space /dashboard/mint)', () => {
     it('L2: user can explicitly pick an assets-bearing row (override path)', async () => {
       const u = coin(5_000);
       await ready([{ u, scan: assetsScan(u) }], oneAddressTestWallet());
-      // auto-pick refused → selectedUtxo null
+      // the SDK refuses the asset coin on its own → no spend coin
       expect(selected()).toBeNull();
       component.selectUtxo({ utxo: u, simulation: simulation(), scan: assetsScan(u), bucket: 'assets' });
       await settle();
-      expect(selected()).toEqual(u);
+      expect({ txid: selected()!.txid, vout: selected()!.vout, bucket: selected()!.bucket }).toEqual({ txid: u.txid, vout: u.vout, bucket: 'assets' });
       expect(component.selectedRow()!.bucket).toBe('assets');
     });
   });

@@ -1,9 +1,11 @@
+import { stackUrl } from 'ordpool-sdk/stack-ports';
+
 import { OrdClientService } from './ord-client.service';
 
 /**
  * REAL integration test — NO MOCK. Runs the ord client against a live regtest
- * cat21-ord (from ordpool-sdk/e2e/docker-compose.regtest.yml, default
- * http://127.0.0.1:8080). Runs only in the regtest lane
+ * cat21-ord (the SDK's consumer-environment stack, on the stack slot's
+ * `E2E_ORD_HOST_PORT`). Runs only in the regtest lane
  * (`npm run test:regtest`), never the pure-unit `npm test`.
  *
  * Why this exists: `getCatsAtOutput` shipped broken and green because its only
@@ -13,7 +15,7 @@ import { OrdClientService } from './ord-client.service';
  * A mock can never catch a wrong-contract bug; only a call to the real
  * dependency can. This is that call.
  */
-const ORD_API_URL = process.env.ORD_API_URL ?? 'http://127.0.0.1:8080';
+const ORD_API_URL = process.env.ORD_API_URL ?? stackUrl('ord');
 
 function realService(): OrdClientService {
   // Minimal ConfigService stub: the ONLY thing mocked is config lookup; the

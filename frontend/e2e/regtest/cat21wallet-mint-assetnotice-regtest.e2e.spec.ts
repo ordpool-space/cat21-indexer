@@ -1,9 +1,9 @@
 /**
  * @test-kind e2e
- * Real:   built frontend (:4221), bitcoind regtest, ordpool-electrs, cat21-ord (:8080), ord-stock (:8081),
- *         cat21-indexer backend (:9998, synced from cat21-ord :8080), cat21-wallet (.crx)
+ * Real:   built frontend (E2E_APP_PORT), bitcoind regtest, ordpool-electrs, cat21-ord (E2E_ORD_HOST_PORT), ord-stock (E2E_ORD_STOCK_HOST_PORT),
+ *         cat21-indexer backend (E2E_APP_BACKEND_PORT, synced from cat21-ord), cat21-wallet (.crx)
  * Faked:
- *         /api/v1/fees/recommended -> fees-electrs-stub on :8999 (ordpool-sdk/e2e/regtest; static
+ *         /api/v1/fees/recommended -> fees-electrs-stub on E2E_FEES_STUB_PORT (ordpool-sdk/e2e/regtest; static
  *         DEFAULT_FEES written in the stub, not captured). Every other /api/* path is proxied to the real electrs.
  * Proves: for an inscription, cat, rune and rare-sat dirty-only pool, the mint page renders
  *         mint-asset-notice naming the seeded asset id with the mint CTA enabled
@@ -24,6 +24,7 @@ import {
   installLeatherOfflineRoutes,
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
+  regtestServiceUrls,
 } from 'ordpool-sdk/e2e';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
@@ -65,7 +66,7 @@ import { measuredTextContrast } from './lib/measured-text-contrast';
  * Needs: real cat21-wallet binary + full regtest stack.
  */
 
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:4221';
+const FRONTEND_URL = regtestServiceUrls().app;
 const MINT_PATH = '/dashboard/mint';
 
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
@@ -118,7 +119,7 @@ test.beforeAll(async () => {
   }
 
   // NO `/output` mock — the funding scan must hit the real ords the workflow
-  // wired in (stock :8081 for inscriptions/runes/rare sats, cat21-ord :8080 for cats).
+  // wired in (stock ord for inscriptions/runes/rare sats, cat21-ord for cats).
   context = await launchWalletContext({ wallet: 'cat21wallet', extensionPath: EXT_PATH });
   // The wallet's vendor backends are answered locally or aborted, and its
   // cat21-ord reads go to the regtest cat21-ord.

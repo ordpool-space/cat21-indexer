@@ -18,6 +18,7 @@ on:
       - 'backend/*.json'
       - 'backend/src/**'
       - 'backend/migrations/**'
+      - 'scripts/e2e-lane.sh'
       - '.github/workflows/e2e-regtest-mint-cat21wallet.yml'
   pull_request:
     paths:
@@ -29,6 +30,7 @@ on:
       - 'backend/*.json'
       - 'backend/src/**'
       - 'backend/migrations/**'
+      - 'scripts/e2e-lane.sh'
       - '.github/workflows/e2e-regtest-mint-cat21wallet.yml'
 
 permissions:
@@ -43,11 +45,6 @@ jobs:
     name: Regtest cat21.space mint via CAT-21 wallet
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env:
-      # ordpool-sdk 6f4d6a7 (c790db7 onward) pins each compose stack to its own
-      # project, so the SDK default `ordpool-e2e-bitcoind` no longer exists —
-      # the consumer-environment's is the only bitcoind. rpc() must target it.
-      REGTEST_BITCOIND_CONTAINER: ordpool-e2e-consumer-bitcoind
     steps:
       - name: Checkout cat21-indexer
         uses: actions/checkout@v4
@@ -61,7 +58,22 @@ jobs:
 
       - name: Install frontend deps (brings ordpool-sdk into node_modules)
         working-directory: frontend
+        # cat21-indexer's lockfile pins @angular/localize@21.2.17, which
+        # strict-peers compiler@21.2.17 against the pinned 21.2.4, so plain
+        # `npm ci` ERESOLVEs. --legacy-peer-deps loses nothing here: sats-connect
+        # and @popperjs/core are direct deps of frontend/package.json.
         run: npm ci --legacy-peer-deps
+
+      - name: Install indexer backend deps
+        working-directory: backend
+        run: npm ci
+
+      # The stack's slot (ordpool-sdk e2e/stack-slots.ts): its host ports,
+      # E2E_PREFIX and container names, exported to every later step. A runner
+      # holds one stack, so this is slot 0. Held by the runner's worker process
+      # ($PPID of a step), which lives for the job.
+      - name: Acquire the regtest stack slot
+        run: node frontend/node_modules/ordpool-sdk/scripts/e2e-slots.mjs acquire --kind consumer --owner-pid "$PPID" --label "regtest-mint-cat21wallet" --format github | tee -a "$GITHUB_ENV"
 
       # ordpool-electrs, cat21-ord and cat21-wallet build from the shas this SDK
       # commit pins (e2e/build-pins.env), read from the installed package so they
@@ -70,12 +82,8 @@ jobs:
       - name: Read the SDK's build pins
         run: grep -E '^[A-Z0-9_]+=' frontend/node_modules/ordpool-sdk/e2e/build-pins.env >> "$GITHUB_ENV"
 
-      - name: Make SDK consumer-environment scripts executable
-        run: chmod +x frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh
-
-      # OUR electrs. consumer-environment.yml builds the electrs service
-      # from the ordpool-electrs fork (not the upstream mempool/electrs
-      # image); ELECTRS_SRC points its build context at this checkout.
+      # OUR electrs: the consumer-environment compose builds it from the
+      # ordpool-electrs fork; ELECTRS_SRC points its build context here.
       - name: Checkout ordpool-electrs (for the electrs container)
         uses: actions/checkout@v4
         with:
@@ -83,75 +91,31 @@ jobs:
           ref: ${{ env.ORDPOOL_ELECTRS_SHA }}
           path: ordpool-electrs
 
-      # cat21-ord — the REAL cat index behind the transfer page's
-      # holdings picker (CatUtxoLookupService via environment.ordExplorer).
-      # The picker e2e proves ord-driven UI against this index instead of
-      # a URL override.
-      - name: Checkout cat21-ord (for the cat21-ord container)
+      # cat21-ord and the stock ord both build from this checkout (ORD_SRC
+      # falls back to CAT21_ORD_SRC in the compose).
+      - name: Checkout cat21-ord (for the ord containers)
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/cat21-ord
           ref: ${{ env.CAT21_ORD_SHA }}
           path: cat21-ord
 
-      # buildx gha cache: reuse the compiled electrs image across runs
-      # instead of recompiling Rust (~10 min) every run. A docker-container
-      # builder + the Actions runtime env make type=gha work; the
-      # .dockerignore excludes each checkout's volatile .git/ so the COPY
-      # layer (and the compile beneath it) is stable and cache-hits.
+      # buildx gha cache: reuse the compiled Rust images across runs. A
+      # docker-container builder + the Actions runtime env make type=gha work;
+      # the .dockerignore keeps each checkout's volatile .git/ out of the COPY
+      # layer so it cache-hits.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Export GitHub Actions runtime for the gha cache backend
         uses: crazy-max/ghaction-github-runtime@v3
 
-      - name: Stabilise the electrs + cat21-ord build contexts for layer caching
+      - name: Stabilise the Rust build contexts for layer caching
         run: |
           printf '.git\ntarget\n' > ordpool-electrs/.dockerignore
           printf '.git\ntarget\n' > cat21-ord/.dockerignore
 
-      - name: Bring up consumer-environment (bitcoind + electrs + mariadb + cat21-ord)
-        env:
-          ELECTRS_SRC: ${{ github.workspace }}/ordpool-electrs
-          CAT21_ORD_SRC: ${{ github.workspace }}/cat21-ord
-        run: |
-          frontend/node_modules/ordpool-sdk/e2e/consumer-environment-bootstrap.sh \
-            --buildx-cache \
-            --with-cat21-ord \
-            > stack.json
-          cat stack.json
-
-      - name: Wait for cat21-ord ready on :8080
-        run: |
-          for i in $(seq 1 120); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/json' http://localhost:8080/status 2>/dev/null || echo 000)
-            if [ "$code" = "200" ]; then
-              echo "cat21-ord up"; break
-            fi
-            if [ "$i" = "120" ]; then
-              echo "cat21-ord never came up (last HTTP $code)"
-              docker logs ordpool-e2e-consumer-cat21-ord --tail 100 || true
-              exit 1
-            fi
-            sleep 2
-          done
-
-      - name: Start fees + electrs HTTP shim on :8999
-        run: |
-          ELECTRS_URL=http://localhost:3010 PORT=8999 \
-            nohup node frontend/node_modules/ordpool-sdk/e2e/regtest/fees-electrs-stub.mjs > fees-stub.log 2>&1 &
-          echo $! > fees-stub.pid
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8999/healthz >/dev/null 2>&1; then
-              echo "fees-stub up"; break
-            fi
-            if [ "$i" = "30" ]; then
-              echo "fees-stub never came up"; cat fees-stub.log || true; exit 1
-            fi
-            sleep 1
-          done
-
-      # The SDK harness (bootstrap, extension staging, seed) comes from the
+      # The SDK harness (extension staging) comes from the
       # same ordpool-sdk sha the frontend's package-lock.json pins.
       - name: Read the pinned ordpool-sdk sha
         id: sdk-pin
@@ -160,7 +124,7 @@ jobs:
           echo "$sha" | grep -Eq '^[0-9a-f]{40}$' || { echo "no full ordpool-sdk sha in frontend/package-lock.json: $sha"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout ordpool-sdk (for the cat21-wallet extension + bootstrap)
+      - name: Checkout ordpool-sdk (for the wallet extension)
         uses: actions/checkout@v4
         with:
           repository: ordpool-space/ordpool-sdk
@@ -180,13 +144,10 @@ jobs:
           npm ci
           npm run build
 
-      - name: Install Playwright system deps + Chromium
+      - name: Install Playwright system deps + Chromium (sdk)
         working-directory: sdk
         run: npx playwright install --with-deps chromium
 
-      # CAT-21 wallet doesn't ship a published .crx yet — build from
-      # source in CI. cat21-wallet is a public repo; checkout works
-      # without auth.
       - name: Checkout cat21-wallet (extension source)
         uses: actions/checkout@v4
         with:
@@ -232,155 +193,38 @@ jobs:
         working-directory: sdk
         run: bash e2e/playwright/playwright-bootstrap.sh cat21wallet
 
-      # regtest-bootstrap.sh is DROPPED: consumer-environment-bootstrap.sh is a
-      # strict superset (same funder, same 101-block funding, same WIF), nothing
-      # reads regtest-bootstrap.json, and under pin 6f4d6a7's per-project stack
-      # isolation running both collides a second bitcoind on host :18443.
-
-      - name: Patch cat21Config + bitcoinNetwork for regtest
-        working-directory: frontend
-        run: |
-          sed -i \
-            -e "s|https://api\.ordpool\.space|http://localhost:8999|g" \
-            -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
-            -e "s|https://ord\.ordpool\.space|http://localhost:8999|g" \
-            -e "s|https://ord\.cat21\.space|http://localhost:8999|g" \
-            -e 's|useValue: Network\.Mainnet|useValue: Network.Regtest|' \
-            src/app/app.config.ts
-          # environment.prod.ts is what the production build bundles (the
-          # sed above only covers app.config.ts). ordExplorer feeds
-          # OrdApiService — the transfer page's holdings picker — and must
-          # hit the REAL local cat21-ord, not the fees/electrs stub and
-          # never the live prod host from CI.
-          sed -i \
-            -e "s|mempoolApiUrl: 'https://api\.ordpool\.space'|mempoolApiUrl: ''|" \
-            -e "s|https://backend2\.cat21\.space|http://localhost:9998|g" \
-            -e "s|https://ord\.cat21\.space|http://localhost:8080|g" \
-            -e "s|https://ord\.ordpool\.space|http://localhost:8999|g" \
-            src/environments/environment.prod.ts
-
-      - name: Build static frontend bundle
-        working-directory: frontend
-        run: |
-          set -o pipefail
-          npx ng build --output-path ../dist-regtest 2>&1 | tee ../build.log
-
-      - name: Locate the built browser output
-        run: |
-          for candidate in \
-              dist-regtest \
-              dist-regtest/browser \
-              $(find dist-regtest -maxdepth 3 -type d -name browser); do
-            if [ -f "$candidate/index.html" ]; then
-              BROWSER_DIR="$candidate"
-              break
-            fi
-          done
-          if [ -z "${BROWSER_DIR:-}" ]; then
-            echo "could not find any index.html under dist-regtest"
-            ls -la dist-regtest || true
-            tail -200 build.log || true
-            exit 1
-          fi
-          echo "BROWSER_DIR=$BROWSER_DIR" >> "$GITHUB_ENV"
-
-      - name: Serve the static bundle on :4221
-        run: |
-          # Dependency-free SPA server (runner-preinstalled node, zero
-          # network): npx-at-runtime proved pathological here — a cold
-          # `npx -y serve@14 --version` took ~4 minutes and the nohup'd
-          # npx still left :4221 refused past the readiness window.
-          cat > spa-server.cjs <<'EOF'
-          const http = require('http'), fs = require('fs'), path = require('path');
-          const root = path.resolve(process.argv[2]);
-          const port = Number(process.argv[3] ?? 4221);
-          const types = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', png: 'image/png', svg: 'image/svg+xml', ico: 'image/x-icon', woff2: 'font/woff2', woff: 'font/woff', txt: 'text/plain', map: 'application/json' };
-          http.createServer((req, res) => {
-            let p = path.normalize(decodeURIComponent((req.url ?? '/').split('?')[0]));
-            let f = path.join(root, p);
-            if (!f.startsWith(root) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(root, 'index.html');
-            const ext = f.split('.').pop() ?? '';
-            res.writeHead(200, { 'content-type': types[ext] ?? 'application/octet-stream' });
-            fs.createReadStream(f).pipe(res);
-          }).listen(port, () => console.log(`spa-server on :${port} root=${root}`));
-          EOF
-          nohup node spa-server.cjs "$BROWSER_DIR" 4221 > serve.log 2>&1 &
-          echo $! > serve.pid
-
-      - name: Wait for static server ready on :4221
-        run: |
-          for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4221/ 2>/dev/null || echo 000)
-            if [ "$code" = "200" ]; then
-              echo "static server up"; break
-            fi
-            if [ "$i" = "60" ]; then
-              echo "static server never came up (last HTTP $code)"; tail -200 serve.log || true; exit 1
-            fi
-            sleep 1
-          done
-
-      # Bring up the cat21-indexer backend on port 9998 (the same port
-      # the built frontend's api URL redirect points at). BACKEND_NETWORK
-      # is regtest so bids POSTed with `network: 'regtest'` pass the
-      # network-mismatch gate. DATABASE_URL points at the MariaDB the
-      # consumer-environment already provisioned; ORD_API_URL points at
-      # the real cat21-ord, so the backend syncs the cats this lane mints
-      # and checks a posted bid against the same index.
-      - name: Install indexer backend deps + build
-        working-directory: backend
-        run: |
-          npm ci
-          npm run build
-
-      - name: Bring up cat21-indexer backend on :9998 (regtest)
-        working-directory: backend
-        env:
-          PORT: '9998'
-          HOST: 127.0.0.1
-          NODE_ENV: development
-          DATABASE_URL: mysql://cat21:cat21@127.0.0.1:3306/cat21
-          ORD_API_URL: http://localhost:8080
-          ELECTRS_API_URL: http://localhost:8999
-          BACKEND_NETWORK: regtest
-          SYNC_INTERVAL_MS: '2000'
-        run: |
-          nohup node dist/main.js > indexer-backend.log 2>&1 &
-          echo $! > indexer-backend.pid
-          for i in $(seq 1 60); do
-            if curl -fsS http://localhost:9998/api/health >/dev/null 2>&1; then
-              echo "indexer backend up"; break
-            fi
-            if [ "$i" = "60" ]; then
-              echo "indexer backend never came up"; tail -100 indexer-backend.log || true; exit 1
-            fi
-            sleep 1
-          done
-
       - name: Install Playwright in the frontend tree
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Run the cat21-wallet regtest spec
-        working-directory: frontend
+      # scripts/e2e-lane.sh: the stack in this slot, the SDK's fees stub, the
+      # frontend built against the stack and served on E2E_APP_PORT, the
+      # backend on E2E_APP_BACKEND_PORT, the specs, then the net-log check
+      # (nothing left the machine). A local run executes the same script
+      # through `e2e-slots.mjs run --kind consumer`.
+      - name: Run the cat21-wallet mint lane
         env:
-          ORDPOOL_E2E_NET_LOG_DIR: ${{ github.workspace }}/net-log
+          ELECTRS_SRC: ${{ github.workspace }}/ordpool-electrs
+          CAT21_ORD_SRC: ${{ github.workspace }}/cat21-ord
+          E2E_BUILDX_CACHE: '1'
+          E2E_SDK_DIR: ${{ github.workspace }}/sdk
+          E2E_LANE_DIR: ${{ github.workspace }}/lane
           CAT21WALLET_EXT_PATH: ${{ github.workspace }}/sdk/e2e/extensions/cat21wallet
-          FRONTEND_URL: http://localhost:4221
-          # cat21-indexer backend hosts the bids marketplace API. The
-          # frontend build sed-swaps `backend2.cat21.space` → this URL,
-          # and the bid-marketplace regtest test POSTs directly to it.
-          CAT21_INDEXER_URL: http://localhost:9998
         run: |
-          xvfb-run --auto-servernum --server-args='-screen 0 1280x900x24' \
-            npx playwright test e2e/regtest/cat21wallet-mint-regtest.e2e.spec.ts \
-            --config=playwright.regtest.config.ts
+          scripts/e2e-lane.sh --wallet cat21wallet --with-cat21-ord --scan stub -- \
+            e2e/regtest/cat21wallet-mint-regtest.e2e.spec.ts
 
-      # Every wallet browser launches through launchWalletContext, which writes
-      # Chrome's net log here; the check fails when any request left the machine.
-      - name: Check the net log (nothing left the machine)
-        if: success() || failure()
-        run: node frontend/node_modules/ordpool-sdk/scripts/check-net-log.mjs net-log
+      - name: Dump container and process logs on failure
+        if: failure() && env.E2E_SLOT != ''
+        run: |
+          for service in bitcoind electrs mariadb cat21-ord; do
+            echo "===== $E2E_PREFIX-consumer-$service ====="
+            docker logs "$E2E_PREFIX-consumer-$service" --tail 100 2>&1 || echo "(no container $E2E_PREFIX-consumer-$service)"
+          done
+          for log in lane/indexer-backend.log lane/fees-stub.log lane/serve.log; do
+            echo "===== $log ====="
+            tail -200 "$log" 2>/dev/null || echo "(no $log)"
+          done
 
       - name: Upload Playwright artifacts
         if: always()
@@ -390,25 +234,12 @@ jobs:
           path: |
             frontend/test-results
             frontend/playwright-report-regtest
-            net-log
-            build.log
-            serve.log
-            fees-stub.log
+            lane/net-log
+            lane/*.log
           retention-days: 14
           if-no-files-found: warn
 
-      - name: Tear down stack
-        if: always()
-        run: |
-          docker compose \
-            -f frontend/node_modules/ordpool-sdk/e2e/docker-compose.consumer-environment.yml \
-            down -v || true
-          if [ -f backend/indexer-backend.pid ]; then
-            kill "$(cat backend/indexer-backend.pid)" 2>/dev/null || true
-          fi
-          if [ -f fees-stub.pid ]; then
-            kill "$(cat fees-stub.pid)" 2>/dev/null || true
-          fi
-          if [ -f serve.pid ]; then
-            kill "$(cat serve.pid)" 2>/dev/null || true
-          fi
+      # Tears the slot's compose projects down by name and releases the slot.
+      - name: Tear down
+        if: always() && env.E2E_SLOT != ''
+        run: node frontend/node_modules/ordpool-sdk/scripts/e2e-slots.mjs down "$E2E_SLOT" --force

@@ -31,6 +31,7 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
+import { DroppedSelectionNotice } from '../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-list';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
@@ -53,7 +54,7 @@ interface ViableUtxoRow {
   selector: 'app-mint',
   templateUrl: './mint.html',
   styleUrl: './mint.scss',
-  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect, SingleAddressNote, UtxoPicker, FundingAssetList],
+  imports: [DecimalPipe, RouterLink, FeesPicker, WalletConnect, SingleAddressNote, UtxoPicker, FundingAssetList, DroppedSelectionNotice],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Mint {
@@ -142,7 +143,26 @@ export class Mint {
   readonly errorMessage = computed(() => this.snap().errorMessage);
   readonly successTxId = computed(() => this.snap().successTxId);
   readonly feeRate = computed(() => this.snap().feeRate);
+  /** The person's explicit pick (`selectUtxoOutput`), null while the SDK chooses. */
   readonly selectedUtxo = computed(() => this.snap().selectedUtxo);
+
+  /**
+   * The coin the mint spends: the person's pick while it still covers, the
+   * SDK's recommendation on `auto` and `asset-notice` otherwise, null when the
+   * SDK spends nothing. Read from the snapshot, never matched up locally, so the
+   * coin shown is the coin `mint()` spends.
+   */
+  readonly resolvedFundingUtxo = computed(() => this.snap().resolvedFundingUtxo);
+
+  /**
+   * The verdict that goes with `resolvedFundingUtxo`: `scanning` while a
+   * recompute is in flight, `null` after a failed one. The CTA proceeds only on
+   * `ready` and `asset-notice`.
+   */
+  readonly resolvedFundingStatus = computed(() => this.snap().resolvedFundingStatus);
+
+  /** Set when the coin the person picked is not the coin the mint spends, with the reason. */
+  readonly droppedSelection = computed(() => this.snap().droppedSelection);
 
   private readonly simulations = computed<UtxoSimulationRow[]>(() => this.snap().simulations);
   private readonly scanStates = toSignal(this.scanner.states$, { initialValue: new Map<string, UtxoScanState>() as ReadonlyMap<string, UtxoScanState> });
@@ -201,7 +221,7 @@ export class Mint {
     const r = rec?.recommended;
     return {
       status: rec?.status ?? 'none',
-      hasSelected: !!this.selectedUtxo(),
+      hasSelected: !!this.resolvedFundingUtxo(),
       hasRecommended: !!r,
       recommendedOutpoint: r ? `${r.txid}:${r.vout}` : '',
       candidates: rec?.candidates?.length ?? 0,
@@ -224,8 +244,8 @@ export class Mint {
    * Every viable (sufficient) UTXO annotated with scan state + bucket, sorted
    * desc by value. Uncapped: the SDK's best-fit recommendation is the SMALLEST
    * covering coin, which can fall outside the top-10-by-value display list, so
-   * the selected-row lookup + the auto-pick effect resolve against this full
-   * set, not the capped display list.
+   * the summary row of the coin the mint spends is looked up in this full set,
+   * not the capped display list.
    */
   readonly allViableRows = computed<ViableUtxoRow[]>(() => {
     const rows = this.simulations();
@@ -282,28 +302,37 @@ export class Mint {
     return rec.recommended ? outpointKey(rec.recommended) : null;
   });
 
-  /** Whether the form has at least one viable UTXO + a fee rate set. */
-  readonly canMint = computed(() => this.allViableRows().length > 0 && this.feeRate() !== null && this.selectedUtxo() !== null && this.state() === 'ready');
+  /**
+   * The mint proceeds when a fee rate is set, the orchestrator is idle, and the
+   * SDK's verdict on the coin it would spend is `ready` or `asset-notice`.
+   */
+  readonly canMint = computed(() => {
+    if (this.feeRate() === null || this.state() !== 'ready') return false;
+    const status = this.resolvedFundingStatus();
+    return !!this.resolvedFundingUtxo() && (status === 'ready' || status === 'asset-notice');
+  });
 
-  /** The simulation entry currently picked, for the summary panel. Resolved
-   *  against the full viable set so an auto-picked best-fit coin outside the
-   *  top-10 display list still renders its summary. */
+  /** The viable rows keyed by `outpointKey`, for the summary lookup. */
+  private readonly viableRowByOutpoint = computed<ReadonlyMap<string, ViableUtxoRow>>(
+    () => new Map(this.allViableRows().map((r) => [outpointKey(r.utxo), r])),
+  );
+
+  /** The summary panel's row: the coin the mint spends, with its simulation and scan state. */
   readonly selectedRow = computed<ViableUtxoRow | null>(() => {
-    const picked = this.selectedUtxo();
-    if (!picked) return null;
-    return this.allViableRows().find(
-      (r) => r.utxo.txid === picked.txid && r.utxo.vout === picked.vout,
-    ) ?? null;
+    const spend = this.resolvedFundingUtxo();
+    return spend ? (this.viableRowByOutpoint().get(outpointKey(spend)) ?? null) : null;
   });
 
   /**
    * Whether the "Choose a different funding source" panel opens
-   * pre-expanded. True in the shallow-water cases (no auto-pick
-   * possible, or auto-pick landed on a row whose safety we couldn't
-   * verify), false on the happy path (auto-pick found a clean or
+   * pre-expanded. True when the person's pick was replaced
+   * (`droppedSelection`, the notice asks them to pick another) and in the
+   * shallow-water cases (the SDK spends no coin, or the coin it spends is one
+   * whose safety we couldn't verify), false on the happy path (a clean or
    * probably-clean source). Users can still toggle either way.
    */
   readonly pickerOpenByDefault = computed<boolean>(() => {
+    if (this.droppedSelection()) return true;
     const sel = this.selectedRow();
     if (!sel) return this.viableRows().length > 0;
     return sel.bucket === 'assets' || sel.bucket === 'failed';
@@ -347,14 +376,6 @@ export class Mint {
 
   private mintAttempted = signal(false);
   private lastWalletAddress: string | null = null;
-
-  /**
-   * Outpoint (`txid:vout`) of the coin the user DELIBERATELY picked via
-   * `selectUtxo`. Distinguishes a user override (preserved across fee-rate /
-   * recommendation changes) from an auto-pick (which must follow the SDK's
-   * current-rate recommendation). Null when the selection is auto-driven.
-   */
-  private userPickedKey = signal<string | null>(null);
 
   // ---------- Lifecycle ----------
 
@@ -401,7 +422,6 @@ export class Mint {
       const addr = this.connectedWallet()?.ordinalsAddress ?? null;
       if (this.lastWalletAddress !== null && addr !== this.lastWalletAddress) {
         this.scanner.reset();
-        this.userPickedKey.set(null); // the new wallet's coins aren't the old user's pick
       }
       this.lastWalletAddress = addr;
     });
@@ -413,43 +433,6 @@ export class Mint {
       const rows = this.viableRows();
       this.scanner.autoScan(rows.map((r) => ({ txid: r.utxo.txid, vout: r.utxo.vout, value: r.utxo.value })));
     });
-
-    // Auto-select the SDK's recommendation for the two statuses where the SDK
-    // ITSELF picks a coin: 'auto' (a content-clean covering coin) and
-    // 'asset-notice' (no clean coin covers, but a coin with NAMED assets does
-    // AND the wallet keeps a separate payment address, so the SDK proceeds and
-    // the UI NOTICEs). Never a raw value-based pre-pick. For 'expert-required'
-    // (named assets on a one-address wallet, or unnamed assets or unknown
-    // content on any wallet), 'scanning', and 'insufficient', the SDK returns no
-    // pick, so the selection is left null: the button blocks and the expert
-    // picker surfaces for a deliberate override.
-    effect(() => {
-      const rows = this.allViableRows();
-      const current = this.selectedUtxo();
-      // Keep a DELIBERATE user pick that is still viable — but never a stale
-      // AUTO-pick. The picker auto-seeds a fee rate (fastestFee) before the user
-      // sets one, so the SDK's first recommendation can be the smallest headroom
-      // coin AT THAT SEED RATE — a dust-cliff coin once the user raises the rate.
-      // When the rate (hence recommendation) changes, the auto-pick must FOLLOW
-      // the new recommendation to the headroom coin; keeping the seed-rate pick
-      // over-pays (the 2026-08-31 regtest false-red: seed 5 -> pick 13689 -> type
-      // 100 -> mint at 107.7 sat/vB). Only an explicit `selectUtxo` survives.
-      const userKey = this.userPickedKey();
-      const userStillThere = !!current
-        && userKey === `${current.txid}:${current.vout}`
-        && rows.some((r) => r.utxo.txid === current.txid && r.utxo.vout === current.vout);
-      if (userStillThere) return;
-      const rec = this.fundingRecommendation();
-      const recommended =
-        rec?.status === 'auto' || rec?.status === 'asset-notice' ? rec.recommended : null;
-      // Adopt the recommendation only when it's actually a viable row (covers
-      // postage + fee at the current rate); otherwise clear so canMint gates
-      // on a deliberate pick.
-      const match = recommended
-        ? rows.find((r) => r.utxo.txid === recommended.txid && r.utxo.vout === recommended.vout)
-        : null;
-      this.orch.setSelectedUtxo(match ? match.utxo : null);
-    });
   }
 
   // ---------- Commands ----------
@@ -459,13 +442,12 @@ export class Mint {
   }
 
   /**
-   * The shared `UtxoPicker`'s `selectionChange` handler. Marks the coin as a
-   * DELIBERATE user override so the auto-pick effect preserves it across fee-rate
-   * / recommendation changes (the picker disables the pick control on unfundable
-   * rows, so this only ever receives a coin that can fund).
+   * The shared `UtxoPicker`'s `selectionChange` handler: the person's explicit
+   * pick. The SDK keeps spending it while it covers and reports a replaced pick
+   * in `droppedSelection` (the picker disables the pick control on unfundable
+   * rows, so this only ever receives a coin that can fund at the current rate).
    */
   selectUtxoOutput(utxo: TxnOutput): void {
-    this.userPickedKey.set(outpointKey(utxo));
     this.orch.setSelectedUtxo(utxo);
   }
 
@@ -508,7 +490,6 @@ export class Mint {
 
   mintAnother(): void {
     this.mintAttempted.set(false);
-    this.userPickedKey.set(null);
     this.orch.reset();
   }
 

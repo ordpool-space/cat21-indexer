@@ -4,7 +4,7 @@
  * Faked:  Cat21Service -> { getUtxos, postTransaction: jest.fn() } (hand-written)
  *         UtxoContentScanner -> ScannerStub (testing/scanner.fixtures)
  *         WalletService -> WalletServiceStub (testing/wallet.fixtures)
- * Proves: a funding refresh to the same outpoint does not re-emit the selection, so the recompute loop settles
+ * Proves: re-picking the same outpoint as a fresh object does not re-emit the selection; a different outpoint does
  */
 import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { provideHttpClient } from '@angular/common/http';
@@ -28,12 +28,14 @@ import { WalletServiceStub } from '../../testing/wallet.fixtures';
 import { ScannerStub } from '../../testing/scanner.fixtures';
 
 /**
- * mint.ts's effect writes setSelectedUtxo() with a fresh row of the same outpoint
- * each recompute. The SDK setter compares by outpoint, so that is a no-op and does
- * not emit; without it the effect re-fires on its own write (recompute loop).
- * Asserts the no-op from the real orchestrator. See commit 8d44e2b.
+ * The picker re-renders its rows on every recompute, so a click on the coin
+ * already picked hands mint.ts's `selectUtxoOutput` a fresh object of the same
+ * outpoint. The SDK setter compares by outpoint, so that is a no-op and does not
+ * emit; compared by identity it would recompute, clear `droppedSelection` and
+ * re-render the rows again. Asserts the no-op from the real orchestrator the
+ * page constructs.
  */
-describe('Mint: a same-outpoint funding refresh does not re-emit (recompute-loop guard)', () => {
+describe('Mint: re-picking the same outpoint does not re-emit the selection', () => {
   let orch: Cat21MintOrchestrator;
 
   const coin = (txid: string, vout = 0): TxnOutput => electrsConfirmedUtxoFixture({ txid, vout, value: 10_000 });

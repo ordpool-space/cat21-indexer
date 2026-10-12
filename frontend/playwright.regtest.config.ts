@@ -23,13 +23,14 @@ const TEST_TIMEOUT_MS = 365_000;
 /**
  * Playwright config for the cat21.space regtest suite.
  *
- * The workflow brings up the consumer-environment stack (bitcoind, electrs,
- * mariadb, and per lane cat21-ord / ord-stock), the cat21-indexer backend,
- * the SDK's fees-electrs-stub, serves the built frontend, and stages the
- * wallet extension, then invokes this config.
+ * scripts/e2e-lane.sh brings up the consumer-environment stack in a stack
+ * slot (bitcoind, electrs, mariadb, and per lane cat21-ord / ord-stock), the
+ * cat21-indexer backend, the SDK's fees-electrs-stub, serves the built
+ * frontend, then invokes this config; the specs read every port from the slot
+ * (`regtestServiceUrls`).
  *
- * Headless mode is off because wallet extensions need a real renderer; the
- * workflow runs the playwright invocation under xvfb to provide a display.
+ * Headless mode is off because wallet extensions need a real renderer; on a
+ * display-less Linux runner the lane script runs Playwright under xvfb.
  */
 export default defineConfig({
   testDir: path.resolve(__dirname, 'e2e/regtest'),

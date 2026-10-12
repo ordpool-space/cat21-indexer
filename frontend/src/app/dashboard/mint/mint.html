@@ -70,6 +70,13 @@
       }
     }
 
+    @if (droppedSelection(); as dropped) {
+      <p class="mint-alert mint-alert-warning" role="status" data-testid="mint-dropped-selection"
+         [attr.data-reason]="dropped.reason">
+        <app-dropped-selection-notice [dropped]="dropped" [feeRate]="feeRate()" />
+      </p>
+    }
+
     @if (viableRows().length === 0 && state() === 'ready') {
       <div class="mint-no-utxos" data-testid="mint-no-utxos">
         <p>
@@ -225,7 +232,7 @@
         </p>
         <app-utxo-picker
           [utxos]="pickerUtxos()"
-          [selected]="selectedUtxo()"
+          [selected]="resolvedFundingUtxo()"
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
           [minScanValueSat]="fundingRequirementSats()"
