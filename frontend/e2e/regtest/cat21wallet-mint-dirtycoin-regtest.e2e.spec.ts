@@ -29,9 +29,9 @@ import {
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
   regtestServiceUrls,
+  regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 
 /**
  * E2E (regtest) — cat21.space MINT funding guard, dirty-coin protection, END TO
@@ -229,7 +229,7 @@ async function runMintDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   const txout = rpc('gettxout', dirty.txid, String(dirty.vout)).trim();
   expect(txout.length, `dirty ${asset} coin ${dirty.outpoint} was SPENT by the mint`).toBeGreaterThan(0);
   const mintRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', mintTxid, '2'),
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', mintTxid, '2'),
   ) as { vin: Array<{ txid: string; vout: number }> };
   const spentDirty = mintRaw.vin.some((v) => v.txid === dirty.txid && v.vout === dirty.vout);
   expect(spentDirty, `mint tx spent the dirty ${asset} coin ${dirty.outpoint}`).toBe(false);

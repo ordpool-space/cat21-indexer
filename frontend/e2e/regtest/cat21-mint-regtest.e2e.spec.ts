@@ -37,9 +37,9 @@ import {
   approveXverseConnect,
   approveXverseSignPopup,
   regtestServiceUrls,
+  regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
 // Canonical clean `/output` body (indexed, carries nothing), merged across the
@@ -248,7 +248,7 @@ test('cat21 mint round-trip on regtest via cat21.space /dashboard/mint + Xverse'
   sharedPaymentAddress = paymentAddress;
 
   // ─── 4. Fund the payment address, mine, wait for electrs ──────
-  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', wallet.paymentAddress, String(FUND_AMOUNT_BTC)).trim();
+  const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', wallet.paymentAddress, String(FUND_AMOUNT_BTC)).trim();
   console.log(`[cat21-mint-page] funded ${wallet.paymentAddress} with ${FUND_AMOUNT_BTC} BTC tx=${fundTxid}`);
   const fundedTip = mineBlocks(1);
   await waitForElectrsSync(fundedTip);
@@ -402,7 +402,7 @@ test('asset scanner: cat-bearing funding UTXO surfaces the "asset found" warning
 
   const SMALL_FUND_BTC = 0.00015;
   const SMALL_FUND_SATS = Math.round(SMALL_FUND_BTC * 1e8);
-  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', paymentAddress, String(SMALL_FUND_BTC)).trim();
+  const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', paymentAddress, String(SMALL_FUND_BTC)).trim();
   console.log(`[asset-scanner] cat-mock target txid=${fundTxid} (small UTXO ${SMALL_FUND_SATS} sat)`);
   const tip = mineBlocks(1);
   await waitForElectrsSync(tip);
@@ -696,7 +696,7 @@ async function mintAtRateAndVerify(opts: {
 
   // ─── Fund a fresh UTXO ───────────────────────────────────────
   const FUND_BTC = 0.001;
-  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC)).trim();
+  const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC)).trim();
   console.log(`[${opts.scenarioLabel}] funded ${sharedPaymentAddress} +${FUND_BTC} BTC tx=${fundTxid}`);
   const tip = mineBlocks(1);
   await waitForElectrsSync(tip);
@@ -792,7 +792,7 @@ test('sign-popup cancel keeps state coherent', async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const FUND_BTC = 0.0003;
-  rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
+  rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();
@@ -840,7 +840,7 @@ test('broadcast failure surfaces as an error, not a fake success', async () => {
   if (!sharedPaymentAddress) throw new Error('first test must have set sharedPaymentAddress');
 
   const FUND_BTC = 0.0003;
-  rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
+  rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', sharedPaymentAddress, String(FUND_BTC));
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();

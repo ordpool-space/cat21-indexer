@@ -26,9 +26,9 @@ import {
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
   regtestServiceUrls,
+  regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 import { measuredTextContrast } from './lib/measured-text-contrast';
 
 /**
@@ -185,7 +185,7 @@ async function runTransferNoticeCell(): Promise<void> {
     console.log(`[${tag}] dirty inscription ${sats}sat ${d.outpoint} assetId=${d.assetId}`);
   }
 
-  const recipient = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
+  const recipient = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
   expect(recipient).toMatch(/^bcrt1p/);
   const transferUrl = new URL(`${FRONTEND_URL}${TRANSFER_PATH}`);
   transferUrl.searchParams.set('catTxid', listed.txid);
@@ -273,8 +273,8 @@ async function runMakeOfferNoticeCell(): Promise<void> {
   const dirty = await seedDirtyCoin({ asset: 'inscription', address: buyerPayment, valueSats: DIRTY_SATS });
   console.log(`[${tag}] dirty inscription coin ${dirty.outpoint} value=${dirty.value} assetId=${dirty.assetId}`);
 
-  const O = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
-  const P = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
+  const O = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
+  const P = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
   const listed = await seedListedCat({ ordinalsAddress: O, valueSats: CAT_VALUE });
   await waitForBackendCat(listed.catNumber);
 

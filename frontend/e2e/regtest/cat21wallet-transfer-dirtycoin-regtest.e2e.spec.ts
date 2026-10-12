@@ -30,9 +30,9 @@ import {
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
   regtestServiceUrls,
+  regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 
 /**
  * E2E (regtest) — cat21.space TRANSFER funding guard, dirty-coin protection, END
@@ -202,7 +202,7 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): P
 
   // ─── 4. Drive transfer via the ?catTxid override (deterministic cat
   //        selection), fill recipient + fee. ────────────────────────
-  const recipient = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
+  const recipient = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
   expect(recipient).toMatch(/^bcrt1p/);
   const transferUrl = new URL(`${FRONTEND_URL}${TRANSFER_PATH}`);
   transferUrl.searchParams.set('catTxid', listed.txid);
@@ -240,7 +240,7 @@ async function runTransferDirtyCell(asset: DirtyCoinAsset, dirtySats: number): P
   const txout = rpc('gettxout', dirty.txid, String(dirty.vout)).trim();
   expect(txout.length, `dirty ${asset} coin ${dirty.outpoint} was SPENT — the transfer funding guard did not steer away from it`).toBeGreaterThan(0);
   const transferRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', transferTxid, '2'),
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', transferTxid, '2'),
   ) as { vin: Array<{ txid: string; vout: number }> };
   const spentDirty = transferRaw.vin.some((v) => v.txid === dirty.txid && v.vout === dirty.vout);
   expect(spentDirty, `transfer tx spent the dirty ${asset} coin ${dirty.outpoint}`).toBe(false);

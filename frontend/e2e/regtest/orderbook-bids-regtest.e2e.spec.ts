@@ -31,9 +31,9 @@ import {
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
   regtestServiceUrls,
+  regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 import { buildCat21BuyOfferPsbt, KnownOrdinalWalletType, Network } from 'ordpool-sdk/core';
 
 /**
@@ -119,9 +119,9 @@ async function openOrderbookViaNav(page: Page): Promise<void> {
  * backend. Returns the bid the backend stored.
  */
 async function postRealBid(cat: SeededListedCat, bidSats: number): Promise<{ id: string; bidSats: number }> {
-  const buyerPaymentAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
-  const buyerReceiveAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
-  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
+  const buyerPaymentAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
+  const buyerReceiveAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
+  const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
   await waitForElectrsSync(mineBlocks(1));
 
   type RawTx = { vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }> };
@@ -157,7 +157,7 @@ async function postRealBid(cat: SeededListedCat, bidSats: number): Promise<{ id:
     feeSats: 2_000,
   });
   const signed = JSON.parse(rpc(
-    RPC_WALLET_ARG, '-named', 'walletprocesspsbt',
+    `-rpcwallet=${regtestWallet()}`, '-named', 'walletprocesspsbt',
     `psbt=${Buffer.from(built.psbt).toString('base64')}`, 'sign=true', 'finalize=false',
   )) as { psbt: string };
 

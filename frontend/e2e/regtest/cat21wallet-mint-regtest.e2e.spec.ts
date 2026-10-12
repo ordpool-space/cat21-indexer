@@ -43,9 +43,9 @@ import {
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
   regtestServiceUrls,
+  regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
 
 // Canonical clean `/output` body (indexed, carries nothing), merged across the
@@ -323,7 +323,7 @@ test('cat21-wallet mint round-trip end-to-end (RBF-signaling sequence pinned)', 
   // 0xfffffffd) lives at the bottom.
   const FUND_AMOUNT_BTC = 0.001;
   const FUND_AMOUNT_SATS = Math.round(FUND_AMOUNT_BTC * 1e8);
-  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', paymentAddr, String(FUND_AMOUNT_BTC)).trim();
+  const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', paymentAddr, String(FUND_AMOUNT_BTC)).trim();
   console.log(`[cat21wallet] funded ${paymentAddr} +${FUND_AMOUNT_BTC} BTC tx=${fundTxid}`);
   const fundedTip = mineBlocks(1);
   await waitForElectrsSync(fundedTip);
@@ -410,7 +410,7 @@ async function cat21walletMintAtRate(opts: {
   }
 
   try {
-    const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, '0.001').trim();
+    const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', sharedPaymentAddress, '0.001').trim();
     console.log(`[${opts.scenarioLabel}] funded tx=${fundTxid}`);
     await waitForElectrsSync(mineBlocks(1));
 
@@ -464,7 +464,7 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
 
   const SMALL_FUND_SATS = 15_000;
-  const fundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, '0.00015').trim();
+  const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', sharedPaymentAddress, '0.00015').trim();
   await waitForElectrsSync(mineBlocks(1));
   const small = await waitForUtxoMatching(
     sharedPaymentAddress,
@@ -562,7 +562,7 @@ test('manual override: typing 1 while the picker suggests 100 — low rate wins 
 
 test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
-  rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, '0.0003');
+  rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();
@@ -597,7 +597,7 @@ test('sign-popup cancel keeps state coherent on CAT-21 wallet', async () => {
 
 test('broadcast failure surfaces as an error on CAT-21 wallet (not a fake success)', async () => {
   if (!sharedPaymentAddress) throw new Error(SHARED_ADDR_UNSET);
-  rpc(RPC_WALLET_ARG, 'sendtoaddress', sharedPaymentAddress, '0.0003');
+  rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', sharedPaymentAddress, '0.0003');
   await waitForElectrsSync(mineBlocks(1));
 
   const page = await context.newPage();
@@ -847,7 +847,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
 
   // ─── Read the mint tx to get the exact seller cat outpoint ───
   const mintTxJson = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', sharedMintTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', sharedMintTxid, '2')
   ) as {
     vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }>;
   };
@@ -866,21 +866,21 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
   // spend a coinbase.
   const BUY_PRICE_SATS = 21000;
   const OFFER_FEE_SATS = 2000;
-  const buyerPaymentAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
-  const buyerReceiveAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
-  const buyerChangeAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
+  const buyerPaymentAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
+  const buyerReceiveAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
+  const buyerChangeAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
   expect(buyerReceiveAddress).toMatch(/^bcrt1p/);
   console.log(`[offer-flow] buyer receive (taproot) = ${buyerReceiveAddress}`);
 
   // Fund the buyer's payment address with 0.001 BTC (100 000 sats)
   // — plenty for the price + fee + change dust.
-  const buyerFundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
+  const buyerFundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
   await waitForElectrsSync(mineBlocks(1));
 
   // Look up the buyer's UTXO via bitcoin-cli (raw JSON to get the
   // scriptPubKey hex, which we need for the offer PSBT builder).
   const buyerFundRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', buyerFundTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', buyerFundTxid, '2')
   ) as {
     vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }>;
   };
@@ -927,7 +927,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
   // seller signature and finalizes the whole PSBT.
   const walletprocessed = JSON.parse(
     rpc(
-      RPC_WALLET_ARG,
+      `-rpcwallet=${regtestWallet()}`,
       '-named',
       'walletprocesspsbt',
       `psbt=${unsignedOfferBase64}`,
@@ -1003,7 +1003,7 @@ test('full offer round-trip: buyer builds+signs, seller countersigns, cat moves 
   // Query via bitcoin-cli to inspect address strings (electrs's
   // vout shape is untyped in EsploraTx so a raw-tx dive is cleaner).
   const settleRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', settleTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', settleTxid, '2')
   ) as {
     vout: Array<{ value: number; scriptPubKey: { address?: string } }>;
   };
@@ -1059,7 +1059,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
 
   // Confirm the mint's vout[0] shape is what we expect.
   const freshRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', freshTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', freshTxid, '2')
   ) as {
     vout: Array<{ value: number; scriptPubKey: { hex: string; address?: string } }>;
   };
@@ -1068,7 +1068,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   console.log(`[transfer-flow] cat currently at ${catAddressBefore}`);
 
   // ─── Fresh recipient (regtest taproot) for the transfer ───
-  const recipientAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
+  const recipientAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
   expect(recipientAddress).toMatch(/^bcrt1p/);
   console.log(`[transfer-flow] transfer target = ${recipientAddress}`);
 
@@ -1167,7 +1167,7 @@ test('full transfer round-trip: fresh mint → transfer via URL → cat moves on
   // vout[0] must be the cat at the new recipient (ord-theory FIFO: cat
   // rides input 0's first sat into output 0's first sat).
   const transferRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', transferTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', transferTxid, '2')
   ) as {
     vout: Array<{ value: number; scriptPubKey: { address?: string } }>;
   };
@@ -1208,7 +1208,7 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
   await waitForElectrsSync(tip);
   await waitForOrdSync(tip);
 
-  const recipientAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
+  const recipientAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
   expect(recipientAddress).toMatch(/^bcrt1p/);
 
   // ─── Navigate WITHOUT any URL override — the picker must do the work ───
@@ -1270,7 +1270,7 @@ test('picker transfer round-trip: fresh mint → cat21-ord indexes it → holdin
   // transfer — the cat moves by sat-tracking regardless.
   expect(transferTx.locktime).toBe(21);
   const transferRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', transferTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', transferTxid, '2')
   ) as {
     vout: Array<{ value: number; scriptPubKey: { address?: string } }>;
   };
@@ -1326,7 +1326,7 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
 
   // ─── Step 2: Read the mint tx → get seller cat outpoint bytes. ───
   const mintTxJson = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', freshMintTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', freshMintTxid, '2')
   ) as {
     vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }>;
   };
@@ -1346,8 +1346,8 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   //             (separate P2WPKH/P2TR addresses = separate roles). ───
   const BID_PRICE_SATS = 25000;
   const BID_FEE_SATS = 2000;
-  const buyerPaymentAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
-  const buyerReceiveAddress = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
+  const buyerPaymentAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
+  const buyerReceiveAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
   // Change re-uses the payment address so the DTO's `buyerPaymentAddress`
   // matches PSBT output 2. A real wallet would use a fresh internal
   // address and add a separate DTO field; for this round-trip the shape
@@ -1357,11 +1357,11 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   expect(buyerReceiveAddress).toMatch(/^bcrt1p/);
 
   // Fund the buyer with enough for price + fee + change dust.
-  const buyerFundTxid = rpc(RPC_WALLET_ARG, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
+  const buyerFundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
   await waitForElectrsSync(mineBlocks(1));
 
   const buyerFundRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', buyerFundTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', buyerFundTxid, '2')
   ) as {
     vout: Array<{ value: number; n: number; scriptPubKey: { hex: string; address?: string } }>;
   };
@@ -1403,7 +1403,7 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   //             (finalize=false → input 0 stays unsigned for seller). ───
   const walletprocessed = JSON.parse(
     rpc(
-      RPC_WALLET_ARG,
+      `-rpcwallet=${regtestWallet()}`,
       '-named',
       'walletprocesspsbt',
       `psbt=${unsignedOfferBase64}`,
@@ -1527,7 +1527,7 @@ test('bid marketplace round-trip: buyer POSTs → GET returns byte-equal PSBT �
   expect(settleTx.vout.length).toBeGreaterThanOrEqual(2);
 
   const settleRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', settleTxid, '2')
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', settleTxid, '2')
   ) as {
     vout: Array<{ value: number; scriptPubKey: { address?: string } }>;
   };

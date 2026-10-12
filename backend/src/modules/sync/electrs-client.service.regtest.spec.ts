@@ -1,4 +1,4 @@
-import { stackUrl } from 'ordpool-sdk/stack-ports';
+import { stackUrl } from 'ordpool-sdk/e2e/stack';
 
 import { ElectrsClientService } from './electrs-client.service';
 

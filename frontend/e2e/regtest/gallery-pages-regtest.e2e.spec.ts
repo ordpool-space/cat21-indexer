@@ -25,9 +25,9 @@ import {
   closeCat21WalletPage,
   SeededListedCat,
   regtestServiceUrls,
+  regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 
 /**
  * The gallery pages read cat21-ord directly (`/address/<a>`,
@@ -99,7 +99,7 @@ test.beforeAll(async () => {
   await onboardCat21Wallet(primer, extensionId);
   await closeCat21WalletPage(primer);
 
-  const owner = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
+  const owner = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
   const cat = await seedListedCat({ ordinalsAddress: owner });
   const blockHash = (JSON.parse(rpc('getrawtransaction', cat.txid, '1')) as { blockhash: string }).blockhash;
   const blockHeight = (JSON.parse(rpc('getblockheader', blockHash)) as { height: number }).height;
@@ -149,7 +149,7 @@ test.describe('Address page', () => {
   });
 
   test('says so when an address holds no cats', async () => {
-    const empty = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32m').trim();
+    const empty = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
     const page = await context.newPage();
     await page.goto(`${FRONTEND_URL}/address/${empty}`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('gallery-empty')).toHaveText('This address has no cats.');

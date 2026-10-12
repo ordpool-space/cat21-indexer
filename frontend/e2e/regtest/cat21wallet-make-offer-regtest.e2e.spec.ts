@@ -31,9 +31,9 @@ import {
   installCat21WalletOrdRoutes,
   closeCat21WalletPage,
   regtestServiceUrls,
+  regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { RPC_WALLET_ARG } from './lib/rpc-wallet';
 
 /**
  * E2E (regtest) — cat21.space make-offer, driven THROUGH THE PAGE, zero mock.
@@ -242,8 +242,8 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   // O = the cat's ordinals owner (a fresh bitcoin-cli address the SELLER
   // controls, so bitcoin-cli can sign input 0). P = the seller's PAYMENT
   // address, a DIFFERENT bitcoin-cli address — the literal the buyer types.
-  const O = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
-  const P = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
+  const O = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
+  const P = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
   expect(P).not.toBe(O);
   const listed = await seedListedCat({ ordinalsAddress: O, valueSats });
   expect(listed.sellerOrdinalsAddress).toBe(O);
@@ -305,7 +305,7 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   // finalize=true completes the PSBT: the buyer's funding inputs are already
   // signed by the page/wallet, and bitcoin-cli holds O's key for input 0.
   const processed = JSON.parse(
-    rpc(RPC_WALLET_ARG, '-named', 'walletprocesspsbt',
+    rpc(`-rpcwallet=${regtestWallet()}`, '-named', 'walletprocesspsbt',
       `psbt=${pageBuiltPsbt}`, 'sign=true', 'finalize=true'),
   ) as { psbt: string; hex?: string; complete: boolean };
   expect(processed.complete).toBe(true);
@@ -318,7 +318,7 @@ async function runMakeOfferCell(valueSats: number, priceSats: number): Promise<v
   mineBlocks(1);
   await waitForTxConfirmed(settleTxid);
   const settleRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', settleTxid, '2'),
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', settleTxid, '2'),
   ) as { vout: Array<{ value: number; scriptPubKey: { address?: string } }> };
 
   // Output 0 = the cat, size PRESERVED, at the BUYER's ordinals address.
@@ -384,8 +384,8 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   console.log(`[${tag}] dirty ${asset} coin ${dirty.outpoint} value=${dirty.value} assetId=${dirty.assetId}`);
 
   // ─── 3. A target cat to offer on (owner O, distinct payment P) ──
-  const O = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
-  const P = rpc(RPC_WALLET_ARG, 'getnewaddress', '', 'bech32').trim();
+  const O = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
+  const P = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
   const listed = await seedListedCat({ ordinalsAddress: O, valueSats: CAT_VALUE });
   await waitForBackendCat(listed.catNumber);
 
@@ -417,7 +417,7 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   await page.getByText('Prefer the raw offer text?', { exact: false }).click();
   const pageBuiltPsbt = (await page.getByTestId('make-offer-artifact-textarea').inputValue()).trim();
   const processed = JSON.parse(
-    rpc(RPC_WALLET_ARG, '-named', 'walletprocesspsbt',
+    rpc(`-rpcwallet=${regtestWallet()}`, '-named', 'walletprocesspsbt',
       `psbt=${pageBuiltPsbt}`, 'sign=true', 'finalize=true'),
   ) as { psbt: string; hex?: string; complete: boolean };
   const settleHex = processed.hex
@@ -434,7 +434,7 @@ async function runMakeOfferDirtyCell(asset: DirtyCoinAsset): Promise<void> {
   const txout = rpc('gettxout', dirty.txid, String(dirty.vout)).trim();
   expect(txout.length, `dirty ${asset} coin ${dirty.outpoint} was SPENT — the funding guard did not steer away from it`).toBeGreaterThan(0);
   const settleRaw = JSON.parse(
-    rpc(RPC_WALLET_ARG, 'getrawtransaction', settleTxid, '2'),
+    rpc(`-rpcwallet=${regtestWallet()}`, 'getrawtransaction', settleTxid, '2'),
   ) as { vin: Array<{ txid: string; vout: number }> };
   const spentDirty = settleRaw.vin.some((v) => v.txid === dirty.txid && v.vout === dirty.vout);
   expect(spentDirty, `settle tx spent the dirty ${asset} coin ${dirty.outpoint}`).toBe(false);
