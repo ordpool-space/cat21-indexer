@@ -21,50 +21,46 @@ import { Start } from './start/start';
 export const routes: Routes = [
   { path: '', pathMatch: 'full', component: Start, title: 'CAT-21 - Rescue the cats!' },
   { path: 'cats/:itemsPerPage/:currentPage', component: Start, title: 'CAT-21 - Minted cats' },
-  { path: 'cat/:catNumber', component: Details, data: { smallHeader: true }, title: 'CAT-21 - Cat details' },
-  { path: 'address/:address', component: Address, data: { smallHeader: true }, title: 'CAT-21 - Address' },
-  { path: 'block/:blockHeight', component: Block, data: { smallHeader: true }, title: 'CAT-21 - Block' },
-  { path: 'block/:blockHeight/:page', component: Block, data: { smallHeader: true }, title: 'CAT-21 - Block' },
-  { path: 'sat/:sat', component: Sat, data: { smallHeader: true }, title: 'CAT-21 - Sat' },
-  { path: 'search', component: Search, data: { smallHeader: true }, title: 'CAT-21 - Search by trait' },
-  { path: 'search/:currentPage', component: Search, data: { smallHeader: true }, title: 'CAT-21 - Search by trait' },
-  { path: 'debug/colors', component: DebugColors, data: { smallHeader: true }, title: 'CAT-21 - Debug colors' },
-  { path: 'about', component: About, data: { smallHeader: true }, title: 'CAT-21 - About' },
+  { path: 'cat/:catNumber', component: Details, title: 'CAT-21 - Cat details' },
+  { path: 'address/:address', component: Address, title: 'CAT-21 - Address' },
+  { path: 'block/:blockHeight', component: Block, title: 'CAT-21 - Block' },
+  { path: 'block/:blockHeight/:page', component: Block, title: 'CAT-21 - Block' },
+  { path: 'sat/:sat', component: Sat, title: 'CAT-21 - Sat' },
+  { path: 'search', component: Search, title: 'CAT-21 - Search by trait' },
+  { path: 'search/:currentPage', component: Search, title: 'CAT-21 - Search by trait' },
+  { path: 'debug/colors', component: DebugColors, title: 'CAT-21 - Debug colors' },
+  { path: 'about', component: About, title: 'CAT-21 - About' },
 
   // CAT-21 orderbook — public feed of seller-signed listings. No
   // wallet required for read; sellers publish from the sell modal
   // on their cat's details page.
-  { path: 'orderbook', component: Orderbook, data: { smallHeader: true }, title: 'CAT-21 - Orderbook' },
-  { path: 'orderbook/:itemsPerPage/:currentPage', component: Orderbook, data: { smallHeader: true }, title: 'CAT-21 - Orderbook' },
+  { path: 'orderbook', component: Orderbook, title: 'CAT-21 - Orderbook' },
+  { path: 'orderbook/:itemsPerPage/:currentPage', component: Orderbook, title: 'CAT-21 - Orderbook' },
 
   // Workspace — gated on a connected wallet via the components' own
   // CTA card (no router guard, since reads-without-wallet still
   // produces a useful "connect to continue" screen).
-  { path: 'dashboard', component: Dashboard, data: { smallHeader: true }, title: 'CAT-21 - Dashboard' },
-  { path: 'dashboard/cats', component: MyCats, data: { smallHeader: true }, title: 'CAT-21 - My cats' },
-  { path: 'dashboard/mint', component: Mint, data: { smallHeader: true }, title: 'CAT-21 - Mint a cat' },
+  { path: 'dashboard', component: Dashboard, title: 'CAT-21 - Dashboard' },
+  { path: 'dashboard/cats', component: MyCats, title: 'CAT-21 - My cats' },
+  { path: 'dashboard/mint', component: Mint, title: 'CAT-21 - Mint a cat' },
   {
     path: 'dashboard/transfer',
     component: Transfer,
-    data: { smallHeader: true },
     title: 'CAT-21 - Transfer a cat',
   },
   {
     path: 'dashboard/trade',
     component: TradeLanding,
-    data: { smallHeader: true },
     title: 'CAT-21 - Trade a cat',
   },
   {
     path: 'dashboard/trade/make',
     component: MakeOffer,
-    data: { smallHeader: true },
     title: 'CAT-21 - Make a buy-offer',
   },
   {
     path: 'dashboard/trade/accept',
     component: AcceptOffer,
-    data: { smallHeader: true },
     title: 'CAT-21 - Accept a buy-offer',
   },
 

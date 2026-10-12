@@ -1,9 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
 import { FamilyFooter } from './layout/family-footer/family-footer';
 import { Header } from './layout/header/header';
-import { RoutingStateService } from './services/routing-state.service';
 
 @Component({
     // eslint-disable-next-line @angular-eslint/component-selector
@@ -18,5 +17,4 @@ import { RoutingStateService } from './services/routing-state.service';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class App {
-  smallHeader = inject(RoutingStateService).smallHeader;
 }

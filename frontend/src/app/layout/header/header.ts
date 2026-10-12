@@ -1,5 +1,5 @@
 import { NgOptimizedImage } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { WalletService } from 'ordpool-sdk';
@@ -15,8 +15,6 @@ import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Header {
-  readonly smallHeader = input<boolean | null>(false);
-
   private walletService = inject(WalletService);
   // Surfaced to the template purely so the "My cats" link can show/hide
   // based on connection state. Same BehaviorSubject the wallet-connect
