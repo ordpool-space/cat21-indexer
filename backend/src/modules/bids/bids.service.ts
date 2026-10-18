@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { base64, hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { and, count, desc, eq } from 'drizzle-orm';
-import { validateCat21BuyOfferPsbt } from 'ordpool-sdk/cat21-validation';
+import { validateCat21BuyOfferPsbt, verifyOfferInputSignatures } from 'ordpool-sdk/cat21-validation';
 
 import { catsArraysEqual } from '../shared/array-utils';
 import {
@@ -134,13 +134,13 @@ export class BidsService {
 
     const sdkNetwork = toSdkNetwork(dto.network);
 
-    // (6) Single SDK gate — parses the PSBT, checks every semantic
-    //     invariant (input 0 outpoint, seller-input postage, sighash
-    //     both PSBT field AND signature flag byte, buyer signatures,
-    //     Output 0 postage + script decodability, Output 1 address +
-    //     floor, Output 2 buyer-change address, exact-price gate).
-    //     Any drift between the buyer's declared DTO and the signed
-    //     bytes surfaces as a typed reason.
+    // (6) Structural SDK gate — parses the PSBT and checks every semantic
+    //     invariant against the DTO (input 0 outpoint, seller-input postage,
+    //     sighash field + signature flag byte, buyer signatures present,
+    //     Output 0 postage + script, Output 1 address + floor, Output 2
+    //     buyer-change address, exact-price). No chain yet: a DTO/shape
+    //     mismatch is cheap to catch and must surface as its own reason
+    //     before any electrs round-trip.
     const sdkResult = validateCat21BuyOfferPsbt({
       psbt: psbtBytes,
       expectedSellerUtxo: { txid: dto.catTxid, vout: dto.catVout },
@@ -155,6 +155,53 @@ export class BidsService {
       throw new BadRequestException({
         code: `psbt-${sdkResult.reason}`,
         detail: sdkResult.detail ?? `SDK validator rejected: ${sdkResult.reason}`,
+      });
+    }
+
+    // (6a) Fetch the TRUE prevout of every input from electrs. The PSBT's own
+    //      witnessUtxo is attacker-controlled and must never be the source for
+    //      a sighash, so the chain prevout is read here and the crypto gate
+    //      (6c) verifies against it. Fail CLOSED: a phantom txid (not-found)
+    //      is unspendable, and an electrs blip (unknown) is rejected too — a
+    //      bid we cannot verify against the chain is not accepted (the buyer
+    //      retries). The spend probe (6b) still runs for the spent-vout case a
+    //      `/tx` read cannot see (a consumed output's tx still exists).
+    const prevouts = new Map<string, { script: Uint8Array; amountSats: number }>();
+    for (let i = 0; i < tx.inputsLength; i++) {
+      const inp = tx.getInput(i);
+      if (!inp.txid) continue;
+      const inpTxid = hex.encode(inp.txid);
+      const inpVout = inp.index ?? 0;
+      const pv = await this.electrsClient.getPrevout(inpTxid, inpVout);
+      if (pv === 'not-found') {
+        throw new BadRequestException({
+          code: 'psbt-buyer-input-unspendable',
+          detail:
+            `PSBT input ${i} (${inpTxid}:${inpVout}) is unspendable — the txid is unknown to ` +
+            'electrs (never broadcast / orphaned) or the vout is out of range.',
+        });
+      }
+      if (pv === 'unknown') {
+        throw new BadRequestException({
+          code: 'prevout-fetch-failed',
+          detail:
+            `Could not read input ${i} (${inpTxid}:${inpVout}) from the chain to verify the ` +
+            'bid signatures. Transient; retry in a moment.',
+        });
+      }
+      prevouts.set(`${inpTxid}:${inpVout}`, pv);
+    }
+
+    // (6c) Cryptographic gate: pin each witnessUtxo to the chain prevout and
+    //      verify every buyer signature against the real BIP-143/341 sighash.
+    //      This is what turns "a signature is present" (6) into "the signature
+    //      is real and spends the coin it names" — a bid with random bytes as
+    //      its signature, or a lied-about input value, is rejected here.
+    const sigResult = verifyOfferInputSignatures(psbtBytes, prevouts);
+    if (!sigResult.ok) {
+      throw new BadRequestException({
+        code: `psbt-${sigResult.reason}`,
+        detail: `input ${sigResult.inputIndex}: ${sigResult.detail}`,
       });
     }
 

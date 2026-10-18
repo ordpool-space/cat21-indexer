@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -48,12 +49,14 @@ export class BidsController {
   // legitimate bidders won't submit more than a handful per minute;
   // spammers get bounded fast.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(Cat21SessionGuard, ThrottlerGuard)
   @ApiOperation({
     summary: 'Post (or overwrite) a bid on a cat UTXO',
     description:
-      "Publishes a buyer's half-signed PSBT to the marketplace. The PSBT itself IS the auth — " +
-      "the buyer's SIGHASH_ALL signatures on inputs 1..N commit their funds to exact outputs. " +
+      "Publishes a buyer's half-signed PSBT to the marketplace. Auth is twofold: a session " +
+      'token (X-Cat21-Session-* headers) proving control of `buyerOrdinalsAddress`, and the ' +
+      "buyer's SIGHASH_ALL signatures on inputs 1..N, verified cryptographically against the " +
+      'chain prevouts. ' +
       "One bid per (network, cat_txid, cat_vout, buyer_ordinals_address); a buyer re-bidding at a " +
       'new price overwrites their previous row atomically. Different buyers coexist on the same ' +
       'UTXO — that\'s the FOMO channel where competing bids drive the price up.\n\n' +
@@ -81,8 +84,19 @@ export class BidsController {
   })
   async create(
     @Body() dto: CreateBidDto,
+    @Cat21SessionAddress() sessionAddress: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<BidDto> {
+    // The session token must prove control of the address the bid is filed
+    // under. Without this, anyone could overwrite a genuine bidder's row by
+    // POSTing a bid under their buyerOrdinalsAddress (the upsert key).
+    if (sessionAddress !== dto.buyerOrdinalsAddress) {
+      reply.header('Cache-Control', NO_STORE);
+      throw new ForbiddenException({
+        code: 'session-address-mismatch',
+        detail: 'Session token proves control of a different address than buyerOrdinalsAddress.',
+      });
+    }
     try {
       const created = await this.bids.create(dto);
       reply.header('Cache-Control', NO_STORE);

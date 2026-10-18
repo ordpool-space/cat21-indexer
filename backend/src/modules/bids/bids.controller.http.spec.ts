@@ -10,9 +10,26 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { Test } from '@nestjs/testing';
 import { ThrottlerModule } from '@nestjs/throttler';
 
+import { Cat21SessionGuard } from '../shared/cat21-session.guard';
 import { NoStoreOnErrorFilter } from '../shared/no-store-on-error.filter';
 import { BidsController } from './bids.controller';
 import { BidsService } from './bids.service';
+
+/**
+ * The POST route is session-guarded. These error-path tests are not about auth,
+ * so the guard is stubbed to pass and to set the session address the
+ * `@Cat21SessionAddress()` param reads — defaulting to the body's buyer address
+ * so the controller's match passes, but overridable per request via the
+ * `x-test-session-address` header so one test can exercise the 403 mismatch.
+ */
+const BODY_BUYER_ORDINALS = 'bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxq7pkrz9';
+const stubSessionGuard = {
+  canActivate: (ctx: import('@nestjs/common').ExecutionContext): boolean => {
+    const req = ctx.switchToHttp().getRequest<{ headers: Record<string, string>; cat21SessionAddress?: string }>();
+    req.cat21SessionAddress = req.headers['x-test-session-address'] ?? BODY_BUYER_ORDINALS;
+    return true;
+  },
+};
 
 /**
  * Mirror of `listings.controller.http.spec.ts` — proves the
@@ -44,7 +61,10 @@ describe('BidsController — error responses carry Cache-Control: no-store over 
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(Cat21SessionGuard)
+      .useValue(stubSessionGuard)
+      .compile();
 
     app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter({ logger: false }));
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -92,6 +112,21 @@ describe('BidsController — error responses carry Cache-Control: no-store over 
     expect(res.statusCode).toBe(400);
     expect(res.headers['cache-control']).toBe('no-store');
     expect(JSON.parse(res.body)).toMatchObject({ code: 'cats-bundle-drift' });
+  });
+
+  it('403 when the session address does not match buyerOrdinalsAddress carries no-store', async () => {
+    // Session token proves control of a different address than the bid is
+    // filed under: the overwrite-a-rival's-bid vector, rejected before create.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/bids',
+      headers: { 'x-test-session-address': 'bc1qz69ej270c3q9qvgt822t6pm3zdksk2x35j2jlm' },
+      payload: validDtoBody(),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(JSON.parse(res.body)).toMatchObject({ code: 'session-address-mismatch' });
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 
   it('429 from ThrottlerGuard (6th request within window) carries no-store', async () => {

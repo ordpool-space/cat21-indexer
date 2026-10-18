@@ -163,4 +163,73 @@ export class ElectrsClientService {
   async isOutpointSpent(txid: string, vout: number): Promise<boolean> {
     return (await this.getOutpointStatus(txid, vout)) === 'spent';
   }
+
+  /**
+   * Read a prevout's scriptPubKey and value from `/tx/<txid>`.
+   *
+   * The buy-offer signature verification needs the TRUE prevout of every
+   * input (script + amount) to recompute the sighash and check the buyer's
+   * signatures cryptographically — the PSBT's own `witnessUtxo` is
+   * attacker-controlled and must never be trusted for that. Returns:
+   *
+   *   - `{ script, amountSats }` — the on-chain prevout.
+   *   - `'not-found'` — txid unknown to electrs (phantom) or vout out of
+   *     range. The outpoint is unspendable; the caller rejects the bid.
+   *   - `'unknown'` — a 5xx / network / parse blip. The caller fails CLOSED
+   *     for the signature gate (a bid that cannot be verified is not
+   *     accepted), unlike the spend-status check which tolerates a blip.
+   */
+  async getPrevout(
+    txid: string,
+    vout: number,
+  ): Promise<{ script: Uint8Array; amountSats: number } | 'not-found' | 'unknown'> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/tx/${txid}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch (err) {
+      this.logger.warn(`electrs /tx fetch failed for ${txid}: ${err instanceof Error ? err.message : err}`);
+      return 'unknown';
+    }
+    if (res.status === 404) return 'not-found';
+    if (!res.ok) {
+      this.logger.warn(`electrs /tx returned ${res.status} for ${txid}`);
+      return 'unknown';
+    }
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch (err) {
+      this.logger.warn(`electrs /tx malformed JSON for ${txid}: ${err instanceof Error ? err.message : err}`);
+      return 'unknown';
+    }
+    const vouts = (body as { vout?: unknown }).vout;
+    if (!Array.isArray(vouts) || vout < 0 || vout >= vouts.length) return 'not-found';
+    const out = vouts[vout] as { scriptpubkey?: unknown; value?: unknown };
+    if (typeof out?.scriptpubkey !== 'string' || typeof out?.value !== 'number') {
+      this.logger.warn(`electrs /tx vout ${vout} unexpected shape for ${txid}`);
+      return 'unknown';
+    }
+    let script: Uint8Array;
+    try {
+      script = hexToBytes(out.scriptpubkey);
+    } catch {
+      return 'unknown';
+    }
+    return { script, amountSats: out.value };
+  }
+}
+
+/** Decode a hex string to bytes without pulling a dependency. */
+function hexToBytes(h: string): Uint8Array {
+  if (h.length % 2 !== 0) throw new Error('odd-length hex');
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    const byte = Number.parseInt(h.slice(i * 2, i * 2 + 2), 16);
+    if (Number.isNaN(byte)) throw new Error('invalid hex');
+    out[i] = byte;
+  }
+  return out;
 }

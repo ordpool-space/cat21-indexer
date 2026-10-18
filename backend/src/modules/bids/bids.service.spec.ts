@@ -10,6 +10,7 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import * as btc from '@scure/btc-signer';
+import type { OfferPrevouts } from 'ordpool-sdk/cat21-validation';
 import {
   TEST_OFFER_BUYER_ORDINALS_ADDRESS,
   TEST_OFFER_BUYER_PAYMENT_ADDRESS,
@@ -45,11 +46,12 @@ const BID_SATS = 21_000;
 /** Four bytes that are valid base64 but not a PSBT: anything that parses them fails as psbt-malformed. */
 const NOT_A_PSBT = 'AAECAw==';
 
-/** The bid the default DTO describes, signed for real. */
-const VALID_PSBT = buildSignedTestBuyOffer({
+/** The bid the default DTO describes, signed for real, with its prevouts. */
+const DEFAULT_OFFER = buildSignedTestBuyOffer({
   sellerUtxo: { txid: REAL_TXID, vout: 0, value: CAT_VALUE_SATS },
   priceSats: BID_SATS,
-}).base64;
+});
+const VALID_PSBT = DEFAULT_OFFER.base64;
 
 const validDto = (over: Partial<Parameters<BidsService['create']>[0]> = {}): Parameters<BidsService['create']>[0] => ({
   network: 'mainnet',
@@ -121,15 +123,23 @@ function createOrdMock(opts: {
 }
 
 /**
- * Electrs mock. Defaults to `'unspent'` for every outpoint so the
- * post-SDK-validate buyer-input existence check passes; a spec that
- * exercises the phantom-input rejection path overrides via `status`.
+ * Electrs mock. `getPrevout` serves the TRUE prevouts the SDK's crypto gate
+ * pins and verifies against — defaulting to the default offer's, so a genuine
+ * bid passes; a spec exercising the fetch-failure paths overrides `getPrevout`
+ * directly. `getOutpointStatus` still backs the spent-vout spend probe and
+ * defaults to `'unspent'`.
  */
-function createElectrsMock(opts: { status?: 'spent' | 'unspent' | 'unknown' } = {}) {
+function createElectrsMock(
+  opts: { status?: 'spent' | 'unspent' | 'unknown'; prevouts?: OfferPrevouts } = {},
+) {
   const status = opts.status ?? 'unspent';
+  const prevouts = opts.prevouts ?? DEFAULT_OFFER.prevouts;
   return {
     getOutpointStatus: jest.fn().mockResolvedValue(status),
     isOutpointSpent: jest.fn().mockResolvedValue(status === 'spent'),
+    getPrevout: jest.fn().mockImplementation((txid: string, vout: number) =>
+      Promise.resolve(prevouts.get(`${txid}:${vout}`) ?? 'not-found'),
+    ),
   };
 }
 
@@ -273,20 +283,69 @@ describe('BidsService.create: SDK validator wiring (every DTO field reaches it)'
 describe('BidsService.create: electrs + ord', () => {
 
   it('checks every buyer funding input against electrs, by its real outpoint', async () => {
-    const electrs = createElectrsMock();
-    const drizzle = createDrizzleMock({ limit: jest.fn().mockResolvedValue([persistedRow()]) });
-    const psbt = psbtWith({
+    const offer = buildSignedTestBuyOffer({
+      sellerUtxo: { txid: REAL_TXID, vout: 0, value: CAT_VALUE_SATS },
+      priceSats: BID_SATS,
       buyerFunding: [
         { txid: testFundingTxid(0xaa), vout: 1, value: 60_000 },
         { txid: testFundingTxid(0xbb), vout: 3, value: 40_000 },
       ],
     });
+    const electrs = createElectrsMock({ prevouts: offer.prevouts });
+    const drizzle = createDrizzleMock({ limit: jest.fn().mockResolvedValue([persistedRow()]) });
     const service = new BidsService(drizzle as never, createOrdMock() as never, electrs as never);
-    await service.create(validDto({ psbtBase64: psbt }));
+    await service.create(validDto({ psbtBase64: offer.base64 }));
     expect(electrs.getOutpointStatus.mock.calls).toEqual([
       [testFundingTxid(0xaa), 1],
       [testFundingTxid(0xbb), 3],
     ]);
+  });
+
+  // A5 seam: the chain prevouts the service fetches must actually reach the
+  // SDK's crypto gate. These three prove the wiring; the signature math itself
+  // is proven in the SDK's verify-offer-input-signatures spec.
+  it('rejects psbt-prevout-amount-mismatch when electrs reports a different input value than the PSBT claims', async () => {
+    // Serve the funding input with a value that disagrees with the signed
+    // witnessUtxo: the crypto gate pins witnessUtxo to the chain and rejects.
+    const tampered: OfferPrevouts = new Map(DEFAULT_OFFER.prevouts);
+    const fundingKey = `${testFundingTxid(0xaa)}:1`;
+    const real = DEFAULT_OFFER.prevouts.get(fundingKey)!;
+    tampered.set(fundingKey, { script: real.script, amountSats: real.amountSats + 1 });
+    const service = new BidsService(
+      createDrizzleMock() as never,
+      createOrdMock() as never,
+      createElectrsMock({ prevouts: tampered }) as never,
+    );
+    await expect(service.create(validDto())).rejects.toMatchObject({
+      response: { code: 'psbt-prevout-amount-mismatch' },
+    });
+  });
+
+  it('rejects psbt-buyer-input-unspendable when a buyer input has no chain prevout (phantom)', async () => {
+    // getPrevout 'not-found' for every outpoint: the funding input is a phantom.
+    const electrs = {
+      getOutpointStatus: jest.fn().mockResolvedValue('unspent'),
+      isOutpointSpent: jest.fn().mockResolvedValue(false),
+      getPrevout: jest.fn().mockResolvedValue('not-found'),
+    };
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, electrs as never);
+    await expect(service.create(validDto())).rejects.toMatchObject({
+      response: { code: 'psbt-buyer-input-unspendable' },
+    });
+  });
+
+  it('rejects prevout-fetch-failed (fail closed) when a prevout cannot be read from electrs', async () => {
+    // An electrs blip on the prevout read: a bid we cannot verify against the
+    // chain is not accepted, unlike the spend probe which tolerates a blip.
+    const electrs = {
+      getOutpointStatus: jest.fn().mockResolvedValue('unspent'),
+      isOutpointSpent: jest.fn().mockResolvedValue(false),
+      getPrevout: jest.fn().mockResolvedValue('unknown'),
+    };
+    const service = new BidsService(createDrizzleMock() as never, createOrdMock() as never, electrs as never);
+    await expect(service.create(validDto())).rejects.toMatchObject({
+      response: { code: 'prevout-fetch-failed' },
+    });
   });
 
   it('rejects ord-lookup-failed when the /output call throws', async () => {
@@ -363,9 +422,12 @@ describe('BidsService.create — happy path + upsert', () => {
   it('accepts a cat that sits on a non-zero output, validating against that outpoint', async () => {
     const ord = createOrdMock();
     const drizzle = createDrizzleMock({ limit: jest.fn().mockResolvedValue([persistedRow({ catVout: 1 })]) });
-    const service = new BidsService(drizzle as never, ord as never, createElectrsMock() as never);
-    const psbt = psbtWith({ sellerUtxo: { txid: REAL_TXID, vout: 1, value: CAT_VALUE_SATS } });
-    await expect(service.create(validDto({ catVout: 1, psbtBase64: psbt }))).resolves.toMatchObject({ catVout: 1 });
+    const offer = buildSignedTestBuyOffer({
+      sellerUtxo: { txid: REAL_TXID, vout: 1, value: CAT_VALUE_SATS },
+      priceSats: BID_SATS,
+    });
+    const service = new BidsService(drizzle as never, ord as never, createElectrsMock({ prevouts: offer.prevouts }) as never);
+    await expect(service.create(validDto({ catVout: 1, psbtBase64: offer.base64 }))).resolves.toMatchObject({ catVout: 1 });
     expect(ord.getCatsAtOutput).toHaveBeenCalledWith(REAL_TXID, 1);
   });
 

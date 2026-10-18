@@ -180,4 +180,49 @@ describe('ElectrsClientService', () => {
       expect.objectContaining({ headers: expect.objectContaining({ Accept: 'application/json' }) }),
     );
   });
+
+  // getPrevout feeds the buy-offer crypto gate: it reads a prevout's
+  // scriptPubKey + value from /tx so the sighash can be recomputed against the
+  // chain, never the PSBT's own (attacker-controlled) witnessUtxo.
+  describe('getPrevout', () => {
+    // A real P2WPKH scriptPubKey: OP_0 PUSH20 <20 bytes>.
+    const SCRIPT_HEX = '0014751e76e8199196d454941c45d1b3a323f1433bd6';
+
+    it('returns the vout script + value from /tx', async () => {
+      stubFetch(200, {
+        vout: [
+          { scriptpubkey: 'ffff', value: 111 },
+          { scriptpubkey: SCRIPT_HEX, value: 60_000 },
+        ],
+      });
+      const prevout = await makeClient().getPrevout(TXID, 1);
+      expect(prevout).toEqual({
+        script: Uint8Array.from([
+          0x00, 0x14, 0x75, 0x1e, 0x76, 0xe8, 0x19, 0x91, 0x96, 0xd4, 0x54, 0x94,
+          0x1c, 0x45, 0xd1, 0xb3, 0xa3, 0x23, 0xf1, 0x43, 0x3b, 0xd6,
+        ]),
+        amountSats: 60_000,
+      });
+    });
+
+    it('returns `not-found` on a 404 (phantom txid)', async () => {
+      stubFetch(404, null);
+      expect(await makeClient().getPrevout(TXID, 0)).toBe('not-found');
+    });
+
+    it('returns `not-found` when the vout index is out of range', async () => {
+      stubFetch(200, { vout: [{ scriptpubkey: SCRIPT_HEX, value: 60_000 }] });
+      expect(await makeClient().getPrevout(TXID, 5)).toBe('not-found');
+    });
+
+    it('returns `unknown` on a 5xx (fail-safe: the crypto gate then fails closed)', async () => {
+      stubFetch(503, null);
+      expect(await makeClient().getPrevout(TXID, 0)).toBe('unknown');
+    });
+
+    it('returns `unknown` when a vout lacks a numeric value', async () => {
+      stubFetch(200, { vout: [{ scriptpubkey: SCRIPT_HEX }] });
+      expect(await makeClient().getPrevout(TXID, 0)).toBe('unknown');
+    });
+  });
 });
