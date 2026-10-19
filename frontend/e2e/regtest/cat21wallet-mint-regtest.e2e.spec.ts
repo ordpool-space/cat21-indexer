@@ -46,7 +46,27 @@ import {
   regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
+import { catOutputFixture, cleanOutputFixture, Network, recommendedFeesFixture } from 'ordpool-sdk/core';
+import { buildCat21SessionMessage } from 'ordpool-sdk/cat21-session';
+import { hex } from '@scure/base';
+import { signTestBip322Message, testTaprootAddress } from 'ordpool-sdk/testing';
+
+// Fixed buyer-ordinals key for the bid's session token: this taproot address
+// only receives the cat and anchors the session, signing no PSBT input, so a
+// known key lets the test BIP-322-sign the session message the bid POST requires.
+const BID_BUYER_ORDINALS_KEY = hex.decode('43'.repeat(32));
+
+/** Session-token headers for `address`, BIP-322-signed with `BID_BUYER_ORDINALS_KEY`. */
+function bidSessionHeaders(address: string): Record<string, string> {
+  const validUntilIso = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const message = buildCat21SessionMessage({ address, validUntilIso });
+  const signature = signTestBip322Message({ privateKey: BID_BUYER_ORDINALS_KEY, message, network: Network.Regtest });
+  return {
+    'X-Cat21-Session-Address': address,
+    'X-Cat21-Session-Valid-Until': validUntilIso,
+    'X-Cat21-Session-Signature': signature,
+  };
+}
 
 // Canonical clean `/output` body (indexed, carries nothing), merged across the
 // two ord surfaces the scanner reads (full ord: inscriptions/runes/sat_ranges;
@@ -1347,7 +1367,9 @@ test('bid marketplace round-trip: buyer POSTs â†’ GET returns byte-equal PSBT â†
   const BID_PRICE_SATS = 25000;
   const BID_FEE_SATS = 2000;
   const buyerPaymentAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
-  const buyerReceiveAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
+  // Known test key (receives the cat + anchors the bid's session token); the
+  // regtest wallet still funds and signs the buyer payment coin.
+  const buyerReceiveAddress = testTaprootAddress(BID_BUYER_ORDINALS_KEY, Network.Regtest);
   // Change re-uses the payment address so the DTO's `buyerPaymentAddress`
   // matches PSBT output 2. A real wallet would use a fresh internal
   // address and add a separate DTO field; for this round-trip the shape
@@ -1448,7 +1470,7 @@ test('bid marketplace round-trip: buyer POSTs â†’ GET returns byte-equal PSBT â†
   };
   const postRes = await fetch(`${bidsUrl}/api/v1/bids`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...bidSessionHeaders(buyerReceiveAddress) },
     body: JSON.stringify(bidBody),
   });
   const postText = await postRes.text();

@@ -35,6 +35,27 @@ import {
 } from 'ordpool-sdk/e2e';
 
 import { buildCat21BuyOfferPsbt, KnownOrdinalWalletType, Network } from 'ordpool-sdk/core';
+import { buildCat21SessionMessage } from 'ordpool-sdk/cat21-session';
+import { hex } from '@scure/base';
+import { signTestBip322Message, testTaprootAddress } from 'ordpool-sdk/testing';
+
+// A fixed buyer-ordinals key for the session token. This address only receives
+// the cat (output 0) and anchors the session; it signs no PSBT input (those are
+// the regtest wallet's payment coins), so a known key is safe and lets the test
+// BIP-322-sign the session message the POST now requires.
+const BUYER_ORDINALS_KEY = hex.decode('42'.repeat(32));
+
+/** Session-token headers for `address`, BIP-322-signed with `BUYER_ORDINALS_KEY`. */
+function sessionHeadersFor(address: string): Record<string, string> {
+  const validUntilIso = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const message = buildCat21SessionMessage({ address, validUntilIso });
+  const signature = signTestBip322Message({ privateKey: BUYER_ORDINALS_KEY, message, network: Network.Regtest });
+  return {
+    'X-Cat21-Session-Address': address,
+    'X-Cat21-Session-Valid-Until': validUntilIso,
+    'X-Cat21-Session-Signature': signature,
+  };
+}
 
 /**
  * Everything on these pages is real: the seller's listing is signed by the
@@ -120,7 +141,9 @@ async function openOrderbookViaNav(page: Page): Promise<void> {
  */
 async function postRealBid(cat: SeededListedCat, bidSats: number): Promise<{ id: string; bidSats: number }> {
   const buyerPaymentAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
-  const buyerReceiveAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32m').trim();
+  // The buyer's ordinals address is a known test key (receives the cat + anchors
+  // the session token); the regtest wallet still funds and signs the payment coin.
+  const buyerReceiveAddress = testTaprootAddress(BUYER_ORDINALS_KEY, Network.Regtest);
   const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
   await waitForElectrsSync(mineBlocks(1));
 
@@ -163,7 +186,7 @@ async function postRealBid(cat: SeededListedCat, bidSats: number): Promise<{ id:
 
   const res = await fetch(`${BACKEND_URL}/api/v1/bids`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...sessionHeadersFor(buyerReceiveAddress) },
     body: JSON.stringify({
       network: 'regtest',
       catTxid: cat.txid,

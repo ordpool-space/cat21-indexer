@@ -98,13 +98,18 @@ export class Cat21BidsService {
   private readonly baseUrl = `${environment.api}/api/v1/bids`;
 
   /**
-   * Post a buyer's half-signed PSBT to the marketplace. The PSBT's
-   * own SIGHASH_ALL sigs on inputs 1..N are the auth; no BIP-322
-   * wrap needed. Network comes from the connected wallet.
+   * Post a buyer's half-signed PSBT to the marketplace. Auth is twofold: the
+   * PSBT's SIGHASH_ALL sigs on inputs 1..N commit the funds (the backend now
+   * verifies them cryptographically against the chain), AND a session token
+   * proving control of `buyerOrdinalsAddress` so a bid can only be filed under
+   * an address the caller owns — without it, anyone could overwrite a rival's
+   * bid on the same UTXO (the upsert key is the buyer ordinals address). The
+   * first bid in a session prompts the wallet for a session sig; subsequent
+   * ones reuse the cached token, same as `deleteBid`.
    *
-   * Errors bubble up as `BidError` with the backend's specific
-   * failure code (`network-mismatch`, `psbt-price-mismatch`,
-   * `cats-bundle-drift`, `bid-below-marketplace-floor`, …). The UI
+   * Errors bubble up as `BidError` with the backend's specific failure code
+   * (`network-mismatch`, `psbt-price-mismatch`, `cats-bundle-drift`,
+   * `bid-below-marketplace-floor`, `session-address-mismatch`, …). The UI
    * maps the code to a human message.
    */
   postBid(args: PostBidArgs): Observable<PersistedCat21Bid> {
@@ -116,7 +121,7 @@ export class Cat21BidsService {
       }));
     }
     const network = this.walletService.network;
-    return of({
+    const body = {
       network,
       catTxid: args.catTxid,
       catVout: args.catVout,
@@ -127,11 +132,12 @@ export class Cat21BidsService {
       buyerPaymentAddress: args.buyerPaymentAddress,
       sellerPaymentAddress: args.sellerPaymentAddress,
       psbtBase64: args.psbtBase64,
-    }).pipe(
-      switchMap((body) =>
+    };
+    return this.session.headersFor(args.buyerOrdinalsAddress).pipe(
+      switchMap((headers) =>
         this.http
-          .post<PersistedCat21Bid>(this.baseUrl, body)
-          .pipe(catchError((err) => throwError(() => this.mapHttpError(err)))),
+          .post<PersistedCat21Bid>(this.baseUrl, body, { headers: new HttpHeaders(headers) })
+          .pipe(catchError((err) => throwError(() => this.mapHttpError(err, args.buyerOrdinalsAddress)))),
       ),
     );
   }
