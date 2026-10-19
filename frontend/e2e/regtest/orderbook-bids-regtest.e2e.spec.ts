@@ -39,17 +39,24 @@ import { buildCat21SessionMessage } from 'ordpool-sdk/cat21-session';
 import { hex } from '@scure/base';
 import { signTestBip322Message, testTaprootAddress } from 'ordpool-sdk/testing';
 
-// A fixed buyer-ordinals key for the session token. This address only receives
-// the cat (output 0) and anchors the session; it signs no PSBT input (those are
-// the regtest wallet's payment coins), so a known key is safe and lets the test
-// BIP-322-sign the session message the POST now requires.
-const BUYER_ORDINALS_KEY = hex.decode('42'.repeat(32));
+// A DISTINCT buyer-ordinals key per bid. The bid upsert key includes
+// buyer_ordinals_address, so two bids sharing one address collapse to a single
+// row; the orderbook test posts two bids on one cat and expects two rows, so
+// each needs its own buyer. The address only receives the cat (output 0) and
+// anchors the session, signing no PSBT input (those are the regtest wallet's
+// payment coins), so a known per-bid key is safe and lets the test BIP-322-sign
+// the session message the POST now requires.
+let bidderSeq = 0;
+function nextBuyerOrdinalsKey(): Uint8Array {
+  bidderSeq += 1;
+  return hex.decode(bidderSeq.toString(16).padStart(2, '0').repeat(32));
+}
 
-/** Session-token headers for `address`, BIP-322-signed with `BUYER_ORDINALS_KEY`. */
-function sessionHeadersFor(address: string): Record<string, string> {
+/** Session-token headers for `address`, BIP-322-signed with `key`. */
+function sessionHeadersFor(address: string, key: Uint8Array): Record<string, string> {
   const validUntilIso = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   const message = buildCat21SessionMessage({ address, validUntilIso });
-  const signature = signTestBip322Message({ privateKey: BUYER_ORDINALS_KEY, message, network: Network.Regtest });
+  const signature = signTestBip322Message({ privateKey: key, message, network: Network.Regtest });
   return {
     'X-Cat21-Session-Address': address,
     'X-Cat21-Session-Valid-Until': validUntilIso,
@@ -141,9 +148,10 @@ async function openOrderbookViaNav(page: Page): Promise<void> {
  */
 async function postRealBid(cat: SeededListedCat, bidSats: number): Promise<{ id: string; bidSats: number }> {
   const buyerPaymentAddress = rpc(`-rpcwallet=${regtestWallet()}`, 'getnewaddress', '', 'bech32').trim();
-  // The buyer's ordinals address is a known test key (receives the cat + anchors
-  // the session token); the regtest wallet still funds and signs the payment coin.
-  const buyerReceiveAddress = testTaprootAddress(BUYER_ORDINALS_KEY, Network.Regtest);
+  // A distinct per-bid ordinals key (receives the cat + anchors the session);
+  // the regtest wallet still funds and signs the payment coin.
+  const buyerOrdinalsKey = nextBuyerOrdinalsKey();
+  const buyerReceiveAddress = testTaprootAddress(buyerOrdinalsKey, Network.Regtest);
   const fundTxid = rpc(`-rpcwallet=${regtestWallet()}`, 'sendtoaddress', buyerPaymentAddress, '0.001').trim();
   await waitForElectrsSync(mineBlocks(1));
 
@@ -186,7 +194,7 @@ async function postRealBid(cat: SeededListedCat, bidSats: number): Promise<{ id:
 
   const res = await fetch(`${BACKEND_URL}/api/v1/bids`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...sessionHeadersFor(buyerReceiveAddress) },
+    headers: { 'content-type': 'application/json', ...sessionHeadersFor(buyerReceiveAddress, buyerOrdinalsKey) },
     body: JSON.stringify({
       network: 'regtest',
       catTxid: cat.txid,
