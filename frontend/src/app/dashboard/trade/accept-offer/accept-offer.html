@@ -36,15 +36,28 @@
   } @else {
     <section class="accept-offer-section" data-testid="accept-offer-cat-section">
       <h2 class="accept-offer-section-heading">1. Which of your cats is the offer for?</h2>
-      @if (urlCatOutpoint(); as fromUrl) {
-        <!-- Buyer's reply link committed the cat outpoint in the URL,
-             so no manual pick needed. Show it as read-only info; the
-             seller can still override by picking from the dropdown. -->
+      @if (urlCatHolding(); as held) {
+        <!-- The buyer's reply link committed a cat outpoint in the URL
+             AND it resolves to a cat this wallet holds, so no manual
+             pick is needed. Show it as read-only info; the seller can
+             still override by picking from the dropdown. -->
         <p class="text-muted small" data-testid="accept-offer-cat-from-url">
-          Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>
+          Cat #{{ held.catNumber }} (<code>{{ held.txid }}:{{ held.vout }}</code>)
           pre-selected from the buyer's link. Pick from the dropdown
           below to override.
         </p>
+      } @else if (urlCatOutpoint(); as fromUrl) {
+        <!-- The link named an outpoint this wallet does not hold. A
+             buyer controls the link, so we do NOT present it as a
+             confirmed selection (audit A14); the seller picks a real
+             holding below. -->
+        @if (!holdingsResource.isLoading()) {
+          <p class="text-muted small" role="alert" data-testid="accept-offer-cat-url-not-held">
+            The buyer's link points at <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>,
+            which isn't a cat in this wallet. Pick one of your cats below
+            to accept an offer.
+          </p>
+        }
       }
       @if (myHoldings().length === 0 && !holdingsResource.isLoading()) {
         <p class="text-muted small" data-testid="accept-offer-no-cats">
@@ -120,13 +133,16 @@
           </div>
           <div class="accept-offer-summary-row">
             <span class="lbl">You receive</span>
-            <span class="val">{{ offer.pricePaidSats + offer.postageSats | number }} sat (price {{ offer.pricePaidSats | number }} + postage {{ offer.postageSats }})</span>
+            <span class="val">{{ proceedsSats() | number }} sat</span>
           </div>
         </div>
         <p class="text-muted small mt-2">
-          By signing, you'll move the cat to the buyer's receive
-          address (encoded in the offer). The fee is already baked into
-          the offer, no extra cost to you.
+          By signing, you'll move the cat to the buyer's receive address
+          (encoded in the offer) and earn {{ offer.pricePaidSats | number }} sat.
+          Your cat's own {{ offer.postageSats | number }} sat return in the
+          same payment output, so {{ offer.pricePaidSats + offer.postageSats | number }}
+          sat land at your payment address in total. The fee is already baked
+          into the offer, no extra cost to you.
         </p>
       </section>
     } @else if (state() === 'invalid' && humanRejection(); as rej) {

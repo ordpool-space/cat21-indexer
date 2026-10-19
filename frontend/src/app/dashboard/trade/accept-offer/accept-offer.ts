@@ -94,6 +94,17 @@ export class AcceptOffer implements OnInit {
   /** A valid, parsed offer is ready to accept. */
   readonly canAccept = computed(() => this.snap().state === 'parsed');
 
+  /**
+   * Net sats the seller earns by accepting: the offer's price. NOT
+   * price + postage — the cat's own UTXO value (`postageSats`) returns
+   * in the same payment output, but those are the cat's sats passing
+   * through, not income (audit A6: the headline once added them and
+   * overstated proceeds by the whole cat-UTXO value). The summary's
+   * headline binds here so the figure is pinned by a unit test, never
+   * inline template arithmetic.
+   */
+  readonly proceedsSats = computed<number | null>(() => this.parsedOffer()?.pricePaidSats ?? null);
+
   // ---------- Cat picker + local form state ----------
 
   /**
@@ -120,6 +131,22 @@ export class AcceptOffer implements OnInit {
     const id = this.selectedInscriptionId();
     if (!id) return null;
     return this.myHoldings().find((h) => h.inscriptionId === id) ?? null;
+  });
+
+  /**
+   * The URL-supplied cat outpoint resolved to the seller's matching
+   * holding, or null when the URL named no outpoint OR named one this
+   * wallet does not actually hold. A buyer controls the accept link, so
+   * the raw `urlCatOutpoint` is untrusted input: the orchestrator's
+   * expected cat is only ever a cat the seller demonstrably holds (fail
+   * closed while holdings are still loading), never an arbitrary outpoint
+   * the link asserted. The manual picker (`selectedHolding`) is already
+   * holdings-backed; this holds the one-click path to the same bar.
+   */
+  readonly urlCatHolding = computed<MyCatHolding | null>(() => {
+    const url = this.urlCatOutpoint();
+    if (!url) return null;
+    return this.myHoldings().find((h) => h.txid === url.txid && h.vout === url.vout) ?? null;
   });
 
   /**
@@ -168,15 +195,19 @@ export class AcceptOffer implements OnInit {
     // (per the ord-style offer protocol).
     effect(() => {
       const fromPicker = this.selectedHolding();
-      const fromUrl = this.urlCatOutpoint();
+      const fromUrl = this.urlCatHolding();
       const wallet = this.walletSignal();
       // Picker takes precedence when the seller has actively picked
-      // a cat. URL-supplied outpoint is the fallback so a one-click
-      // accept-link from the buyer doesn't require picking anything.
+      // a cat. The URL-supplied outpoint is the fallback so a one-click
+      // accept-link from the buyer doesn't require picking anything, but
+      // only after it resolves to a cat the seller actually holds
+      // (`urlCatHolding`); a link naming an outpoint this wallet does not
+      // hold yields null here, so the expected cat is never set from
+      // untrusted link data (audit A14).
       if (fromPicker) {
         this.orch.setExpectedCatUtxo({ txid: fromPicker.txid, vout: fromPicker.vout });
       } else if (fromUrl) {
-        this.orch.setExpectedCatUtxo(fromUrl);
+        this.orch.setExpectedCatUtxo({ txid: fromUrl.txid, vout: fromUrl.vout });
       } else {
         this.orch.setExpectedCatUtxo(null);
       }

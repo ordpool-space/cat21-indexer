@@ -44,6 +44,19 @@ const CAT = { txid: CAT_TXID, vout: 1, value: 546 };
 const PRICE = 21_000;
 
 /**
+ * The seller's cat as it appears in their holdings lookup. The accept
+ * flow only trusts a URL-supplied outpoint once it resolves to one of
+ * these (audit A14), so every "seller can accept" fixture seeds it.
+ */
+const CAT_HOLDING: MyCatHolding = {
+  txid: CAT.txid,
+  vout: CAT.vout,
+  value: CAT.value,
+  catNumber: 42,
+  inscriptionId: 'inscription-cat-i0',
+};
+
+/**
  * A buyer-signed offer for the test wallet's cat: the test wallet is the
  * seller, so input 0 spends its ordinals script and output 1 pays its payment
  * address unless a case says otherwise.
@@ -129,9 +142,14 @@ async function setup(queryParams: Record<string, string> = {}) {
   return { fixture, component: fixture.componentInstance, orchestrator, spies, broadcast, walletService, lookup, settle };
 }
 
-/** The seller's page with the wallet connected and the cat outpoint from the URL. */
-async function sellerReady() {
+/**
+ * The seller's page with the wallet connected, the cat outpoint in the
+ * URL, and the seller actually holding that cat (the A14 precondition:
+ * a URL outpoint is only honoured once it resolves to a real holding).
+ */
+async function sellerReady(holdings: MyCatHolding[] = [CAT_HOLDING]) {
   const ctx = await setup({ catTxid: CAT.txid, catVout: String(CAT.vout) });
+  ctx.lookup.getMyHoldingsImpl.mockReturnValue(of(holdings));
   ctx.walletService.connectedWalletSubject.next(testWallet());
   await ctx.settle();
   return ctx;
@@ -186,6 +204,31 @@ describe('AcceptOffer: the orchestrator verdict surfaces to the UI', () => {
     expect(component.state()).toBe('parsed');
     expect(component.canAccept()).toBe(true);
   });
+
+  it('A6: proceedsSats is the net price, NOT price + postage (the headline figure the seller reads)', async () => {
+    const { component, settle } = await sellerReady();
+    component.onPasteChange(buildOfferPsbt());
+    await settle();
+
+    // The cat's own UTXO value (postage) returns in the payment output
+    // but is the cat's sats passing through, not income. The headline
+    // must show the price alone, never price + postage.
+    expect(component.proceedsSats()).toBe(PRICE);
+    expect(component.proceedsSats()).not.toBe(PRICE + CAT.value);
+  });
+
+  it('A6: proceedsSats stays net price when the cat sits on a LARGE UTXO (overstatement would be visible)', async () => {
+    // A 30 000-sat cat: the old "price + postage" headline overstated
+    // proceeds by 30 000 sat. Prove the figure is price alone regardless
+    // of the cat UTXO size.
+    const bigCat = { txid: CAT.txid, vout: CAT.vout, value: 30_000 };
+    const { component, settle } = await sellerReady([{ ...CAT_HOLDING, value: bigCat.value }]);
+    component.onPasteChange(buildOfferPsbt({ sellerUtxo: bigCat }));
+    await settle();
+
+    expect(component.validationResult()).toEqual({ ok: true, pricePaidSats: PRICE, postageSats: bigCat.value });
+    expect(component.proceedsSats()).toBe(PRICE);
+  });
 });
 
 describe('rejectionToHuman: one sentence per SDK rejection reason', () => {
@@ -226,18 +269,22 @@ describe('rejectionToHuman: one sentence per SDK rejection reason', () => {
 
 describe('AcceptOffer — URL prefill via ?offer=&catTxid=&catVout=', () => {
 
-  it('URL supplies BOTH offer + catOutpoint → orchestrator receives both', async () => {
+  it('URL supplies offer + catOutpoint → offer is pasted, but expectedCatUtxo stays null until a held cat confirms it (A14)', async () => {
     const offer = buildOfferPsbt();
     const { component, spies, orchestrator } = await setup({
       offer,
       catTxid: CAT.txid,
       catVout: String(CAT.vout),
     });
-    // urlCatOutpoint is populated from the URL for the effect fallback.
+    // urlCatOutpoint is populated from the URL (raw, untrusted) ...
     expect(component.urlCatOutpoint()).toEqual({ txid: CAT.txid, vout: CAT.vout });
     expect(spies.setPastedOffer).toHaveBeenCalledWith(offer);
     expect(orchestrator.getSnapshot().pastedOffer).toBe(offer);
-    expect(orchestrator.getSnapshot().expectedCatUtxo).toEqual({ txid: CAT.txid, vout: CAT.vout });
+    // ... but with no wallet connected there are no holdings, so the URL
+    // outpoint resolves to no cat and the expected cat is NOT set from
+    // the link alone.
+    expect(component.urlCatHolding()).toBeNull();
+    expect(orchestrator.getSnapshot().expectedCatUtxo).toBeNull();
   });
 
   it('URL missing catTxid → urlCatOutpoint stays null; orchestrator gets pasted offer only', async () => {
@@ -263,11 +310,12 @@ describe('AcceptOffer — URL prefill via ?offer=&catTxid=&catVout=', () => {
 
 describe('AcceptOffer — wallet-driven picker/payment wiring', () => {
 
-  it('when a wallet connects with the URL outpoint already set, the orchestrator receives BOTH the outpoint AND the seller-payment address', async () => {
-    const { spies, orchestrator, walletService, settle } = await setup({
+  it('when a wallet connects holding the URL cat, the orchestrator receives BOTH the outpoint AND the seller-payment address', async () => {
+    const { spies, orchestrator, walletService, lookup, settle } = await setup({
       catTxid: CAT.txid,
       catVout: String(CAT.vout),
     });
+    lookup.getMyHoldingsImpl.mockReturnValue(of([CAT_HOLDING]));
     walletService.connectedWalletSubject.next(testWallet());
     await settle();
 
@@ -320,6 +368,58 @@ describe('AcceptOffer — wallet-driven picker/payment wiring', () => {
     );
     expect(pickerCall?.[0]).toEqual({ txid: 'c'.repeat(64), vout: 2 });
     expect(orchestrator.getSnapshot().expectedCatUtxo).toEqual({ txid: 'c'.repeat(64), vout: 2 });
+  });
+});
+
+describe('AcceptOffer — A14: the URL cat outpoint is trusted only when the seller holds it', () => {
+
+  it('URL outpoint IS a holding → urlCatHolding resolves and drives the expected cat', async () => {
+    const { component, orchestrator, walletService, lookup, settle } = await setup({
+      catTxid: CAT.txid,
+      catVout: String(CAT.vout),
+    });
+    lookup.getMyHoldingsImpl.mockReturnValue(of([CAT_HOLDING]));
+    walletService.connectedWalletSubject.next(testWallet());
+    await settle();
+
+    expect(component.urlCatHolding()).toEqual(CAT_HOLDING);
+    expect(orchestrator.getSnapshot().expectedCatUtxo).toEqual({ txid: CAT.txid, vout: CAT.vout });
+  });
+
+  it('URL outpoint is NOT a holding → urlCatHolding is null, the expected cat is never set from the link', async () => {
+    // Wallet holds a DIFFERENT cat than the one the buyer's link names.
+    const otherCat: MyCatHolding = {
+      txid: 'd'.repeat(64), vout: 0, value: 546, catNumber: 7, inscriptionId: 'inscription-other-i0',
+    };
+    const { component, orchestrator, walletService, lookup, settle } = await setup({
+      catTxid: CAT.txid,
+      catVout: String(CAT.vout),
+    });
+    lookup.getMyHoldingsImpl.mockReturnValue(of([otherCat]));
+    walletService.connectedWalletSubject.next(testWallet());
+    await settle();
+
+    expect(component.urlCatOutpoint()).toEqual({ txid: CAT.txid, vout: CAT.vout });
+    expect(component.urlCatHolding()).toBeNull();
+    expect(orchestrator.getSnapshot().expectedCatUtxo).toBeNull();
+  });
+
+  it('a buyer-forged link (outpoint the seller does not hold) + a matching offer cannot reach a valid accept', async () => {
+    // The link and the offer both name CAT, the wallet is connected (so the
+    // seller-payment address IS set), but the seller holds no cats (empty
+    // holdings, the LookupStub default). Without a verified holding the
+    // expected cat is never set, so the validator never runs: the offer
+    // cannot be accepted even though it is structurally fine for CAT.
+    const { component, walletService, settle } = await setup({ catTxid: CAT.txid, catVout: String(CAT.vout) });
+    walletService.connectedWalletSubject.next(testWallet());
+    await settle();
+
+    component.onPasteChange(buildOfferPsbt());
+    await settle();
+
+    expect(component.urlCatHolding()).toBeNull();
+    expect(component.canAccept()).toBe(false);
+    expect(component.state()).toBe('idle');
   });
 });
 
