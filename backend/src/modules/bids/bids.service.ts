@@ -11,6 +11,8 @@ import {
   toSdkNetwork,
 } from '../shared/backend-network';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
+import { throwCatNotFound, throwOrdLookupFailed } from '../shared/marketplace-errors';
+import { paginationOffset } from '../shared/pagination';
 import { bids } from '../shared/drizzle/schema/bids';
 import { ElectrsClientService } from '../sync/electrs-client.service';
 import { OrdClientService } from '../sync/ord-client.service';
@@ -168,10 +170,9 @@ export class BidsService {
     //      `/tx` read cannot see (a consumed output's tx still exists).
     const prevouts = new Map<string, { script: Uint8Array; amountSats: number }>();
     for (let i = 0; i < tx.inputsLength; i++) {
-      const inp = tx.getInput(i);
-      if (!inp.txid) continue;
-      const inpTxid = hex.encode(inp.txid);
-      const inpVout = inp.index ?? 0;
+      const op = this.inputOutpoint(tx, i);
+      if (!op) continue;
+      const { txid: inpTxid, vout: inpVout } = op;
       const pv = await this.electrsClient.getPrevout(inpTxid, inpVout);
       if (pv === 'not-found') {
         throw new BadRequestException({
@@ -218,10 +219,9 @@ export class BidsService {
     //      electrs momentarily 500'd; the pruner catches truly
     //      broken bids later.
     for (let i = 1; i < tx.inputsLength; i++) {
-      const inp = tx.getInput(i);
-      if (!inp.txid) continue;
-      const inpTxid = hex.encode(inp.txid);
-      const inpVout = inp.index ?? 0;
+      const op = this.inputOutpoint(tx, i);
+      if (!op) continue;
+      const { txid: inpTxid, vout: inpVout } = op;
       const status = await this.electrsClient.getOutpointStatus(inpTxid, inpVout);
       if (status === 'spent') {
         throw new BadRequestException({
@@ -243,18 +243,13 @@ export class BidsService {
       liveCats = await this.ordClient.getCatsAtOutput(dto.catTxid, dto.catVout);
     } catch (err) {
       this.logger.warn(`ord /output lookup failed for ${dto.catTxid}:${dto.catVout}: ${err instanceof Error ? err.message : err}`);
-      throw new BadRequestException({
-        code: 'ord-lookup-failed',
-        detail: 'On-chain cats-bundle check could not complete. Try again in a moment.',
-      });
+      throwOrdLookupFailed();
     }
     if (liveCats === null || liveCats.length === 0) {
-      throw new BadRequestException({
-        code: 'cat-not-found',
-        detail:
-          `UTXO ${dto.catTxid}:${dto.catVout} carries no cats on ord (already spent, unknown, ` +
+      throwCatNotFound(
+        `UTXO ${dto.catTxid}:${dto.catVout} carries no cats on ord (already spent, unknown, ` +
           'or never held a cat).',
-      });
+      );
     }
     if (!catsArraysEqual(liveCats, dto.cats)) {
       throw new BadRequestException({
@@ -313,17 +308,23 @@ export class BidsService {
    * `createdAt` DESC (ties broken by most-recent). The seller's view:
    * "who's offering the most right now".
    */
+  /** The (network, cat outpoint) predicates every single-outpoint query shares. */
+  private outpointPredicates(network: string, catTxid: string, catVout: number) {
+    return [eq(bids.network, network), eq(bids.catTxid, catTxid), eq(bids.catVout, catVout)];
+  }
+
+  /** The (txid, vout) of PSBT input `i`, or null when the input carries no txid. */
+  private inputOutpoint(tx: btc.Transaction, i: number): { txid: string; vout: number } | null {
+    const inp = tx.getInput(i);
+    if (!inp.txid) return null;
+    return { txid: hex.encode(inp.txid), vout: inp.index ?? 0 };
+  }
+
   async findByOutpoint(network: string, catTxid: string, catVout: number): Promise<BidDto[]> {
     const rows = await this.drizzle.db
       .select()
       .from(bids)
-      .where(
-        and(
-          eq(bids.network, network),
-          eq(bids.catTxid, catTxid),
-          eq(bids.catVout, catVout),
-        ),
-      )
+      .where(and(...this.outpointPredicates(network, catTxid, catVout)))
       .orderBy(desc(bids.bidSats), desc(bids.createdAt));
     return rows.map((r) => this.rowToDto(r));
   }
@@ -342,9 +343,7 @@ export class BidsService {
       .from(bids)
       .where(
         and(
-          eq(bids.network, network),
-          eq(bids.catTxid, catTxid),
-          eq(bids.catVout, catVout),
+          ...this.outpointPredicates(network, catTxid, catVout),
           eq(bids.buyerOrdinalsAddress, buyerOrdinalsAddress),
         ),
       )
@@ -358,13 +357,7 @@ export class BidsService {
    * most-recently-posted first. Bounded page size same as listings.
    */
   async findPaginated(itemsPerPage: number, currentPage: number): Promise<PaginatedBidsDto> {
-    if (!Number.isInteger(itemsPerPage) || itemsPerPage < 1 || itemsPerPage > 100) {
-      throw new BadRequestException('itemsPerPage must be an integer in [1, 100]');
-    }
-    if (!Number.isInteger(currentPage) || currentPage < 1) {
-      throw new BadRequestException('currentPage must be a positive integer');
-    }
-    const offset = (currentPage - 1) * itemsPerPage;
+    const offset = paginationOffset(itemsPerPage, currentPage);
     const [rows, [{ total }]] = await Promise.all([
       this.drizzle.db
         .select()

@@ -27,6 +27,10 @@ import { MAX_ASK_SATS } from 'ordpool-sdk/cat21-validation';
  * layer is needed on top.
  */
 export class CreateBidDto {
+  /* jscpd:ignore-start -- the network and cats fields validate the same shapes as
+     CreateListingDto on purpose: both are independent public POST contracts. A shared
+     base DTO would merge them into one OpenAPI schema and change the generated client,
+     so the field-level duplication is the contract, not drift. */
   @ApiProperty({
     description:
       'Bitcoin network the bid targets. Must match the backend deployment; a testnet-signed ' +
@@ -37,6 +41,7 @@ export class CreateBidDto {
   @IsString()
   @IsIn(['mainnet', 'testnet3', 'testnet4', 'signet', 'regtest'])
   network!: 'mainnet' | 'testnet3' | 'testnet4' | 'signet' | 'regtest';
+  /* jscpd:ignore-end */
 
   @ApiProperty({
     description: "Cat UTXO's txid the buyer's PSBT input 0 targets. Lowercase 64-hex.",
@@ -52,6 +57,8 @@ export class CreateBidDto {
   @Min(0)
   catVout!: number;
 
+  /* jscpd:ignore-start -- see the network-field note above: the cats array validation
+     matches CreateListingDto by contract, not by accident. */
   @ApiProperty({
     description:
       'Cats on the UTXO at bid time (buyer-observed snapshot). Sorted ascending, deduped. ' +
@@ -68,6 +75,7 @@ export class CreateBidDto {
   @IsInt({ each: true })
   @Min(0, { each: true })
   cats!: number[];
+  /* jscpd:ignore-end */
 
   @ApiProperty({
     description:

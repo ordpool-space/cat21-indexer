@@ -1,0 +1,17 @@
+{
+  "path": ["src"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/*.spec.ts",
+    "**/*.e2e-spec.ts"
+  ],
+  "minLines": 5,
+  "minTokens": 50,
+  "maxLines": 100000,
+  "maxSize": "10mb",
+  "threshold": 0,
+  "reporters": ["console"],
+  "gitignore": true,
+  "ignorePattern": ["import\\s[^;]*?\\sfrom\\s'[^']+';"]
+}

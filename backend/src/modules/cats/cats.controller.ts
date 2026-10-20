@@ -129,6 +129,20 @@ export class CatsController {
     return cat;
   }
 
+  /**
+   * Load the cat's SVG or 404. Sets `no-store` before throwing, because a
+   * not-yet-synced cat's 404 must never be edge-cached (see the repo's
+   * Cache-Control rule).
+   */
+  private async loadCatSvgOrThrow(catNumber: number, reply: FastifyReply): Promise<string> {
+    const svg = await this.catsService.getCatSvg(catNumber);
+    if (!svg) {
+      reply.header('Cache-Control', 'no-store');
+      throw new NotFoundException(`Cat #${catNumber} not found`);
+    }
+    return svg;
+  }
+
   @Get('cat/:catNumber/image.svg')
   @ApiOperation({ summary: 'Get cat SVG image', description: 'Returns the cat as an SVG image. The image is deterministically generated from the transaction and block hash.' })
   @ApiParam({ name: 'catNumber', description: 'Cat number (0-based)', example: 0 })
@@ -139,11 +153,7 @@ export class CatsController {
     @Param('catNumber', ParseIntPipe) catNumber: number,
     @Res() reply: FastifyReply,
   ) {
-    const svg = await this.catsService.getCatSvg(catNumber);
-    if (!svg) {
-      reply.header('Cache-Control', 'no-store');
-      throw new NotFoundException(`Cat #${catNumber} not found`);
-    }
+    const svg = await this.loadCatSvgOrThrow(catNumber, reply);
 
     return reply
       .header('Cache-Control', IMMUTABLE_CACHE_CONTROL)
@@ -162,11 +172,7 @@ export class CatsController {
     @Param('catNumber', ParseIntPipe) catNumber: number,
     @Res() reply: FastifyReply,
   ) {
-    const svg = await this.catsService.getCatSvg(catNumber);
-    if (!svg) {
-      reply.header('Cache-Control', 'no-store');
-      throw new NotFoundException(`Cat #${catNumber} not found`);
-    }
+    const svg = await this.loadCatSvgOrThrow(catNumber, reply);
 
     try {
       const webp = await sharp(Buffer.from(svg))

@@ -27,6 +27,10 @@ jobs:
       working-directory: backend
       run: npm ci
 
+    - name: Duplicate check (jscpd)
+      working-directory: backend
+      run: npm run dupes
+
     - name: Unit tests (Jest)
       working-directory: backend
       run: npm test -- --coverage

@@ -54,6 +54,10 @@ export class BidDto {
   createdAt!: string;
 }
 
+/* jscpd:ignore-start -- the total/currentPage/itemsPerPage pagination envelope recurs
+   across every paginated DTO (listings, cats) by API contract. A shared generic base
+   would change the generated OpenAPI client's schema composition, so each endpoint
+   declares its own envelope. */
 export class PaginatedBidsDto {
   @ApiProperty({ description: 'Total active bids on the orderbook.', example: 137 })
   total!: number;
@@ -67,3 +71,4 @@ export class PaginatedBidsDto {
   @ApiProperty({ type: [BidDto] })
   items!: BidDto[];
 }
+/* jscpd:ignore-end */

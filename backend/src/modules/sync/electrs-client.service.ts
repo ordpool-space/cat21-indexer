@@ -134,10 +134,16 @@ export class ElectrsClientService {
    * `{ spent: false }` for a txid it never saw, so it cannot detect a
    * phantom outpoint on its own.
    */
-  private async txExists(txid: string): Promise<'exists' | 'missing' | 'unknown'> {
-    let res: Response;
+  /**
+   * GET `/tx/<txid>` with the shared timeout. Returns the raw `Response`,
+   * or the `'unknown'` sentinel on a network / timeout blip so every
+   * caller fails safe on transport errors the same way; each caller maps
+   * the HTTP status itself, because a 404 means different things to them
+   * ('missing' vs 'not-found').
+   */
+  private async fetchTx(txid: string): Promise<Response | 'unknown'> {
     try {
-      res = await fetch(`${this.baseUrl}/tx/${txid}`, {
+      return await fetch(`${this.baseUrl}/tx/${txid}`, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
@@ -147,6 +153,11 @@ export class ElectrsClientService {
       );
       return 'unknown';
     }
+  }
+
+  private async txExists(txid: string): Promise<'exists' | 'missing' | 'unknown'> {
+    const res = await this.fetchTx(txid);
+    if (res === 'unknown') return 'unknown';
     if (res.status === 404) return 'missing';
     if (!res.ok) {
       this.logger.warn(`electrs /tx returned ${res.status} for ${txid}`);
@@ -183,16 +194,8 @@ export class ElectrsClientService {
     txid: string,
     vout: number,
   ): Promise<{ script: Uint8Array; amountSats: number } | 'not-found' | 'unknown'> {
-    let res: Response;
-    try {
-      res = await fetch(`${this.baseUrl}/tx/${txid}`, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      });
-    } catch (err) {
-      this.logger.warn(`electrs /tx fetch failed for ${txid}: ${err instanceof Error ? err.message : err}`);
-      return 'unknown';
-    }
+    const res = await this.fetchTx(txid);
+    if (res === 'unknown') return 'unknown';
     if (res.status === 404) return 'not-found';
     if (!res.ok) {
       this.logger.warn(`electrs /tx returned ${res.status} for ${txid}`);

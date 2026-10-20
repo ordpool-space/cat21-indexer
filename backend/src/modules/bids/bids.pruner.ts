@@ -58,6 +58,12 @@ export class BidsPruner implements OnModuleInit, OnModuleDestroy {
     private readonly bidsService: BidsService,
   ) {}
 
+  /* jscpd:ignore-start -- the boot-timer / teardown / re-entrancy-guard / @Cron
+     scaffolding mirrors the listings pruner on purpose. It stays on each concrete
+     pruner rather than a shared base class because @nestjs/schedule discovers
+     @Cron via metadata on the instance's own prototype; an inherited decorated
+     method can silently fail to register, which would stop pruning unnoticed.
+     The real pruning logic (runPruneInner) is entirely distinct per domain. */
   onModuleInit(): void {
     this.bootTimer = setTimeout(() => {
       this.bootTimer = null;
@@ -87,6 +93,7 @@ export class BidsPruner implements OnModuleInit, OnModuleDestroy {
       this.running = false;
     }
   }
+  /* jscpd:ignore-end */
 
   private async runPruneInner(): Promise<void> {
     const started = Date.now();

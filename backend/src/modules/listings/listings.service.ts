@@ -7,6 +7,8 @@ import {
   readBackendNetworkFromEnv,
 } from '../shared/backend-network';
 import { DrizzleService } from '../shared/drizzle/drizzle.service';
+import { throwCatNotFound, throwOrdLookupFailed } from '../shared/marketplace-errors';
+import { paginationOffset } from '../shared/pagination';
 import { listings } from '../shared/drizzle/schema/listings';
 import { OrdClientService } from '../sync/ord-client.service';
 import { CreateListingDto } from './dto/create-listing.dto';
@@ -86,19 +88,14 @@ export class ListingsService {
       this.logger.warn(
         `ord /output lookup failed for ${dto.catTxid}:${dto.catVout}: ${err instanceof Error ? err.message : err}`,
       );
-      throw new BadRequestException({
-        code: 'ord-lookup-failed',
-        detail: 'On-chain cats-bundle check could not complete. Try again in a moment.',
-      });
+      throwOrdLookupFailed();
     }
     if (liveCats === null || liveCats.length === 0) {
-      throw new BadRequestException({
-        code: 'cat-not-found',
-        detail:
-          `UTXO ${dto.catTxid}:${dto.catVout} carries no cats on ord (already spent, ` +
+      throwCatNotFound(
+        `UTXO ${dto.catTxid}:${dto.catVout} carries no cats on ord (already spent, ` +
           `unknown, or never held a cat). If the cat just moved, re-sign against the ` +
           `new outpoint.`,
-      });
+      );
     }
     if (!catsArraysEqual(liveCats, dto.cats)) {
       throw new BadRequestException({
@@ -257,13 +254,7 @@ export class ListingsService {
    * pressure — 100 rows/page hard cap.
    */
   async findPaginated(itemsPerPage: number, currentPage: number): Promise<PaginatedListingsDto> {
-    if (!Number.isInteger(itemsPerPage) || itemsPerPage < 1 || itemsPerPage > 100) {
-      throw new BadRequestException('itemsPerPage must be an integer in [1, 100]');
-    }
-    if (!Number.isInteger(currentPage) || currentPage < 1) {
-      throw new BadRequestException('currentPage must be a positive integer');
-    }
-    const offset = (currentPage - 1) * itemsPerPage;
+    const offset = paginationOffset(itemsPerPage, currentPage);
     const [rows, [{ total }]] = await Promise.all([
       this.drizzle.db
         .select()
