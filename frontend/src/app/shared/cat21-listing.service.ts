@@ -9,6 +9,7 @@ import {
 
 import { environment } from '../../environments/environment';
 import { Cat21SessionService } from './cat21-session.service';
+import { mapCat21HttpError } from './map-cat21-http-error';
 
 /**
  * What the backend stores + returns. Historical per-listing BIP-322
@@ -169,30 +170,11 @@ export class Cat21ListingService {
   }
 
   /**
-   * Map a HTTP error into a `CreateListingError`. On a 401 (session
-   * token rejected by the backend guard), clear the cached session
-   * for the address so the next attempt re-prompts.
+   * Map an HTTP error into a `CreateListingError`. On a 401 the cached
+   * session for `addressToClearOn401` is dropped so the next attempt
+   * re-prompts.
    */
   private mapHttpError(err: unknown, addressToClearOn401: string | null): CreateListingError {
-    if (err instanceof HttpErrorResponse) {
-      if (err.status === 401 && addressToClearOn401) {
-        this.session.clearFor(addressToClearOn401);
-      }
-      const body = err.error as { code?: string; detail?: string } | undefined;
-      if (body?.code) {
-        return {
-          code: body.code as CreateListingErrorCode,
-          detail: body.detail ?? err.statusText,
-        };
-      }
-      return {
-        code: 'network-error',
-        detail: `${err.status} ${err.statusText}`,
-      };
-    }
-    return {
-      code: 'network-error',
-      detail: err instanceof Error ? err.message : String(err),
-    };
+    return mapCat21HttpError<CreateListingErrorCode>(err, addressToClearOn401, (a) => this.session.clearFor(a));
   }
 }

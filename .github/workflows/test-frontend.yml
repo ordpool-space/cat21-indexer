@@ -40,6 +40,10 @@ jobs:
       working-directory: frontend
       run: npm ci --legacy-peer-deps
 
+    - name: Duplicate check (jscpd)
+      working-directory: frontend
+      run: npm run dupes
+
     - name: Typecheck e2e specs (tsc, esbuild never does)
       working-directory: frontend
       run: npm run typecheck:e2e

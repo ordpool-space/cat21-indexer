@@ -138,11 +138,17 @@ export class Mint {
    * Connected wallet from WalletService. The orchestrator no longer owns the
    * wallet; we push it in via `setWallet` (see the constructor effect).
    */
+  /* jscpd:ignore-start -- deliberate parallel signal glue across the four money-path
+     pages (mint, transfer, make-offer, accept-offer): each binds the connected wallet
+     via toSignal and mirrors the orchestrator snapshot into per-page computeds. The
+     "setWallet re-emission" rule keeps this per-page and guarded (no shared base), so
+     it is marked here, not extracted. */
   readonly connectedWallet = toSignal(this.walletService.connectedWallet$, { initialValue: null });
   readonly state = computed(() => this.snap().state);
   readonly errorMessage = computed(() => this.snap().errorMessage);
   readonly successTxId = computed(() => this.snap().successTxId);
   readonly feeRate = computed(() => this.snap().feeRate);
+  /* jscpd:ignore-end */
   /** The person's explicit pick (`selectUtxoOutput`), null while the SDK chooses. */
   readonly selectedUtxo = computed(() => this.snap().selectedUtxo);
 
@@ -398,6 +404,9 @@ export class Mint {
     // Push wallet changes into the orchestrator; it (re)fetches the wallet's
     // UTXOs and recomputes. `setWallet` is async + dedupes internally, so a
     // BehaviorSubject re-emission of the same wallet is a no-op there.
+    /* jscpd:ignore-start -- the setWallet push effect is deliberately mirrored on each
+       money-path page; the "setWallet re-emission" rule keeps it per-page and guarded
+       in the SDK, so it is marked, not extracted into a shared base. */
     effect(() => {
       const w = this.connectedWallet();
       void this.orch.setWallet(
@@ -411,6 +420,7 @@ export class Mint {
           : null,
       );
     });
+    /* jscpd:ignore-end */
 
     // Wipe the scanner cache when one wallet swaps out for another —
     // the previous wallet's UTXO outpoints aren't relevant to the new

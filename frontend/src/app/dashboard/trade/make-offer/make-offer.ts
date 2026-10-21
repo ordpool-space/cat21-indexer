@@ -9,6 +9,7 @@ import {
   CapabilitySupport,
   Cat21CreateOfferOrchestrator,
   Cat21Service,
+  CatOutpoint,
   CreateOfferSnapshot,
   ExpertRequiredCause,
   UtxoAssetDetail,
@@ -25,6 +26,7 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../../shared/cat21-orchestrator-ports';
+import { parseCatOutpointFromParams } from '../../../shared/cat-outpoint-params';
 import { DroppedSelectionNotice } from '../../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../../shared/funding-asset-list/funding-asset-list';
 import { BidError, Cat21BidsService, PersistedCat21Bid, PostBidArgs } from '../../../shared/cat21-bids.service';
@@ -117,15 +119,9 @@ export class MakeOffer {
    * Parsed intent-lock outpoint from the URL. Null when either param
    * is missing / malformed. See `catTxidParam` for semantics.
    */
-  readonly linkedOutpoint = computed<{ txid: string; vout: number } | null>(() => {
-    const txid = this.catTxidParam();
-    const voutRaw = this.catVoutParam();
-    if (!txid || !voutRaw) return null;
-    if (!/^[0-9a-f]{64}$/i.test(txid)) return null;
-    const vout = Number.parseInt(voutRaw, 10);
-    if (!Number.isInteger(vout) || vout < 0) return null;
-    return { txid: txid.toLowerCase(), vout };
-  });
+  readonly linkedOutpoint = computed<CatOutpoint | null>(() =>
+    parseCatOutpointFromParams(this.catTxidParam(), this.catVoutParam()),
+  );
 
   /**
    * True when the URL brought an intent-lock outpoint AND the on-chain
@@ -381,14 +377,7 @@ export class MakeOffer {
       if (this.lastSeenOrdinalsAddress === current) return;
       this.lastSeenOrdinalsAddress = current;
       // Wallet swapped — clear local form fields the orchestrator doesn't own.
-      this.draft.set({
-        catNumberInput: '',
-        sellerPaymentAddressInput: '',
-        priceSatsInput: '',
-      });
-      this.lookupState.set('idle');
-      this.lookupError.set(null);
-      this.resolvedSellerAddress.set(null);
+      this.resetDraftAndLookup();
       this.lookupRequestId++; // invalidate any in-flight response
       this.prefilledFor = null; // allow the query-param prefill to run again for the new wallet
     });
@@ -595,6 +584,18 @@ export class MakeOffer {
 
   onResetClick(): void {
     this.orch.reset();
+    this.resetDraftAndLookup();
+    this.bidPublishState.set('idle');
+    this.bidPublishError.set(null);
+    this.bidPublishedRow.set(null);
+  }
+
+  /**
+   * Clear the draft form fields and the seller-lookup state. Shared by the
+   * wallet-swap reset effect and the manual reset button; the publish-state
+   * fields are cleared only by the reset button.
+   */
+  private resetDraftAndLookup(): void {
     this.draft.set({
       catNumberInput: '',
       sellerPaymentAddressInput: '',
@@ -603,9 +604,6 @@ export class MakeOffer {
     this.lookupState.set('idle');
     this.lookupError.set(null);
     this.resolvedSellerAddress.set(null);
-    this.bidPublishState.set('idle');
-    this.bidPublishError.set(null);
-    this.bidPublishedRow.set(null);
   }
 
   // ---------- Publish to the CAT-21 Bazaar (X.5) ----------

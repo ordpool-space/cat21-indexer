@@ -19,6 +19,7 @@ import { Cat21Viewer } from '../cat21-viewer/cat21-viewer';
 import { ApiService } from '../shared/cat21-api';
 import { Cat21BidsService, PersistedCat21Bid } from '../shared/cat21-bids.service';
 import { Cat21ListingService, CreateListingError, PersistedCat21Listing } from '../shared/cat21-listing.service';
+import { parseCatOutpointFromParams } from '../shared/cat-outpoint-params';
 import { CatUtxoLookupService } from '../shared/cat-utxo-lookup.service';
 import { OrdApiService } from '../shared/ord-api.service';
 import { PriceService } from '../shared/price.service';
@@ -303,18 +304,12 @@ export class Details {
 
   /**
    * Cat outpoint the URL was minted against (from `?catTxid=…&catVout=…`).
-   * Null when either param is missing / malformed — legacy ask links
+   * Null when either param is missing or malformed; legacy ask links
    * carry no intent-lock and get no stale check.
    */
-  readonly linkedOutpoint = computed<CatOutpoint | null>(() => {
-    const txid = this.catTxid();
-    const voutRaw = this.catVout();
-    if (!txid || !voutRaw) return null;
-    if (!/^[0-9a-f]{64}$/i.test(txid)) return null;
-    const vout = Number.parseInt(voutRaw, 10);
-    if (!Number.isInteger(vout) || vout < 0) return null;
-    return { txid: txid.toLowerCase(), vout };
-  });
+  readonly linkedOutpoint = computed<CatOutpoint | null>(() =>
+    parseCatOutpointFromParams(this.catTxid(), this.catVout()),
+  );
 
   /**
    * True when the URL brought an intent-lock (`linkedOutpoint`) AND the
@@ -333,13 +328,20 @@ export class Details {
     return target.target.txid !== linked.txid || target.target.vout !== linked.vout;
   });
 
-  readonly sellButtonState = computed<ActionButtonState>(() => {
+  /**
+   * Owner-only action gate shared by Sell and Send: both require a connected
+   * wallet that owns the cat, and neither applies to a free or owner-unknown
+   * cat. Buy is separate (buyer-facing and stale-aware).
+   */
+  private readonly ownerActionButtonState = computed<ActionButtonState>(() => {
     if (this.isFree()) return 'free';
     if (this.ownerLookupUnknown()) return 'unknown';
     if (!this.connectedWallet()) return 'connect';
     if (!this.isOwner()) return 'not-owner';
     return 'enabled';
   });
+
+  readonly sellButtonState = this.ownerActionButtonState;
 
   readonly buyButtonState = computed<ActionButtonState>(() => {
     if (this.isFree()) return 'free';
@@ -354,13 +356,7 @@ export class Details {
     return 'enabled';
   });
 
-  readonly sendButtonState = computed<ActionButtonState>(() => {
-    if (this.isFree()) return 'free';
-    if (this.ownerLookupUnknown()) return 'unknown';
-    if (!this.connectedWallet()) return 'connect';
-    if (!this.isOwner()) return 'not-owner';
-    return 'enabled';
-  });
+  readonly sendButtonState = this.ownerActionButtonState;
 
   // ---------- Sell-listing modal ----------
 

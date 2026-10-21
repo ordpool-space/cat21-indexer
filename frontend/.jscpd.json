@@ -1,0 +1,20 @@
+{
+  "path": ["src"],
+  "format": ["typescript"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.angular/**",
+    "**/*.spec.ts",
+    "**/*.e2e-spec.ts",
+    "**/app/shared/cat21-api/**"
+  ],
+  "minLines": 5,
+  "minTokens": 50,
+  "maxLines": 100000,
+  "maxSize": "10mb",
+  "threshold": 0,
+  "reporters": ["console"],
+  "gitignore": true,
+  "ignorePattern": ["import\\s[^;]*?\\sfrom\\s'[^']+';"]
+}

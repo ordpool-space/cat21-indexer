@@ -222,6 +222,10 @@ export class Transfer {
 
   // ---------- My cats — async load ----------
 
+  /* jscpd:ignore-start -- the holdings-resource plus selectedInscriptionId/selectedHolding
+     picker glue is deliberately mirrored on the money-path pages that let a wallet choose
+     one of its own cats (transfer, make-offer, accept-offer). Each reads its own wallet
+     signal and lives in its own zoneless component, so it stays per-page, not a base. */
   /**
    * Resource that fetches the user's current cat holdings (cat number +
    * current UTXO outpoint per cat) the moment a wallet connects. Drives
@@ -239,7 +243,7 @@ export class Transfer {
     () => this.holdingsResource.value() ?? [],
   );
 
-  /** Currently selected cat (by inscription ID — stable across re-fetches). */
+  /** Currently selected cat (by inscription ID, stable across re-fetches). */
   readonly selectedInscriptionId = signal<string | null>(null);
 
   readonly selectedHolding = computed<MyCatHolding | null>(() => {
@@ -247,6 +251,7 @@ export class Transfer {
     if (!id) return null;
     return this.myHoldings().find((h) => h.inscriptionId === id) ?? null;
   });
+  /* jscpd:ignore-end */
 
   /** Recipient address as typed by the user (sync with orchestrator). */
   readonly recipientInput = signal<string>('');
