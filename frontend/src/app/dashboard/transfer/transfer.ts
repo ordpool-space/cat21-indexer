@@ -28,7 +28,7 @@ import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
-import { CatUtxoLookupService, MyCatHolding } from '../../shared/cat-utxo-lookup.service';
+import { CatUtxoLookupService, MyCatHolding, findHoldingAtOutpoint } from '../../shared/cat-utxo-lookup.service';
 import { rxResourceFixed } from '../../shared/rx-resource-fixed';
 
 const TXID_RE = /^[0-9a-f]{64}$/i;
@@ -417,11 +417,9 @@ export class Transfer {
    * (`selectedHolding`) is already holdings-backed; this holds the deep-link
    * path to the same bar. Mirrors accept-offer's `urlCatHolding` (A14).
    */
-  readonly urlCatHolding = computed<MyCatHolding | null>(() => {
-    const url = this.urlCatOutpoint();
-    if (!url) return null;
-    return this.myHoldings().find((h) => h.txid === url.txid && h.vout === url.vout) ?? null;
-  });
+  readonly urlCatHolding = computed<MyCatHolding | null>(() =>
+    findHoldingAtOutpoint(this.myHoldings(), this.urlCatOutpoint()),
+  );
 
   // ---------- Commands ----------
 

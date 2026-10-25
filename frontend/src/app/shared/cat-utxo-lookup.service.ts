@@ -36,6 +36,20 @@ export interface MyCatHolding extends Cat21Holding {
 }
 
 /**
+ * The holding at a given outpoint, or null. Shared by the transfer and
+ * accept-offer deep-link gates: a `?catTxid/catVout` link is untrusted input,
+ * so each surface only acts on a cat the wallet demonstrably holds (fail closed
+ * while holdings load), never the outpoint the link merely asserted.
+ */
+export function findHoldingAtOutpoint(
+  holdings: readonly MyCatHolding[],
+  outpoint: { txid: string; vout: number } | null,
+): MyCatHolding | null {
+  if (!outpoint) return null;
+  return holdings.find((h) => h.txid === outpoint.txid && h.vout === outpoint.vout) ?? null;
+}
+
+/**
  * Translates from "user-visible cat identity" (a cat number) to the
  * orchestrator-required `Cat21Holding` / `BuyOfferTargetCat` shape that
  * carries the cat's CURRENT on-chain location. Backed by cat21-ord's

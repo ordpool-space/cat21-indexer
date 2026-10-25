@@ -18,7 +18,7 @@ import {
 
 import { bitcoinNetwork } from '../../../shared/sdk-tokens';
 
-import { CatUtxoLookupService, MyCatHolding } from '../../../shared/cat-utxo-lookup.service';
+import { CatUtxoLookupService, MyCatHolding, findHoldingAtOutpoint } from '../../../shared/cat-utxo-lookup.service';
 import { PsbtExportBridgeService } from '../../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { rxResourceFixed } from '../../../shared/rx-resource-fixed';
 import { WalletCapabilityNotice } from '../../../shared/wallet-capability-notice/wallet-capability-notice';
@@ -143,11 +143,9 @@ export class AcceptOffer implements OnInit {
    * the link asserted. The manual picker (`selectedHolding`) is already
    * holdings-backed; this holds the one-click path to the same bar.
    */
-  readonly urlCatHolding = computed<MyCatHolding | null>(() => {
-    const url = this.urlCatOutpoint();
-    if (!url) return null;
-    return this.myHoldings().find((h) => h.txid === url.txid && h.vout === url.vout) ?? null;
-  });
+  readonly urlCatHolding = computed<MyCatHolding | null>(() =>
+    findHoldingAtOutpoint(this.myHoldings(), this.urlCatOutpoint()),
+  );
 
   /**
    * Cat outpoint the URL-shareable accept link supplied. When the
