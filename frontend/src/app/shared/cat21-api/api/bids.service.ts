@@ -41,22 +41,43 @@ export class BidsService extends BaseService {
 
     /**
      * Post (or overwrite) a bid on a cat UTXO
-     * Publishes a buyer\&#39;s half-signed PSBT to the marketplace. The PSBT itself IS the auth — the buyer\&#39;s SIGHASH_ALL signatures on inputs 1..N commit their funds to exact outputs. One bid per (network, cat_txid, cat_vout, buyer_ordinals_address); a buyer re-bidding at a new price overwrites their previous row atomically. Different buyers coexist on the same UTXO — that\&#39;s the FOMO channel where competing bids drive the price up.  Rate-limited to 5/min/IP.
+     * Publishes a buyer\&#39;s half-signed PSBT to the marketplace. Auth is twofold: a session token (X-Cat21-Session-* headers) proving control of &#x60;buyerOrdinalsAddress&#x60;, and the buyer\&#39;s SIGHASH_ALL signatures on inputs 1..N, verified cryptographically against the chain prevouts. One bid per (network, cat_txid, cat_vout, buyer_ordinals_address); a buyer re-bidding at a new price overwrites their previous row atomically. Different buyers coexist on the same UTXO — that\&#39;s the FOMO channel where competing bids drive the price up.  Rate-limited to 5/min/IP.
      * @endpoint post /api/v1/bids
+     * @param xCat21SessionAddress Ordinals address the caller controls (the BIP-322 signer).
+     * @param xCat21SessionValidUntil ISO-8601 expiry the signature commits to (at most 7 days out).
+     * @param xCat21SessionSignature base64 BIP-322 signature over the canonical session message.
      * @param createBidDto 
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public bidsControllerCreate(createBidDto: CreateBidDto, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<BidDto>;
-    public bidsControllerCreate(createBidDto: CreateBidDto, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<BidDto>>;
-    public bidsControllerCreate(createBidDto: CreateBidDto, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<BidDto>>;
-    public bidsControllerCreate(createBidDto: CreateBidDto, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public bidsControllerCreate(xCat21SessionAddress: string, xCat21SessionValidUntil: string, xCat21SessionSignature: string, createBidDto: CreateBidDto, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<BidDto>;
+    public bidsControllerCreate(xCat21SessionAddress: string, xCat21SessionValidUntil: string, xCat21SessionSignature: string, createBidDto: CreateBidDto, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<BidDto>>;
+    public bidsControllerCreate(xCat21SessionAddress: string, xCat21SessionValidUntil: string, xCat21SessionSignature: string, createBidDto: CreateBidDto, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<BidDto>>;
+    public bidsControllerCreate(xCat21SessionAddress: string, xCat21SessionValidUntil: string, xCat21SessionSignature: string, createBidDto: CreateBidDto, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+        if (xCat21SessionAddress === null || xCat21SessionAddress === undefined) {
+            throw new Error('Required parameter xCat21SessionAddress was null or undefined when calling bidsControllerCreate.');
+        }
+        if (xCat21SessionValidUntil === null || xCat21SessionValidUntil === undefined) {
+            throw new Error('Required parameter xCat21SessionValidUntil was null or undefined when calling bidsControllerCreate.');
+        }
+        if (xCat21SessionSignature === null || xCat21SessionSignature === undefined) {
+            throw new Error('Required parameter xCat21SessionSignature was null or undefined when calling bidsControllerCreate.');
+        }
         if (createBidDto === null || createBidDto === undefined) {
             throw new Error('Required parameter createBidDto was null or undefined when calling bidsControllerCreate.');
         }
 
         let localVarHeaders = this.defaultHeaders;
+        if (xCat21SessionAddress !== undefined && xCat21SessionAddress !== null) {
+            localVarHeaders = localVarHeaders.set('X-Cat21-Session-Address', String(xCat21SessionAddress));
+        }
+        if (xCat21SessionValidUntil !== undefined && xCat21SessionValidUntil !== null) {
+            localVarHeaders = localVarHeaders.set('X-Cat21-Session-Valid-Until', String(xCat21SessionValidUntil));
+        }
+        if (xCat21SessionSignature !== undefined && xCat21SessionSignature !== null) {
+            localVarHeaders = localVarHeaders.set('X-Cat21-Session-Signature', String(xCat21SessionSignature));
+        }
 
         const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
             'application/json'
@@ -113,14 +134,17 @@ export class BidsService extends BaseService {
      * @param catTxid Cat UTXO txid.
      * @param catVout 
      * @param buyer Buyer ordinals address (unique-key second half). Must match the session address.
+     * @param xCat21SessionAddress Ordinals address the caller controls (the BIP-322 signer).
+     * @param xCat21SessionValidUntil ISO-8601 expiry the signature commits to (at most 7 days out).
+     * @param xCat21SessionSignature base64 BIP-322 signature over the canonical session message.
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public bidsControllerDelete(catTxid: string, catVout: number, buyer: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any>;
-    public bidsControllerDelete(catTxid: string, catVout: number, buyer: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<any>>;
-    public bidsControllerDelete(catTxid: string, catVout: number, buyer: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<any>>;
-    public bidsControllerDelete(catTxid: string, catVout: number, buyer: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public bidsControllerDelete(catTxid: string, catVout: number, buyer: string, xCat21SessionAddress: string, xCat21SessionValidUntil: string, xCat21SessionSignature: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any>;
+    public bidsControllerDelete(catTxid: string, catVout: number, buyer: string, xCat21SessionAddress: string, xCat21SessionValidUntil: string, xCat21SessionSignature: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<any>>;
+    public bidsControllerDelete(catTxid: string, catVout: number, buyer: string, xCat21SessionAddress: string, xCat21SessionValidUntil: string, xCat21SessionSignature: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<any>>;
+    public bidsControllerDelete(catTxid: string, catVout: number, buyer: string, xCat21SessionAddress: string, xCat21SessionValidUntil: string, xCat21SessionSignature: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: undefined, context?: HttpContext, transferCache?: boolean}): Observable<any> {
         if (catTxid === null || catTxid === undefined) {
             throw new Error('Required parameter catTxid was null or undefined when calling bidsControllerDelete.');
         }
@@ -129,6 +153,15 @@ export class BidsService extends BaseService {
         }
         if (buyer === null || buyer === undefined) {
             throw new Error('Required parameter buyer was null or undefined when calling bidsControllerDelete.');
+        }
+        if (xCat21SessionAddress === null || xCat21SessionAddress === undefined) {
+            throw new Error('Required parameter xCat21SessionAddress was null or undefined when calling bidsControllerDelete.');
+        }
+        if (xCat21SessionValidUntil === null || xCat21SessionValidUntil === undefined) {
+            throw new Error('Required parameter xCat21SessionValidUntil was null or undefined when calling bidsControllerDelete.');
+        }
+        if (xCat21SessionSignature === null || xCat21SessionSignature === undefined) {
+            throw new Error('Required parameter xCat21SessionSignature was null or undefined when calling bidsControllerDelete.');
         }
 
         let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
@@ -143,6 +176,15 @@ export class BidsService extends BaseService {
 
 
         let localVarHeaders = this.defaultHeaders;
+        if (xCat21SessionAddress !== undefined && xCat21SessionAddress !== null) {
+            localVarHeaders = localVarHeaders.set('X-Cat21-Session-Address', String(xCat21SessionAddress));
+        }
+        if (xCat21SessionValidUntil !== undefined && xCat21SessionValidUntil !== null) {
+            localVarHeaders = localVarHeaders.set('X-Cat21-Session-Valid-Until', String(xCat21SessionValidUntil));
+        }
+        if (xCat21SessionSignature !== undefined && xCat21SessionSignature !== null) {
+            localVarHeaders = localVarHeaders.set('X-Cat21-Session-Signature', String(xCat21SessionSignature));
+        }
 
         const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
         ]);

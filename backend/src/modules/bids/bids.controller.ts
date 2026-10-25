@@ -28,6 +28,7 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { FastifyReply } from 'fastify';
 
 import {
+  ApiSessionHeaders,
   Cat21SessionAddress,
   Cat21SessionGuard,
 } from '../shared/cat21-session.guard';
@@ -50,6 +51,7 @@ export class BidsController {
   // spammers get bounded fast.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @UseGuards(Cat21SessionGuard, ThrottlerGuard)
+  @ApiSessionHeaders()
   @ApiOperation({
     summary: 'Post (or overwrite) a bid on a cat UTXO',
     description:
@@ -149,6 +151,7 @@ export class BidsController {
   @Delete('outpoint/:catTxid/:catVout')
   @HttpCode(204)
   @UseGuards(Cat21SessionGuard, ThrottlerGuard)
+  @ApiSessionHeaders()
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({
     summary: 'Delete a bid (buyer cancels)',

@@ -1,4 +1,5 @@
-import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException, createParamDecorator } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException, applyDecorators, createParamDecorator } from '@nestjs/common';
+import { ApiHeader } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { buildCat21SessionMessage, checkSessionValidity } from 'ordpool-sdk/cat21-session';
 import { verifyBip322Signature } from 'ordpool-sdk/cat21-validation';
@@ -88,6 +89,19 @@ export const Cat21SessionAddress = createParamDecorator(
     return addr;
   },
 );
+
+/**
+ * Declare the three session-token request headers on an endpoint so the OpenAPI
+ * contract (and every generated client) document what Cat21SessionGuard reads.
+ * Apply to each session-guarded mutation alongside the guard.
+ */
+export function ApiSessionHeaders(): MethodDecorator & ClassDecorator {
+  return applyDecorators(
+    ApiHeader({ name: 'X-Cat21-Session-Address', required: true, description: 'Ordinals address the caller controls (the BIP-322 signer).' }),
+    ApiHeader({ name: 'X-Cat21-Session-Valid-Until', required: true, description: 'ISO-8601 expiry the signature commits to (at most 7 days out).' }),
+    ApiHeader({ name: 'X-Cat21-Session-Signature', required: true, description: 'base64 BIP-322 signature over the canonical session message.' }),
+  );
+}
 
 function readHeader(req: FastifyRequest, name: string): string | null {
   const v = req.headers[name];
