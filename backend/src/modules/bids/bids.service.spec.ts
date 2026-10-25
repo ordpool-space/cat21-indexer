@@ -20,6 +20,9 @@ import {
   testFundingTxid,
 } from 'ordpool-sdk/testing';
 
+import type { SQL } from 'drizzle-orm';
+import { MySqlDialect } from 'drizzle-orm/mysql-core';
+import { bids } from '../shared/drizzle/schema/bids';
 import { BidsService } from './bids.service';
 
 // ---------------------------------------------------------------------------
@@ -494,15 +497,26 @@ describe('BidsService.findPaginated — bounds', () => {
 
 describe('BidsService.deleteByOutpointAndBuyer', () => {
 
-  it('runs the delete query with the unique-key fields', async () => {
-    const where = jest.fn().mockResolvedValue(undefined);
+  it('deletes from bids filtering on ALL FOUR unique-key fields, buyer included', async () => {
+    let capturedWhere: SQL | undefined;
+    const where = jest.fn((cond: SQL) => {
+      capturedWhere = cond;
+      return Promise.resolve(undefined);
+    });
     const drizzle = createDrizzleMock({
       delete: jest.fn().mockReturnValue({ where }),
     });
     const service = new BidsService(drizzle as never, createOrdMock() as never, createElectrsMock() as never);
     await service.deleteByOutpointAndBuyer('mainnet', REAL_TXID, 0, BUYER_ORD_ADDR);
-    expect(drizzle.db.delete).toHaveBeenCalled();
-    expect(where).toHaveBeenCalled();
+
+    expect(drizzle.db.delete).toHaveBeenCalledWith(bids);
+    // Compile the real predicate and assert its bound params, not just that
+    // where() was called. Dropping the buyerOrdinalsAddress eq (which would make
+    // a prune delete EVERY buyer's bid on the outpoint) changes these params and
+    // reds this test.
+    expect(capturedWhere).toBeDefined();
+    const { params } = new MySqlDialect().sqlToQuery(capturedWhere as SQL);
+    expect(params).toEqual(['mainnet', REAL_TXID, 0, BUYER_ORD_ADDR]);
   });
 });
 

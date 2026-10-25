@@ -199,16 +199,19 @@ describe('BidsPruner.runPrune — buyer-side (funding UTXO liveness)', () => {
   });
 
   it('electrs flake keeps the bid (fail-safe: unknown → live, no destructive drop on transient error)', async () => {
-    // The client's fail-safe returns `false` on error → we interpret
-    // as "not spent" and keep the bid. Verified by the client's own
-    // spec; the pruner just trusts that contract.
+    // getOutpointStatus is tri-state; a transient electrs failure resolves
+    // 'unknown', which the pruner must treat as "not spent → keep". Seed the
+    // funding txid as 'unknown' so this actually drives the fail-safe branch;
+    // the default 'unspent' would only re-run the all-live path above.
     stubPsbt([FUND_TXID_LIVE]);
     const drizzle = drizzleWithRows([row()]);
     const ord = { getCatsAtOutput: jest.fn().mockResolvedValue([42]) };
-    const electrs = createElectrsMock(); // returns false for all
+    const electrs = createElectrsMock({ [FUND_TXID_LIVE]: 'unknown' });
     const bidsSvc = { deleteByOutpointAndBuyer: jest.fn() };
     const pruner = new BidsPruner(drizzle as never, ord as never, electrs as never, bidsSvc as never);
     await pruner.runPrune();
+    // Mutation check: adding `|| status === 'unknown'` to the pruner's spent
+    // test would delete every bid on a transient outage; this then reds.
     expect(bidsSvc.deleteByOutpointAndBuyer).not.toHaveBeenCalled();
   });
 });
