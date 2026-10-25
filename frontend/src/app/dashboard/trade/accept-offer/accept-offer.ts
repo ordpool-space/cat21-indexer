@@ -346,6 +346,18 @@ export function rejectionToHuman(reason: Cat21OfferRejectionReason, detail?: str
       return `The cat output is going to a different address than the buyer's receive address. ${detail ?? ''}`.trim();
     case 'change-output-wrong-address':
       return `The buyer's change output is going to an unexpected address. ${detail ?? ''}`.trim();
+    case 'prevout-missing':
+      return `A buyer input references a coin that isn't on chain, so its signature can't be verified. ${detail ?? ''}`.trim();
+    case 'prevout-script-mismatch':
+      return `A buyer input's declared script doesn't match the coin on chain. ${detail ?? ''}`.trim();
+    case 'prevout-amount-mismatch':
+      return `A buyer input's declared value doesn't match the coin on chain. ${detail ?? ''}`.trim();
+    case 'unsupported-input-type':
+      return `A signed buyer input uses a type we can't verify (not P2TR or P2WPKH). ${detail ?? ''}`.trim();
+    case 'signature-missing':
+      return `The buyer hasn't signed one of their funding inputs. ${detail ?? ''}`.trim();
+    case 'signature-invalid':
+      return `A buyer signature in the offer doesn't verify against the coin it spends. ${detail ?? ''}`.trim();
     default: {
       // Compile-time exhaustiveness: a new Cat21OfferRejectionReason in the
       // SDK fails the build here instead of silently hitting a generic string.
