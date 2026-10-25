@@ -250,18 +250,37 @@ export class CatUtxoLookupService {
   }
 
   /**
-   * Resolve a single cat outpoint (from a deep-link `?catTxid=&catVout=`)
-   * into an orchestrator-ready `Cat21Holding` by reading the UTXO's REAL
-   * value from electrs — never an assumed 546. Returns null if the tx or
-   * vout can't be found (deep-link to a spent / nonexistent outpoint), so
-   * the caller degrades gracefully instead of signing over a guessed value.
-   * `catNumber` is display-only (not part of the tx signing surface).
+   * Resolve a single cat outpoint (from an untrusted deep-link
+   * `?catTxid=&catVout=`) into an orchestrator-ready `Cat21Holding`, but
+   * only when the outpoint is demonstrably held by `ownerAddress` (the
+   * connected wallet's ordinals address). The UTXO's REAL value and its
+   * owning scriptPubKey address both come from electrs — our Bitcoin Core
+   * node, the authority on who holds a coin right now, and reachable the
+   * moment the tx is in the mempool. That makes this the ownership proof
+   * for the deep-link path: ord's per-address inscription index lags the
+   * chain (a just-minted cat is not in it yet), so a holdings-index gate
+   * would wrongly reject a cat the wallet verifiably holds.
+   *
+   * Returns null when the tx / vout can't be found (spent or nonexistent
+   * outpoint), OR when the outpoint is held by a DIFFERENT address than
+   * `ownerAddress` — fail closed, so an attacker-crafted link to someone
+   * else's cat never becomes the transfer target. `catNumber` is
+   * display-only (not part of the tx signing surface).
    */
-  getHoldingByOutpoint(txid: string, vout: number, catNumber: number): Observable<Cat21Holding | null> {
+  getOwnedHoldingByOutpoint(
+    txid: string,
+    vout: number,
+    catNumber: number,
+    ownerAddress: string,
+  ): Observable<Cat21Holding | null> {
     return this.fetchEsploraTx(txid).pipe(
       map<EsploraTxResponse, Cat21Holding | null>((tx) => {
         const out = tx.vout?.[vout];
         if (!out) return null;
+        // Fail closed on ownership: the outpoint must sit on the connected
+        // wallet's own ordinals address. electrs omits the address field for
+        // non-standard scripts; a missing address is treated as not-owned.
+        if (out.scriptpubkey_address !== ownerAddress) return null;
         return { catNumber, txid, vout, value: out.value };
       }),
       catchError(() => of(null)),

@@ -56,14 +56,14 @@
             Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>
             pre-selected from the deep-link.
           </p>
-        } @else if (holdingsResource.isLoading()) {
+        } @else if (urlCatOwnedResource.isLoading()) {
           <p class="text-muted small" data-testid="transfer-cat-url-loading">
             Resolving cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>&hellip;
           </p>
         } @else {
           <p class="text-danger small" data-testid="transfer-cat-url-notfound">
-            Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code> isn't in
-            your wallet's holdings. You can only transfer a cat you currently hold.
+            Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code> isn't held
+            by your wallet. You can only transfer a cat you currently hold.
           </p>
         }
       } @else if (myHoldings().length === 0) {

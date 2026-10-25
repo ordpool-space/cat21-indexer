@@ -411,31 +411,53 @@ describe('CatUtxoLookupService', () => {
     });
   });
 
-  describe('getHoldingByOutpoint (deep-link resolver)', () => {
-    it('resolves the outpoint with the REAL electrs value (not an assumed 546)', async () => {
+  describe('getOwnedHoldingByOutpoint (deep-link resolver, ownership-gated)', () => {
+    const OWNER = 'bcrt1powneraddressaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    it('resolves the outpoint with the REAL electrs value (not an assumed 546) when owned', async () => {
       const txid = 'a'.repeat(64);
       // non-546 sentinel at vout 1 proves the real value flows through.
       http.get.mockReturnValue(of({
         txid,
         vout: [
-          { scriptpubkey: '51', value: 111 },
-          { scriptpubkey: '5120' + 'a'.repeat(64), value: 3210 },
+          { scriptpubkey: '51', value: 111, scriptpubkey_address: 'bcrt1psomeoneelse' },
+          { scriptpubkey: '5120' + 'a'.repeat(64), value: 3210, scriptpubkey_address: OWNER },
         ],
       }));
-      const result = await firstValueFrom(service.getHoldingByOutpoint(txid, 1, 42));
+      const result = await firstValueFrom(service.getOwnedHoldingByOutpoint(txid, 1, 42, OWNER));
       expect(result).toEqual({ catNumber: 42, txid, vout: 1, value: 3210 });
+    });
+
+    it('returns null (fail closed) when the outpoint is held by a DIFFERENT address', async () => {
+      const txid = 'd'.repeat(64);
+      http.get.mockReturnValue(of({
+        txid,
+        vout: [{ scriptpubkey: '5120' + 'a'.repeat(64), value: 3210, scriptpubkey_address: 'bcrt1psomeoneelse' }],
+      }));
+      const result = await firstValueFrom(service.getOwnedHoldingByOutpoint(txid, 0, 42, OWNER));
+      expect(result).toBeNull();
+    });
+
+    it('returns null (fail closed) when electrs omits the address field (non-standard script)', async () => {
+      const txid = 'e'.repeat(64);
+      http.get.mockReturnValue(of({
+        txid,
+        vout: [{ scriptpubkey: '6a', value: 3210 }],
+      }));
+      const result = await firstValueFrom(service.getOwnedHoldingByOutpoint(txid, 0, 42, OWNER));
+      expect(result).toBeNull();
     });
 
     it('returns null when the vout does not exist at that tx', async () => {
       const txid = 'b'.repeat(64);
       http.get.mockReturnValue(of({ txid, vout: [] }));
-      const result = await firstValueFrom(service.getHoldingByOutpoint(txid, 0, 7));
+      const result = await firstValueFrom(service.getOwnedHoldingByOutpoint(txid, 0, 7, OWNER));
       expect(result).toBeNull();
     });
 
     it('returns null (degrades gracefully) when the electrs fetch errors', async () => {
       http.get.mockReturnValue(throwError(() => new Error('404')));
-      const result = await firstValueFrom(service.getHoldingByOutpoint('c'.repeat(64), 0, 9));
+      const result = await firstValueFrom(service.getOwnedHoldingByOutpoint('c'.repeat(64), 0, 9, OWNER));
       expect(result).toBeNull();
     });
   });

@@ -36,3 +36,6 @@ frontend/test-results/
 
 # scripts/e2e-lane.sh and scripts/backend-regtest-lane.sh output
 .e2e-lane/
+
+# Claude Code agent worktrees (transient, never committed)
+.claude/worktrees/

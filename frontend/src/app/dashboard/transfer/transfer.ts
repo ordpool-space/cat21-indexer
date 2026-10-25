@@ -5,6 +5,7 @@ import { EMPTY, firstValueFrom } from 'rxjs';
 import * as btc from '@scure/btc-signer';
 import {
   CandidateFeeRow,
+  Cat21Holding,
   Cat21Service,
   Cat21TransferOrchestrator,
   ExpertRequiredCause,
@@ -28,7 +29,7 @@ import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
-import { CatUtxoLookupService, MyCatHolding, findHoldingAtOutpoint } from '../../shared/cat-utxo-lookup.service';
+import { CatUtxoLookupService, MyCatHolding } from '../../shared/cat-utxo-lookup.service';
 import { rxResourceFixed } from '../../shared/rx-resource-fixed';
 
 const TXID_RE = /^[0-9a-f]{64}$/i;
@@ -325,11 +326,12 @@ export class Transfer {
     });
 
     // Push the cat the user means to transfer to the orchestrator. Both
-    // sources are holdings-backed: the dropdown pick takes precedence, and the
-    // deep-link falls back to the SAME bar: `urlCatHolding` only resolves to a
-    // cat the wallet demonstrably holds, never the outpoint the link asserted
-    // (fail closed while holdings load). So an unowned `?catTxid/catVout` never
-    // becomes the transfer target.
+    // sources are ownership-backed: the dropdown pick comes from the wallet's
+    // own holdings and takes precedence; the deep-link falls back to
+    // `urlCatHolding`, which only resolves once electrs confirms the outpoint
+    // sits on the connected wallet's ordinals address (fail closed while that
+    // lookup is in flight). So an unowned `?catTxid/catVout` never becomes the
+    // transfer target.
     effect(() => {
       const holding = this.selectedHolding() ?? this.urlCatHolding();
       if (holding) {
@@ -410,15 +412,34 @@ export class Transfer {
   });
 
   /**
-   * The URL-asserted outpoint, resolved against the wallet's REAL holdings.
-   * `catTxid`/`catVout` are untrusted input, so the transfer only ever operates
-   * on a cat the wallet demonstrably holds (fail closed while holdings load),
-   * never an arbitrary outpoint the link asserted. The manual picker
-   * (`selectedHolding`) is already holdings-backed; this holds the deep-link
-   * path to the same bar. Mirrors accept-offer's `urlCatHolding` (A14).
+   * The URL-asserted outpoint, resolved against electrs and gated on
+   * ownership: `catTxid`/`catVout` are untrusted, so the transfer only ever
+   * operates on a cat the connected wallet verifiably holds (its owning
+   * scriptPubKey address equals `connectedWallet.ordinalsAddress`), never an
+   * arbitrary outpoint the link asserted. electrs is used rather than ord's
+   * per-address inscription index because the latter lags the chain: a cat
+   * minted moments ago is not in the ord holdings yet, so a holdings gate
+   * would wrongly reject a cat the wallet verifiably holds. Fail closed while
+   * the lookup is in flight and whenever the owner address doesn't match.
    */
-  readonly urlCatHolding = computed<MyCatHolding | null>(() =>
-    findHoldingAtOutpoint(this.myHoldings(), this.urlCatOutpoint()),
+  readonly urlCatOwnedResource = rxResourceFixed({
+    params: () => ({
+      outpoint: this.urlCatOutpoint(),
+      ownerAddress: this.connectedWallet()?.ordinalsAddress ?? null,
+    }),
+    stream: ({ params }) =>
+      params.outpoint && params.ownerAddress
+        ? this.lookup.getOwnedHoldingByOutpoint(
+            params.outpoint.txid,
+            params.outpoint.vout,
+            params.outpoint.catNumber,
+            params.ownerAddress,
+          )
+        : EMPTY,
+  });
+
+  readonly urlCatHolding = computed<Cat21Holding | null>(
+    () => this.urlCatOwnedResource.value() ?? null,
   );
 
   // ---------- Commands ----------
