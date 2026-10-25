@@ -16,6 +16,7 @@ import {
   WalletCapability,
   WalletService,
   capabilityOf,
+  supportsCapability,
   expertRequiredCause,
   outpointKey,
   parseBuyOfferQueryParams,
@@ -624,11 +625,25 @@ export class MakeOffer {
   readonly bidPublishError = signal<BidError | null>(null);
   readonly bidPublishedRow = signal<PersistedCat21Bid | null>(null);
 
-  /** Show the "Post to Bazaar" button only when we have an artifact + a target. */
+  /**
+   * Whether the connected wallet can produce a BIP-322 message signature,
+   * per the SDK capability matrix (not a hardcoded wallet list). Posting a bid
+   * to the Bazaar mints a session token via signMessage, so a wallet without
+   * it (watch-only xpub, or an injected wallet the matrix marks Unsupported for
+   * SignMessage) cannot post. Mirrors details.ts's orderbook opt-in gate.
+   */
+  readonly walletCanSignMessage = computed<boolean>(() => {
+    const w = this.connectedWallet();
+    return !!w && supportsCapability(w.type, WalletCapability.SignMessage);
+  });
+
+  /** Show the "Post to Bazaar" button only with an artifact, a target, and a
+   *  signMessage-capable wallet (posting needs a session token it can't mint). */
   readonly canPostToBazaar = computed<boolean>(() => {
     if (!this.offerArtifact()) return false;
     const target = this.targetCat();
     if (!target) return false;
+    if (!this.walletCanSignMessage()) return false;
     if (this.bidPublishState() === 'posting' || this.bidPublishState() === 'fetching-bundle') return false;
     return true;
   });

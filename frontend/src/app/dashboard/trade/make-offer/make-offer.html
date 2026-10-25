@@ -127,6 +127,12 @@
             @case ('error') { Retry }
           }
         </button>
+        @if (connectedWallet() && !walletCanSignMessage()) {
+          <p class="text-muted small mt-2" data-testid="make-offer-bazaar-no-signmessage">
+            This wallet can't sign a message (watch-only, or signMessage isn't supported for it),
+            so it can't post to the Bazaar. Share the offer link above with the owner instead.
+          </p>
+        }
         @if (bidPublishState() === 'success' && bidPublishedRow(); as row) {
           <div class="alert alert-success mt-2" role="status" data-testid="make-offer-post-bazaar-success">
             Your bid is live on the Bazaar for <strong>cat #{{ row.headlineCatNumber }}</strong>
