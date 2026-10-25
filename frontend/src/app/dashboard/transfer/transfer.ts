@@ -324,22 +324,21 @@ export class Transfer {
       );
     });
 
-    // When the user picks a cat from the dropdown, push it to the
-    // orchestrator as the Cat21Holding it expects. Picker takes
-    // precedence; URL override is the fallback (deep-links that
-    // already know the outpoint, or e2e where ord is unreachable).
+    // Push the cat the user means to transfer to the orchestrator. Both
+    // sources are holdings-backed: the dropdown pick takes precedence, and the
+    // deep-link falls back to the SAME bar: `urlCatHolding` only resolves to a
+    // cat the wallet demonstrably holds, never the outpoint the link asserted
+    // (fail closed while holdings load). So an unowned `?catTxid/catVout` never
+    // becomes the transfer target.
     effect(() => {
-      const fromPicker = this.selectedHolding();
-      const fromUrl = this.urlCatUtxoResource.value() ?? null;
-      if (fromPicker) {
+      const holding = this.selectedHolding() ?? this.urlCatHolding();
+      if (holding) {
         this.orch.setCatUtxo({
-          catNumber: fromPicker.catNumber,
-          txid: fromPicker.txid,
-          vout: fromPicker.vout,
-          value: fromPicker.value,
+          catNumber: holding.catNumber,
+          txid: holding.txid,
+          vout: holding.vout,
+          value: holding.value,
         });
-      } else if (fromUrl) {
-        this.orch.setCatUtxo(fromUrl);
       } else {
         this.orch.setCatUtxo(null);
       }
@@ -386,8 +385,8 @@ export class Transfer {
   /**
    * Cat outpoint parsed from `?catTxid=&catVout=` query params. Returns
    * null when either param is missing or malformed. Carries only the
-   * outpoint + display cat number; the UTXO VALUE is resolved separately
-   * (see {@link urlCatUtxoResource}) by reading electrs — never guessed.
+   * outpoint + display cat number; it is untrusted and only acted on once
+   * {@link urlCatHolding} confirms the wallet holds that outpoint.
    */
   readonly urlCatOutpoint = computed<{ txid: string; vout: number; catNumber: number } | null>(() => {
     // Router's `withComponentInputBinding()` delivers the params via
@@ -411,21 +410,17 @@ export class Transfer {
   });
 
   /**
-   * Resolves the deep-linked outpoint into a full `Cat21Holding` by
-   * reading the UTXO's REAL value from electrs (a cat rides any-size
-   * UTXO; 546 is only our mint OUTPUT size). Value stays `undefined`
-   * while loading and null if the outpoint can't be found.
+   * The URL-asserted outpoint, resolved against the wallet's REAL holdings.
+   * `catTxid`/`catVout` are untrusted input, so the transfer only ever operates
+   * on a cat the wallet demonstrably holds (fail closed while holdings load),
+   * never an arbitrary outpoint the link asserted. The manual picker
+   * (`selectedHolding`) is already holdings-backed; this holds the deep-link
+   * path to the same bar. Mirrors accept-offer's `urlCatHolding` (A14).
    */
-  readonly urlCatUtxoResource = rxResourceFixed({
-    params: () => ({ outpoint: this.urlCatOutpoint() }),
-    stream: ({ params }) =>
-      params.outpoint
-        ? this.lookup.getHoldingByOutpoint(
-            params.outpoint.txid,
-            params.outpoint.vout,
-            params.outpoint.catNumber,
-          )
-        : EMPTY,
+  readonly urlCatHolding = computed<MyCatHolding | null>(() => {
+    const url = this.urlCatOutpoint();
+    if (!url) return null;
+    return this.myHoldings().find((h) => h.txid === url.txid && h.vout === url.vout) ?? null;
   });
 
   // ---------- Commands ----------

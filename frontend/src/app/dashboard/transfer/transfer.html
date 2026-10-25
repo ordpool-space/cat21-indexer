@@ -47,23 +47,23 @@
     <section class="transfer-section" data-testid="transfer-cat-section">
       <h2 class="transfer-section-heading">1. Pick the cat you want to send</h2>
       @if (urlCatOutpoint(); as fromUrl) {
-        <!-- Deep-link supplied the cat outpoint; no picker needed. The
-             value is resolved from electrs, so reflect that resolution:
-             a spent / invalid outpoint resolves to null and must SAY so
-             rather than leave the Transfer button silently disabled. -->
-        @if (urlCatUtxoResource.value()) {
+        <!-- Deep-link supplied the cat outpoint, but it is untrusted: only
+             pre-select it once the wallet's holdings confirm you hold it. A
+             link to a cat you don't hold must SAY so rather than leave the
+             Transfer button silently disabled. -->
+        @if (urlCatHolding()) {
           <p class="text-muted small" data-testid="transfer-cat-from-url">
             Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>
             pre-selected from the deep-link.
           </p>
-        } @else if (urlCatUtxoResource.isLoading()) {
+        } @else if (holdingsResource.isLoading()) {
           <p class="text-muted small" data-testid="transfer-cat-url-loading">
             Resolving cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code>&hellip;
           </p>
         } @else {
           <p class="text-danger small" data-testid="transfer-cat-url-notfound">
-            Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code> could not
-            be resolved on-chain. The transaction may not exist, or the link is invalid.
+            Cat outpoint <code>{{ fromUrl.txid }}:{{ fromUrl.vout }}</code> isn't in
+            your wallet's holdings. You can only transfer a cat you currently hold.
           </p>
         }
       } @else if (myHoldings().length === 0) {
