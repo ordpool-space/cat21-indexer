@@ -167,50 +167,15 @@ jobs:
         working-directory: sdk
         run: npx playwright install --with-deps chromium
 
-      - name: Checkout cat21-wallet (extension source)
-        uses: actions/checkout@v4
+      - name: Build + stage the Cat21 Wallet extension
+        # Shared SDK composite action: clones cat21-wallet at CAT21_WALLET_SHA and
+        # builds it on the Node its own .nvmrc names (the extension's toolchain does
+        # not build under this job's Node), caches by sha+node, stages the unpacked
+        # dist via playwright-bootstrap.sh, then restores this job's Node.
+        uses: ./sdk/.github/actions/build-cat21-wallet
         with:
-          repository: ordpool-space/cat21-wallet
-          path: cat21-wallet-src
-          ref: ${{ env.CAT21_WALLET_SHA }}
-
-      - name: Setup pnpm for cat21-wallet build
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
-      - name: Cache cat21-wallet pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/share/pnpm/store
-          key: cat21wallet-pnpm-${{ hashFiles('cat21-wallet-src/pnpm-lock.yaml') }}
-          restore-keys: |
-            cat21wallet-pnpm-
-
-      - name: Cache cat21-wallet extension dist
-        id: cat21wallet-dist-cache
-        uses: actions/cache@v4
-        with:
-          path: cat21-wallet-src/apps/extension/dist
-          key: cat21wallet-dist-${{ env.CAT21_WALLET_SHA }}
-
-      - name: Install cat21-wallet dependencies
-        if: steps.cat21wallet-dist-cache.outputs.cache-hit != 'true'
-        working-directory: cat21-wallet-src
-        run: pnpm install --frozen-lockfile
-
-      - name: Build cat21-wallet extension
-        if: steps.cat21wallet-dist-cache.outputs.cache-hit != 'true'
-        working-directory: cat21-wallet-src
-        run: pnpm build:extension
-
-      - name: Stage cat21-wallet extension via SDK bootstrap (LOCAL_DIST mode)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CAT21_WALLET_LOCAL_DIST: ${{ github.workspace }}/cat21-wallet-src/apps/extension/dist
-        working-directory: sdk
-        run: bash e2e/playwright/playwright-bootstrap.sh cat21wallet
+          wallet-sha: ${{ env.CAT21_WALLET_SHA }}
+          node-version: '26.12.1'
 
       - name: Install Playwright in the frontend tree
         working-directory: frontend
