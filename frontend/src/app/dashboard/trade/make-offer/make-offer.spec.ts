@@ -346,8 +346,17 @@ describe('MakeOffer — Post to Bazaar (X.5)', () => {
     expect(provider!.requests.map((r) => r.signAtIndex)).toEqual([[1]]);
     const tx = btc.Transaction.fromPSBT(hex.decode(component.offerArtifact()!.hex));
     expect(hex.encode(tx.getInput(0).txid!)).toBe(CAT_TXID);
+    // The seller's cat input (0) is left entirely for the seller: unsigned and
+    // not finalised.
     expect(tx.getInput(0).partialSig ?? tx.getInput(0).tapKeySig).toBeUndefined();
-    expect(tx.getInput(1).partialSig?.length).toBe(1);
+    expect(tx.getInput(0).finalScriptWitness).toBeUndefined();
+    // The buyer input (1) is FINALISED, not merely partially signed: ord's
+    // `wallet offer accept` rejects a non-finalised buyer input (and any input
+    // that carries a sighashType), so the SDK finalises the buyer input. A
+    // finalised P2WPKH input carries a [signature, pubkey] witness and no
+    // partialSig.
+    expect(tx.getInput(1).partialSig).toBeUndefined();
+    expect(tx.getInput(1).finalScriptWitness?.length).toBe(2);
   });
 
   it('onPostToBazaarClick fetches cats + calls bidsService.postBid with the assembled args', async () => {

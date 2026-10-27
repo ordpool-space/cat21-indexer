@@ -138,11 +138,13 @@ export class BidsService {
 
     // (6) Structural SDK gate — parses the PSBT and checks every semantic
     //     invariant against the DTO (input 0 outpoint, seller-input postage,
-    //     sighash field + signature flag byte, buyer signatures present,
+    //     finalised buyer inputs whose signatures commit SIGHASH_ALL,
     //     Output 0 postage + script, Output 1 address + floor, Output 2
-    //     buyer-change address, exact-price). No chain yet: a DTO/shape
-    //     mismatch is cheap to catch and must surface as its own reason
-    //     before any electrs round-trip.
+    //     buyer-change address, exact-price). No input carries a sighashType
+    //     field: ord's `wallet offer accept` rejects any that does, so the
+    //     buyer inputs are finalised and the flag byte rides inside each
+    //     signature. No chain yet: a DTO/shape mismatch is cheap to catch and
+    //     must surface as its own reason before any electrs round-trip.
     const sdkResult = validateCat21BuyOfferPsbt({
       psbt: psbtBytes,
       expectedSellerUtxo: { txid: dto.catTxid, vout: dto.catVout },
