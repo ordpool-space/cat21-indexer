@@ -52,7 +52,7 @@ env:
 jobs:
   regtest-mint-cat21wallet:
     name: Regtest cat21.space mint via CAT-21 wallet
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - name: Checkout cat21-indexer
