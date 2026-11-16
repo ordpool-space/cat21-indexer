@@ -50,7 +50,7 @@
     "@angular/compiler-cli": "21.2.4",
     "@angular/language-service": "21.2.4",
     "@openapitools/openapi-generator-cli": "^2.23.4",
-    "@playwright/test": "^1.58.2",
+    "@playwright/test": "^1.65.1",
     "@schematics/angular": "16.2.1",
     "@types/jest": "^30.0.0",
     "assert": "^2.0.0",

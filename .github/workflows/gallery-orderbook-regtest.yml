@@ -57,7 +57,7 @@ env:
 jobs:
   gallery-orderbook-regtest:
     name: Regtest gallery, orderbook and bids pages (real backend)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
       - name: Checkout cat21-indexer

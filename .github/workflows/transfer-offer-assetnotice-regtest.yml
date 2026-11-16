@@ -63,7 +63,7 @@ env:
 jobs:
   transfer-offer-assetnotice-regtest:
     name: Regtest transfer+make-offer asset-notice (real ord, no mock)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
       - name: Checkout cat21-indexer

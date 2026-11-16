@@ -62,7 +62,7 @@ env:
 jobs:
   funding-guard:
     name: Regtest funding-safety guard (real ord, no mock)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
       - name: Checkout cat21-indexer
