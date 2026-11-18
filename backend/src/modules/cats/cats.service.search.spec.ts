@@ -10,7 +10,8 @@ import { buildSearchWhere, type SearchFilters } from './cats.service';
  *
  * The load-bearing case is `category`. Per the workspace HARD RULE
  * (ordpool-parser/CAT21-RARITY-SCORE.md), categories are DISJOINT collections:
- * `sub1k` means cats 1000-9999 ONLY, matched by `inArray(cats.category, …)` —
+ * `sub1k` means cats 1-999 ONLY (cat #0 lives in `sub1`, cats 1000-9999 in
+ * `sub10k`), matched by `inArray(cats.category, …)` —
  * NEVER a cumulative `cat_number < threshold`. The exact HARD-RULE regression
  * (swap that `inArray` for a cumulative `lte()`) changes the compiled SQL from
  * `` `category` in (?) `` to `` `cat_number` <= ? `` and the param from the band

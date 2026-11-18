@@ -209,7 +209,9 @@ export class SyncService implements OnModuleInit {
 
           const traits = parsed?.getTraits();
           const feeRate = detail.fee / (detail.weight / 4);
-          // null for genesis cats; one of red/orange/yellow/green/blue/purple/pink otherwise.
+          // 'black'/'white' for genesis cats, 'fire'/'saturated' for the fee-rate
+          // easter eggs, else one of red/orange/yellow/green/blue/purple/pink.
+          // Never null: the column is nullable only so un-backfilled rows read null.
           const dominantColorCategory = getCatColorCategory(txid, blockHash, feeRate);
 
           return {

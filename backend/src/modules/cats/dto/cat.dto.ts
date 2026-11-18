@@ -127,8 +127,11 @@ export class CatSearchQueryDto {
   color?: string;
 
   // ORIGIN trait — the genesis flag surfaced as a searchable boolean.
-  // Filter values: 'genesis' (the 1-of-1) or 'normal' (everything else).
-  @ApiPropertyOptional({ description: 'Origin: genesis (the 1-of-1 cat #0) or normal (everything else).', example: 'genesis' })
+  // The parser's `genesis` trait fires when catHash[0] === 79 (~0.4% of
+  // cats, the genesis-palette variant), so it is a small cohort, not the
+  // 1-of-1. Cat #0 is a separate concept (the `sub1` category).
+  // Filter values: 'genesis' or 'normal' (everything else).
+  @ApiPropertyOptional({ description: 'Origin: genesis (genesis-palette cats, catHash[0] === 79, ~0.4% of the collection) or normal (everything else).', example: 'genesis' })
   @IsOptional() @IsString() @MaxLength(FILTER_MAX_LENGTH)
   @Matches(GENESIS_CSV, { message: msg('genesis', GENESIS_VALUES) })
   genesis?: string;

@@ -61,7 +61,7 @@ export class Dashboard {
     },
     {
       title: 'Transfer a cat',
-      description: 'Send one of your cats to another address. nLockTime=21 preserved through the transfer, so the cat mints a fresh block-21 marker on arrival.',
+      description: 'Send one of your cats to another address. The transfer also chooses lockTime=21 by convention, so it mints a fresh bonus cat on arrival; your original cat rides its sat either way.',
       link: '/dashboard/transfer',
       status: 'active',
       testId: 'transfer',
