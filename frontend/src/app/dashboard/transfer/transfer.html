@@ -159,17 +159,15 @@
           </p>
         }
       }
-      @if (assetNotice()) {
+      @if (noticeAssets(); as assets) {
         <div class="alert alert-warning small" data-testid="transfer-asset-notice">
           <p class="mb-1">
-            <strong>Heads up.</strong> The coin that will cover the fee
+            <strong>Heads up.</strong> The only coin that can cover the fee
             carries an on-chain asset. Transferring spends it as the miner fee,
             so that asset goes to the miner. You can go ahead, or send a plain
             payment UTXO to your wallet first to keep it.
           </p>
-          @if (noticeAssets(); as assets) {
-            <app-funding-asset-list [assets]="assets" testidPrefix="transfer-asset-notice" />
-          }
+          <app-funding-asset-list [assets]="assets" testidPrefix="transfer-asset-notice" />
         </div>
       }
       @if (droppedSelection(); as dropped) {

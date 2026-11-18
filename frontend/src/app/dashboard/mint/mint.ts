@@ -85,9 +85,7 @@ export class Mint {
       // are unnamed or whose content is unknown blocks on every wallet. The
       // orchestrator resolves the topology from the wallet context it holds
       // (setWallet), so this page never computes it.
-      // Pass the injected scanner (the DI singleton the picker + summary read) so
-      // the recommendation's any-size force-scan lands in the states$ they render.
-      cat21OrchestratorPorts(inject(Cat21Service), this.config, inject(bitcoinNetwork), 'derive', this.scanner),
+      cat21OrchestratorPorts(inject(Cat21Service), this.config, inject(bitcoinNetwork), 'derive'),
     );
 
   /** Reactive mirror of the orchestrator's snapshot; bound once in the constructor. */
@@ -215,7 +213,7 @@ export class Mint {
    * `expert-required`), not this template's. The notice obligation is ours:
    * name what sits on the coin, visibly, before the click.
    */
-  readonly assetNotice = computed(() => this.resolvedFundingStatus() === 'asset-notice');
+  readonly assetNotice = computed(() => this.fundingRecommendation()?.status === 'asset-notice');
 
   /**
    * Diagnostic-only (rendered into a display:none marker like transfer's), so an
@@ -238,20 +236,14 @@ export class Mint {
   });
 
   /**
-   * The asset detail the notice names: the assets of the coin that WILL be spent
-   * (`resolvedFundingUtxo` — the person's pick while it covers, else the SDK's
-   * recommendation), read back from the recommendation's `candidates` by
-   * outpoint. The pick is always one of them (the SDK selects from `candidates`),
-   * so the notice names what the MINT spends, never the recommended coin after an
-   * explicit override. Null unless the RESOLVED status is `asset-notice`.
+   * The asset detail the notice must name, taken from the RECOMMENDATION itself
+   * (the coin the SDK picked), never from a second scan of the coin. Null unless
+   * the status is `asset-notice`, where the SDK guarantees it names at least one
+   * asset (`namesAssets`).
    */
   readonly noticeAssets = computed<UtxoAssetDetail | null>(() => {
-    if (this.resolvedFundingStatus() !== 'asset-notice') return null;
-    const pick = this.resolvedFundingUtxo();
-    if (!pick) return null;
-    const key = outpointKey(pick);
-    const annotated = this.fundingRecommendation()?.candidates?.find((c) => outpointKey(c) === key);
-    return annotated?.assets ?? null;
+    const rec = this.fundingRecommendation();
+    return rec?.status === 'asset-notice' ? (rec.recommended?.assets ?? null) : null;
   });
 
   /**

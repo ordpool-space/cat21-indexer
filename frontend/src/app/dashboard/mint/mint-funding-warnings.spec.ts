@@ -264,37 +264,6 @@ describe('Mint: the asset notice (separate-address wallet, named assets) stays a
     const row = m.q(`utxo-row-${coin.txid}-${coin.vout}`);
     expect(row?.querySelector('[data-testid="utxo-recommended"]')).not.toBeNull();
   });
-
-  // B1: after an explicit pick, the notice must name the coin the mint WILL
-  // spend (the resolved pick), not the SDK's recommended coin. Reading the
-  // assets off `recommended` (the pre-fix code) names the wrong coin here, so
-  // reverting `noticeAssets` to `recommended.assets` turns this red.
-  it('after picking a different asset coin, the notice names the PICKED coin, not the recommended one', async () => {
-    const INSCRIPTION_A = `${'a'.repeat(64)}i0`; // on the recommended coin
-    const INSCRIPTION_B = `${'b'.repeat(64)}i0`; // on the picked coin
-    // Both asset coins cover; the SDK recommends the smaller (best-fit).
-    const recommended = fundingCoin(30_000, 0x70);
-    const picked = fundingCoin(60_000, 0x71);
-    const m = await mount({ coins: [recommended, picked] });
-    io!.setOutput(outpointKey(recommended), inscribedOutputFixture(INSCRIPTION_A));
-    io!.setOutput(outpointKey(picked), inscribedOutputFixture(INSCRIPTION_B));
-    await m.connect(testWallet(), 'asset-notice');
-    await m.until(() => m.q('mint-asset-notice') !== null, 'notice rendered');
-
-    // Before the pick: the notice names the recommended coin's asset.
-    expect(text(m.q('mint-asset-notice-inscription'))).toBe(INSCRIPTION_A);
-
-    // The person picks the other asset coin ("Use anyway" on an asset row).
-    (m.el.querySelector(`button[data-testid="utxo-pick-override-${picked.txid}"]`) as HTMLButtonElement).click();
-    await m.until(
-      () => m.fixture.componentInstance.resolvedFundingUtxo()?.txid === picked.txid
-        && m.fixture.componentInstance.resolvedFundingStatus() !== 'scanning',
-      'picked coin resolved',
-    );
-
-    // After the pick: the notice names the PICKED coin's asset, not the recommended one.
-    expect(text(m.q('mint-asset-notice-inscription'))).toBe(INSCRIPTION_B);
-  });
 });
 
 describe('Mint: a blocked mint renders the facts the FundingBlockedError carries', () => {

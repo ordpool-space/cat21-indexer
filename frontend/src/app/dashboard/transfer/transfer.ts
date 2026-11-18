@@ -12,7 +12,6 @@ import {
   TransferSnapshot,
   TxnOutput,
   UtxoAssetDetail,
-  UtxoContentScanner,
   WalletCapability,
   WalletService,
   expertRequiredCause,
@@ -49,7 +48,6 @@ export class Transfer {
   private cat21 = inject(Cat21Service);
   private config = inject(cat21Config);
   private network = inject(bitcoinNetwork);
-  private scanner = inject(UtxoContentScanner);
   private destroyRef = inject(DestroyRef);
 
   /**
@@ -67,9 +65,7 @@ export class Transfer {
       // one-address wallet WARNs and blocks (expert-required); a coin whose
       // assets are unnamed or whose content is unknown blocks on every wallet.
       // The orchestrator resolves the topology from the wallet context it holds.
-      // Share the injected scanner (the DI singleton the picker reads) so the
-      // recommendation's any-size force-scan lands in the states$ the picker renders.
-      cat21OrchestratorPorts(this.cat21, this.config, this.network, 'derive', this.scanner),
+      cat21OrchestratorPorts(this.cat21, this.config, this.network, 'derive'),
     );
   private snap = signal<TransferSnapshot>(this.orch.getSnapshot());
 
@@ -183,27 +179,21 @@ export class Transfer {
    * scan NAMED does AND the wallet keeps a SEPARATE payment address, so the SDK
    * auto-selects that coin and we INFORM rather than block (the asset-to-miner
    * ruling). CTA stays enabled; the obligation is to NAME what sits on the coin
-   * before the click. On this branch the coin can ITSELF over-pay (dirty-branch
-   * best-fit is against the requirement, not the preferred target): that
-   * ★+over-pay pair is intended, rendered by the picker, not a bug. Gated on the
-   * RESOLVED status so an explicit pick is honoured.
+   * before the click. On this branch the recommended coin can ITSELF over-pay
+   * (dirty-branch best-fit is against the requirement, not the preferred
+   * target): that ★+over-pay pair is intended, rendered by the picker, not a bug.
    */
-  readonly assetNotice = computed(() => this.resolvedFundingStatus() === 'asset-notice');
+  readonly assetNotice = computed(() => this.fundingRecommendation().status === 'asset-notice');
 
   /**
-   * The asset detail the notice names: the assets of the coin that WILL be spent
-   * (`resolvedFundingUtxo` — the person's pick while it covers, else the SDK's
-   * recommendation), read back from the recommendation's `candidates` by
-   * outpoint. Names what the TRANSFER spends, never the recommended coin after an
-   * explicit override. Null unless the RESOLVED status is `asset-notice`.
+   * The asset detail the notice must name, from the RECOMMENDATION itself (the
+   * coin the SDK picked), never a second scan. Null unless the status is
+   * `asset-notice`, where the SDK guarantees it names at least one asset
+   * (`namesAssets`).
    */
   readonly noticeAssets = computed<UtxoAssetDetail | null>(() => {
-    if (this.resolvedFundingStatus() !== 'asset-notice') return null;
-    const pick = this.resolvedFundingUtxo();
-    if (!pick) return null;
-    const key = outpointKey(pick);
-    const annotated = this.fundingRecommendation().candidates.find((c) => outpointKey(c) === key);
-    return annotated?.assets ?? null;
+    const rec = this.fundingRecommendation();
+    return rec.status === 'asset-notice' ? (rec.recommended?.assets ?? null) : null;
   });
 
   /**

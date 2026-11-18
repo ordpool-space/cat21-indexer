@@ -54,23 +54,13 @@ export function cat21OrchestratorPorts(
   config: Cat21SdkConfig,
   network: Network,
   fundingTopology?: FundingTopologySetting,
-  scanner?: UtxoContentScanner,
 ): Cat21OrchestratorPorts {
   return {
     getUtxos: (paymentAddress) => firstValueFrom(cat21.getUtxos(paymentAddress)),
     // The whole scanner IS a ContentScanPort; it only reads the ord URLs from the
     // config. Using it (not a hand-rolled classifyOutpoint flatten) is what keeps
     // the classifier->verdict->asset-detail mapping in the ONE place the SDK owns.
-    //
-    // Share the caller's scanner instance (the DI singleton the picker and the
-    // summary read) so the recommendation's force-scan of covering coins of ANY
-    // size lands in the `states$` those surfaces render. A private instance here
-    // would scan into a second `states$` the UI never sees, and
-    // `UtxoContentScanner.autoScan`'s 50 000-sat cap would then leave a larger
-    // asset coin showing "not scanned" in the picker while the SDK has already
-    // classified it as asset-bearing. A caller without a scanner (a test) gets a
-    // fresh one from the config.
-    scan: scanner ?? new UtxoContentScanner(config),
+    scan: new UtxoContentScanner(config),
     broadcast: (signedTxHex) => firstValueFrom(cat21.postTransaction(signedTxHex)),
     network,
     ...(fundingTopology ? { fundingTopology } : {}),
