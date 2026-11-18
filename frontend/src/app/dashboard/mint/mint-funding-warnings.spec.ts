@@ -295,6 +295,48 @@ describe('Mint: the asset notice (separate-address wallet, named assets) stays a
   /* jscpd:ignore-end */
 });
 
+describe('Mint: deliberately picking an asset coin while a clean coin covers (audit B1, > 50k)', () => {
+
+  // The audit case: a clean coin is recommended, but the person picks a LARGE
+  // asset coin (above AUTO_SCAN_MAX_VALUE_SAT = 50k). The recommendation
+  // force-scans every covering coin, and the picker reads that one shared scan,
+  // so the big coin shows as an asset (not "not scanned") and the picker offers
+  // "Use anyway". Picking it must raise the stronger asset-found-warning BEFORE
+  // the mint click, naming the PICKED coin's inscription. A private scanner here
+  // (the pre-fix wiring) left the coin unscanned, so this warning never showed.
+  it('shows the asset-found-warning naming the picked coin, with the mint CTA still enabled', async () => {
+    const INSCRIPTION = `${'c'.repeat(64)}i0`;
+    const clean = fundingCoin(100_000, 0x74);        // recommended (clean, covers)
+    const bigAsset = fundingCoin(2_000_000, 0x75);   // > 50k, carries an inscription
+    const m = await mount({ coins: [clean, bigAsset] });
+    io!.setOutput(outpointKey(clean), cleanOutputFixture());
+    io!.setOutput(outpointKey(bigAsset), inscribedOutputFixture(INSCRIPTION));
+    await m.connect(testWallet(), 'auto'); // a clean coin covers -> auto-pick, no notice
+
+    // The big asset coin is force-scanned by the recommendation and shows as an
+    // asset in the picker (not "not scanned"), despite being above the 50k cap.
+    const assetRow = m.q(`utxo-row-${bigAsset.txid}-${bigAsset.vout}`);
+    await m.until(() => assetRow?.getAttribute('data-bucket') === 'assets', 'big coin scanned to assets');
+    // Nothing warns yet: the recommended (clean) coin is the one that would spend.
+    expect(m.q('asset-found-warning')).toBeNull();
+
+    // The person picks the big asset coin.
+    (m.el.querySelector(`button[data-testid="utxo-pick-override-${bigAsset.txid}"]`) as HTMLButtonElement).click();
+    await m.until(
+      () => m.fixture.componentInstance.resolvedFundingUtxo()?.txid === bigAsset.txid
+        && m.fixture.componentInstance.resolvedFundingStatus() !== 'scanning',
+      'big asset coin resolved',
+    );
+
+    // The stronger danger warning is up BEFORE the mint click and names the coin.
+    const warning = m.q('asset-found-warning');
+    expect(warning).not.toBeNull();
+    expect(text(warning)).toContain(INSCRIPTION);
+    // Informational, not a hard block: the person owns their funds.
+    expect(m.cta().disabled).toBe(false);
+  });
+});
+
 describe('Mint: a blocked mint renders the facts the FundingBlockedError carries', () => {
 
   it('named-assets: a mint that reaches the orchestrator is refused with the cause and coin the warning shows; nothing is signed', async () => {
