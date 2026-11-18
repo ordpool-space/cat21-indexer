@@ -478,17 +478,17 @@ export class Mint {
 
   /**
    * "Retry scan" on the `unknown-content` warning. The recommendation comes from
-   * the orchestrator's own scan port, so the retry re-reads the wallet's coins
-   * through the orchestrator (a failed scan is never cached, so the covering
-   * coins are scanned again), and re-scans the recommended coin's row badge
-   * first when there is one, so the re-read sees that answer.
+   * the orchestrator's own scan port, so the retry asks the orchestrator to
+   * re-scan the covering coins and recompute (`rescanFunding()`; a failed scan
+   * is never cached), scanning the recommended coin's row badge first when there
+   * is one.
    */
   retryFundingScan(): void {
     const r = this.fundingRecommendation()?.recommended;
     if (r) {
       this.rescanCoin(outpointKey(r));
     } else {
-      void this.orch.refreshUtxos();
+      void this.orch.rescanFunding();
     }
   }
 

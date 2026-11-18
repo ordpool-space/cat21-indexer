@@ -320,7 +320,7 @@ describe('MakeOffer: a blocked offer renders the facts the FundingBlockedError c
       vout: coin.vout,
       value: 60_000,
       bucket: 'assets',
-      assets: { inscriptionIds: [INSCRIPTION_ID], runeNames: [], catIds: [], cats: [], rareSat: null },
+      assets: { inscriptionIds: [INSCRIPTION_ID], runeNames: [], catIds: [], cats: [], catSat: null, rareSat: null },
     });
     expect(text(t.q('make-offer-funding-expert-required-inscription'))).toBe(err.recommendation.recommended.assets?.inscriptionIds[0]);
     expect(t.cta().disabled).toBe(true);

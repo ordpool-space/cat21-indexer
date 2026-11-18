@@ -44,11 +44,8 @@ import {
   outpointKey,
 } from 'ordpool-sdk';
 
-import { cat21OrdCatInscriptionFixture } from 'ordpool-sdk/testing';
-
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
-import { inscriptionReviewLink } from '../../shared/funding-asset-links';
 import { Mint } from './mint';
 import { FUNDING_TEST_CONFIG, FundingFetch, installFundingFetch } from '../../testing/funding-fetch.fixtures';
 import { WalletServiceStub } from '../../testing/wallet.fixtures';
@@ -365,7 +362,7 @@ describe('Mint: a blocked mint renders the facts the FundingBlockedError carries
       vout: coin.vout,
       value: 30_000,
       bucket: 'assets',
-      assets: { inscriptionIds: [INSCRIPTION_ID], runeNames: [], catIds: [], cats: [], rareSat: null },
+      assets: { inscriptionIds: [INSCRIPTION_ID], runeNames: [], catIds: [], cats: [], catSat: null, rareSat: null },
     });
     expect(text(m.q('mint-funding-expert-required-inscription'))).toBe(err.recommendation.recommended.assets?.inscriptionIds[0]);
     expect(m.cta().disabled).toBe(true);
@@ -408,7 +405,8 @@ describe('Mint: the asset notice proceeds to a mint with the noticed coin', () =
  * scan carries `cats`; only this proves the page renders them.
  */
 describe('Mint: cats on a funding coin are named by number', () => {
-  const CAT_ID = cat21OrdCatInscriptionFixture.id;
+  /** A real-shaped cat id; `catOutputFixture(CAT_ID, n)` serves its `/inscription` with number n. */
+  const CAT_ID = `${'1b93'.padEnd(64, 'c')}i0`;
 
   /** The `Cat #N` links under `root` with the given testid. */
   const catLinks = (root: Element | null, testid: string) =>
@@ -420,8 +418,7 @@ describe('Mint: cats on a funding coin are named by number', () => {
   it('the asset notice and the picker row name the cat as "Cat #2", linked to /cat/2', async () => {
     const coin = fundingCoin(30_000, 0x80);
     const m = await mount({ coins: [coin] });
-    io!.setOutput(outpointKey(coin), catOutputFixture(CAT_ID));
-    io!.setInscription(CAT_ID, cat21OrdCatInscriptionFixture);
+    io!.setOutput(outpointKey(coin), catOutputFixture(CAT_ID, 2));
     await m.connect(testWallet(), 'asset-notice');
     await m.until(() => m.q('mint-asset-notice-cat') !== null, 'notice cat rendered');
     expect(catLinks(m.el, 'mint-asset-notice-cat')).toEqual([{ label: 'Cat #2', href: '/cat/2' }]);
@@ -432,8 +429,7 @@ describe('Mint: cats on a funding coin are named by number', () => {
   it('the expert-required warning (one-address wallet) names the cat as "Cat #2"', async () => {
     const coin = fundingCoin(30_000, 0x81);
     const m = await mount({ coins: [coin] });
-    io!.setOutput(outpointKey(coin), catOutputFixture(CAT_ID));
-    io!.setInscription(CAT_ID, cat21OrdCatInscriptionFixture);
+    io!.setOutput(outpointKey(coin), catOutputFixture(CAT_ID, 2));
     await m.connect(oneAddressTestWallet(), 'expert-required');
     await m.until(() => m.q('mint-funding-expert-required-cat') !== null, 'warning cat rendered');
     expect(catLinks(m.el, 'mint-funding-expert-required-cat')).toEqual([{ label: 'Cat #2', href: '/cat/2' }]);
@@ -445,8 +441,7 @@ describe('Mint: cats on a funding coin are named by number', () => {
     const catCoin = fundingCoin(60_000, 0x83);
     const m = await mount({ coins: [clean, catCoin] });
     io!.setOutput(outpointKey(clean), cleanOutputFixture());
-    io!.setOutput(outpointKey(catCoin), catOutputFixture(CAT_ID));
-    io!.setInscription(CAT_ID, cat21OrdCatInscriptionFixture);
+    io!.setOutput(outpointKey(catCoin), catOutputFixture(CAT_ID, 2));
     await m.connect(testWallet(), 'auto');
     const row = m.q(`utxo-row-${catCoin.txid}-${catCoin.vout}`);
     await m.until(() => row?.getAttribute('data-bucket') === 'assets', 'cat coin scanned to assets');
@@ -456,13 +451,11 @@ describe('Mint: cats on a funding coin are named by number', () => {
   });
 
   // The Genesis Cat's number is 0, which is falsy: a truthiness check on the
-  // number (`cat.number ? ...`) sends it to the unnumbered fallback. Same
-  // captured /inscription answer, number set to 0.
+  // number (`cat.number ? ...`) sends it to the unnumbered fallback.
   it('the Genesis Cat (number 0) is named "Cat #0", linked to /cat/0, not the fallback', async () => {
     const coin = fundingCoin(30_000, 0x85);
     const m = await mount({ coins: [coin] });
-    io!.setOutput(outpointKey(coin), catOutputFixture(CAT_ID));
-    io!.setInscription(CAT_ID, { ...cat21OrdCatInscriptionFixture, number: 0 });
+    io!.setOutput(outpointKey(coin), catOutputFixture(CAT_ID, 0));
     await m.connect(testWallet(), 'asset-notice');
     await m.until(() => m.q('mint-asset-notice-cat') !== null, 'notice cat rendered');
     expect(catLinks(m.el, 'mint-asset-notice-cat')).toEqual([{ label: 'Cat #0', href: '/cat/0' }]);
@@ -470,19 +463,18 @@ describe('Mint: cats on a funding coin are named by number', () => {
     expect(catLinks(row, 'utxo-asset-cat')).toEqual([{ label: 'Cat #0', href: '/cat/0' }]);
   });
 
-  it('a cat whose number cat21-ord cannot give keeps its inscription id and link', async () => {
+  it('a cat whose number cat21-ord cannot give falls back to the sat page, on the notice and the picker', async () => {
     const coin = fundingCoin(30_000, 0x84);
     const m = await mount({ coins: [coin] });
     io!.setOutput(outpointKey(coin), catOutputFixture(CAT_ID));
     io!.setInscription(CAT_ID, 'not-found');
     await m.connect(testWallet(), 'asset-notice');
     await m.until(() => m.q('mint-asset-notice-cat') !== null, 'notice cat rendered');
-    expect(catLinks(m.el, 'mint-asset-notice-cat')).toEqual([{ label: CAT_ID, href: inscriptionReviewLink(CAT_ID) }]);
-    // The picker row knows the sat, so its fallback is the sat page.
+    const [notice] = catLinks(m.el, 'mint-asset-notice-cat');
+    expect(notice.label).toBe('CAT-21 cat');
+    expect(notice.href).toMatch(/^https:\/\/cat21\.space\/sat\/\d+$/);
     const row = m.q(`utxo-row-${coin.txid}-${coin.vout}`);
-    const [pick] = catLinks(row, 'utxo-asset-cat');
-    expect(pick.label).toBe('CAT-21 cat');
-    expect(pick.href).toMatch(/^https:\/\/cat21\.space\/sat\/\d+$/);
+    expect(catLinks(row, 'utxo-asset-cat')).toEqual([notice]);
   });
 });
 

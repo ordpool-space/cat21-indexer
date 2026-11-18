@@ -26,12 +26,11 @@ export function catSatLink(catSat: number): string {
  *
  * A cat whose number the scan resolved is `Cat #N`, linked to its own page on
  * this site (`/cat/N`), so the person sees WHICH cat they would give away, not
- * a count. A cat the scan could not number keeps the surface's own link: where
- * the sat is known (the picker's scan state) all unnumbered cats share one entry
- * linked to the sat page, which lists every cat riding it; where it is not (the
- * notice and the warnings, whose `UtxoAssetDetail` carries no sat) each one is
- * its inscription id, linked to the inscription. A scan answer without `cats`
- * (no number lookup) is treated as all unnumbered.
+ * a count. Cats the scan could not number share one entry linked to the sat
+ * page, which lists every cat riding that sat (the picker's scan state and the
+ * notice's `UtxoAssetDetail` both carry `catSat`). Without a sat each one is its
+ * inscription id, linked to the inscription. A scan answer without `cats` (no
+ * number lookup) is treated as all unnumbered.
  */
 export function catAssetLinks(content: CatAssetContent): CatAssetLink[] {
   const cats = content.cats ?? content.catIds.map((id) => ({ id, number: null }));

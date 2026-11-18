@@ -6,7 +6,7 @@
  *         /api/v1/fees/recommended (static DEFAULT_FEES) and ord /output for both ord URLs; every other
  *         /api/* path is proxied to the real electrs
  *         context route on every /output/<outpoint> -> cleanOutputFixture (ordpool-sdk/core)
- *         page route on /output/<outpoint> for one outpoint -> catOutputFixture (ordpool-sdk/core)
+ *         page route on /output/<outpoint> for one outpoint -> catOutputFixture (ordpool-sdk/core, via lib/mocked-cat-inscription), plus its /inscription
  *         page route on /api/v1/fees/recommended -> recommendedFeesFixture with an invented spread
  *         page route on POST /api/tx -> 400 (broadcast-failure test)
  *         Xverse's vendor backends -> installXverseOfflineRoutes (ordpool-sdk/e2e, captured)
@@ -40,8 +40,8 @@ import {
   regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { catOutputFixture, cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
-import { MOCKED_CAT_ID, routeMockedCatInscription } from './lib/mocked-cat-inscription';
+import { cleanOutputFixture, recommendedFeesFixture } from 'ordpool-sdk/core';
+import { MOCKED_CAT, routeMockedCatInscription } from './lib/mocked-cat-inscription';
 
 // Canonical clean `/output` body (indexed, carries nothing), merged across the
 // two ord surfaces the scanner reads (full ord: inscriptions/runes/sat_ranges;
@@ -53,7 +53,7 @@ const CLEAN_OUTPUT_BODY = { ...cleanOutputFixture().ord, ...cleanOutputFixture()
 
 // The same merge for a coin carrying a CAT-21 cat (cat21-ord reports the cat,
 // the full ord reports nothing), so the scanner classifies it as an asset coin.
-const CAT_OUTPUT_BODY = { ...catOutputFixture(MOCKED_CAT_ID).ord, ...catOutputFixture(MOCKED_CAT_ID).cat21Ord };
+const CAT_OUTPUT_BODY = { ...MOCKED_CAT.ord, ...MOCKED_CAT.cat21Ord };
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint

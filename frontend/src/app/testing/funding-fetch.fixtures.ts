@@ -16,8 +16,8 @@ import {
  * the SDK's `recommendedFeesFixture`), the per-outpoint `/output` answers of ord
  * and cat21-ord (the SDK's `OutputFixture` builders: `cleanOutputFixture`,
  * `inscribedOutputFixture`, `notIndexedOutputFixture`, ...), cat21-ord's
- * `GET /inscription/<id>` (where the scanner reads a cat's number; the SDK's
- * captured `cat21OrdCatInscriptionFixture`) and the broadcast
+ * `GET /inscription/<id>` (where the scanner reads a cat's number; the
+ * `catInscription` a `catOutputFixture` carries) and the broadcast
  * (`POST <mempool>/api/tx` with the raw tx hex as the body, answered with the
  * txid as plain text, as esplora's `POST /tx` does). A URL nothing here answers
  * is recorded in `unexpected` and fails with 404, so a spec can assert the page
@@ -33,11 +33,16 @@ export const FUNDING_TEST_CONFIG: Cat21SdkConfig = {
 export interface FundingFetch {
   /** Set what electrs lists at `address`. */
   setUtxos(address: string, utxos: TxnOutput[]): void;
-  /** Set what ord and cat21-ord answer for `outpoint` (`txid:vout`). */
-  setOutput(outpoint: string, fixture: OutputFixture): void;
   /**
-   * Set what cat21-ord answers for `GET /inscription/<id>`: a body (200) or
-   * `'not-found'` (404, the scanner then shows the cat without a number).
+   * Set what ord and cat21-ord answer for `outpoint` (`txid:vout`). A cat
+   * fixture's `catInscription` (`catOutputFixture`) is also served at
+   * cat21-ord's `/inscription/<id>`, where the scan reads the cat's number.
+   */
+  setOutput(outpoint: string, fixture: OutputFixture & { catInscription?: { id: string } }): void;
+  /**
+   * Set what cat21-ord answers for `GET /inscription/<id>`, overriding what
+   * `setOutput` registered: a body (200) or `'not-found'` (404, the scanner then
+   * shows the cat without a number).
    */
   setInscription(id: string, answer: unknown): void;
   /** Every URL fetched, in order. */
@@ -113,7 +118,10 @@ export function installFundingFetch(config: Cat21SdkConfig = FUNDING_TEST_CONFIG
 
   return {
     setUtxos: (address, list) => utxos.set(address, list),
-    setOutput: (outpoint, fixture) => outputs.set(outpoint, fixture),
+    setOutput: (outpoint, fixture) => {
+      outputs.set(outpoint, fixture);
+      if (fixture.catInscription) inscriptions.set(fixture.catInscription.id, fixture.catInscription);
+    },
     setInscription: (id, answer) => inscriptions.set(id, answer),
     calls,
     unexpected,

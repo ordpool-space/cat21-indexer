@@ -8,7 +8,7 @@
  *         recommendedFeesFixture with an invented spread); ord /output for the frontend's ord URLs;
  *         every other /api/* path is proxied to the real electrs
  *         context route on every /output/<outpoint> -> cleanOutputFixture (ordpool-sdk/core)
- *         page route on /output/<outpoint> for one outpoint -> catOutputFixture (ordpool-sdk/core)
+ *         page route on /output/<outpoint> for one outpoint -> catOutputFixture (ordpool-sdk/core, via lib/mocked-cat-inscription), plus its /inscription
  *         page route on POST /api/tx -> 400 (broadcast-failure test)
  * Proves: mint round-trip with nLockTime=21 and sequence 0xfffffffd; "Use anyway" spends a cat-flagged
  *         coin; manual fee overrides land on-chain; sign cancel and broadcast failure surface as errors;
@@ -46,8 +46,8 @@ import {
   regtestWallet,
 } from 'ordpool-sdk/e2e';
 
-import { catOutputFixture, cleanOutputFixture, Network, recommendedFeesFixture } from 'ordpool-sdk/core';
-import { MOCKED_CAT_ID, routeMockedCatInscription } from './lib/mocked-cat-inscription';
+import { cleanOutputFixture, Network, recommendedFeesFixture } from 'ordpool-sdk/core';
+import { MOCKED_CAT, routeMockedCatInscription } from './lib/mocked-cat-inscription';
 import { buildCat21SessionMessage } from 'ordpool-sdk/cat21-session';
 import { hex } from '@scure/base';
 import { signTestBip322Message, testTaprootAddress } from 'ordpool-sdk/testing';
@@ -79,7 +79,7 @@ const CLEAN_OUTPUT_BODY = { ...cleanOutputFixture().ord, ...cleanOutputFixture()
 
 // The same merge for a coin carrying a CAT-21 cat (cat21-ord reports the cat,
 // the full ord reports nothing), so the scanner classifies it as an asset coin.
-const CAT_OUTPUT_BODY = { ...catOutputFixture(MOCKED_CAT_ID).ord, ...catOutputFixture(MOCKED_CAT_ID).cat21Ord };
+const CAT_OUTPUT_BODY = { ...MOCKED_CAT.ord, ...MOCKED_CAT.cat21Ord };
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint via CAT-21 wallet.
