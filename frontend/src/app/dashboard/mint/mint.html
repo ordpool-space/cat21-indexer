@@ -132,20 +132,23 @@
         </div>
       </section>
 
-      @if (noticeAssets(); as assets) {
-        <!-- asset-notice: the SDK auto-selected a coin whose assets the scan
-             named, because it is the ONLY cover and the wallet keeps a separate
-             payment address. Proceed is allowed (CTA stays enabled); the
-             obligation is to name what sits on the coin, from the
-             recommendation itself. -->
+      @if (assetNotice()) {
+        <!-- asset-notice: the coin the mint WILL spend carries named assets and
+             proceeding is allowed (the SDK's resolved verdict for the coin,
+             honouring an explicit pick; CTA stays enabled). The obligation is to
+             name what sits on THAT coin, before the click. The gate is the
+             resolved status so the notice always shows when proceeding on an
+             asset coin; the asset list binds to the resolved pick. -->
         <div class="mint-alert mint-alert-warning" data-testid="mint-asset-notice">
           <p>
-            <strong>Heads up.</strong> The only coin that can cover this mint
+            <strong>Heads up.</strong> The coin that will cover this mint
             carries an on-chain asset. Minting spends it as the miner fee, so
             that asset goes to the miner. You can go ahead, or send a plain
             payment UTXO to your wallet first to keep it.
           </p>
-          <app-funding-asset-list [assets]="assets" testidPrefix="mint-asset-notice" />
+          @if (noticeAssets(); as assets) {
+            <app-funding-asset-list [assets]="assets" testidPrefix="mint-asset-notice" />
+          }
         </div>
       } @else if (sel.bucket === 'assets' && sel.scan.kind === 'scanned-with-assets') {
         <div class="mint-alert mint-alert-danger" data-testid="asset-found-warning">

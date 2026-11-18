@@ -293,15 +293,17 @@
           </p>
         }
       }
-      @if (buyerNoticeAssets(); as assets) {
+      @if (buyerAssetNotice()) {
         <div class="alert alert-warning small" data-testid="make-offer-asset-notice">
           <p class="mb-1">
-            <strong>Heads up.</strong> The only coin that can cover this offer
+            <strong>Heads up.</strong> The coin that will cover this offer
             carries an on-chain asset. Creating the offer spends it into the
             trade, so that asset goes to the miner (or to the seller). You can
             go ahead, or send a plain payment UTXO to your wallet first to keep it.
           </p>
-          <app-funding-asset-list [assets]="assets" testidPrefix="make-offer-asset-notice" />
+          @if (buyerNoticeAssets(); as assets) {
+            <app-funding-asset-list [assets]="assets" testidPrefix="make-offer-asset-notice" />
+          }
         </div>
       }
       @if (droppedSelection(); as dropped) {
