@@ -5,4 +5,7 @@
   @case ('below-requirement') {
     <span data-testid="dropped-selection-text">The coin you picked, <code>{{ dropped().txid }}:{{ dropped().vout }}</code>, no longer covers this transaction at {{ rateText() }}. Lower the fee rate, or pick another coin below.</span>
   }
+  @case ('contents-changed') {
+    <span data-testid="dropped-selection-text">The coin you picked, <code>{{ dropped().txid }}:{{ dropped().vout }}</code>, now carries assets that were not shown when you picked it. Review what it holds below, then pick it again or pick another coin.</span>
+  }
 }

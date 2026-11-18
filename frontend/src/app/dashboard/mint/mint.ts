@@ -29,6 +29,7 @@ import {
 } from 'ordpool-sdk';
 
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
+import { catAssetLinks } from '../../shared/cat-asset-links';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { resolvedNoticeAssets } from '../../shared/resolved-notice-assets';
@@ -122,16 +123,8 @@ export class Mint {
     return txid ? runeEtchingReviewLink(txid, name) : null;
   }
 
-  /**
-   * Sat-page link for the cats on a funding UTXO, shown in the "you are about
-   * to spend this" warning. All cats at an outpoint share offset 0, so one sat
-   * page lists every one of them and shows where each sits now. The mint tx
-   * would be wrong here: it shows where a cat started, not where it is after a
-   * transfer.
-   */
-  catSatLink(catSat: number): string {
-    return `https://cat21.space/sat/${catSat}`;
-  }
+  /** Names the cats on a coin as `Cat #N` links (shared with the notice and warnings). */
+  readonly catAssetLinks = catAssetLinks;
 
   /** Auto-scan threshold passed through to the template for the "Scan anyway" label. */
   readonly autoScanThreshold = AUTO_SCAN_MAX_VALUE_SAT;

@@ -18,6 +18,7 @@ import {
 } from 'ordpool-sdk';
 
 import { PriceService } from '../price.service';
+import { catAssetLinks } from '../cat-asset-links';
 import { rareSatLabel } from '../rare-sat-label';
 import { inscriptionReviewLink, runeEtchingReviewLink } from '../funding-asset-links';
 import { runeRowLabel } from '../rune-row-label';
@@ -245,10 +246,8 @@ export class UtxoPicker {
     return txid ? runeEtchingReviewLink(txid, name) : null;
   }
 
-  /** cat21.space sat page listing the cats on this UTXO. All share offset 0. */
-  catSatLink(catSat: number): string {
-    return `https://cat21.space/sat/${catSat}`;
-  }
+  /** Names the cats on a coin as `Cat #N` links (shared with the notice and warnings). */
+  readonly catAssetLinks = catAssetLinks;
 
   /** Shared funding-row helpers; identical to the mint panel so the two can't drift. */
   readonly inscriptionReviewLink = inscriptionReviewLink;

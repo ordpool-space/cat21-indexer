@@ -313,7 +313,7 @@ describe('Transfer: a blocked transfer renders the facts the FundingBlockedError
       vout: coin.vout,
       value: 30_000,
       bucket: 'assets',
-      assets: { inscriptionIds: [INSCRIPTION_ID], runeNames: [], catIds: [], rareSat: null },
+      assets: { inscriptionIds: [INSCRIPTION_ID], runeNames: [], catIds: [], cats: [], rareSat: null },
     });
     expect(text(t.q('transfer-funding-expert-required-inscription'))).toBe(err.recommendation.recommended.assets?.inscriptionIds[0]);
     expect(t.cta().disabled).toBe(true);

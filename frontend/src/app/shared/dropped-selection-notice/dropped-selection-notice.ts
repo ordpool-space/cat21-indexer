@@ -6,7 +6,9 @@ import { DroppedSelection } from 'ordpool-sdk';
  * the orchestrator snapshot's `droppedSelection`, and what to do about it:
  * `gone` (the coin is no longer among the wallet's spendable coins, pick
  * another) or `below-requirement` (the coin is still there but no longer covers
- * at this fee rate, lower the rate or pick another).
+ * at this fee rate, lower the rate or pick another) or `contents-changed` (a
+ * newer scan found assets on it that were not shown when it was picked, so the
+ * pick no longer means what the person agreed to: review and pick again).
  *
  * The SDK decides the drop (`describeFundingPick`); this only words it. Without
  * the sentence the page shows the coin it will spend, which is correct about

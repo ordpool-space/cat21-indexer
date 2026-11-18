@@ -1,13 +1,15 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input } from '@angular/core';
 import { UtxoAssetDetail } from 'ordpool-sdk';
 
+import { catAssetLinks } from '../cat-asset-links';
 import { inscriptionReviewLink, runeEtchingReviewLink } from '../funding-asset-links';
 import { rareSatLabel } from '../rare-sat-label';
 import { RuneEtchingService } from '../rune-etching.service';
 
 /**
- * The named assets on one funding coin, one line per kind: inscriptions and
- * cats linked to the transaction that created them, runes linked to their
+ * The named assets on one funding coin, one line per kind: inscriptions linked
+ * to the transaction that created them, cats as `Cat #N` linked to their page
+ * (`catAssetLinks`), runes linked to their
  * etching once it resolves (plain text until then), the rare sat by its sat
  * number. Rendered inside the asset notice (the wallet proceeds) and the
  * expert-required warning (the wallet blocks) on mint, transfer and
@@ -32,6 +34,9 @@ export class FundingAssetList {
 
   readonly inscriptionReviewLink = inscriptionReviewLink;
   readonly rareSatLabel = rareSatLabel;
+
+  /** The cats on the coin as `Cat #N` links, or the sat-link fallback when unnumbered. */
+  readonly catLinks = computed(() => catAssetLinks(this.assets()));
 
   constructor() {
     // Resolve the rune etchings when the list appears, not per render. The

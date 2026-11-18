@@ -1,33 +1,21 @@
 import { WritableSignal } from '@angular/core';
-import { TxnOutput, isFundingSelectionChangedError } from 'ordpool-sdk';
-
-/**
- * The SDK throws a PLAIN `Error` (no typed class in this build) for the
- * transient case where an execute ran before the funding preview caught up to a
- * still-VALID pin. Only transfer and create-offer reach it (they pass the
- * simulation's funding UTXO as the resolved coin, which lags the pin); mint
- * cannot. Matched by the stable message. The pin stays valid, so the page shows
- * a "try again in a moment" hint, never a re-confirm.
- *
- * A typed error here would be sturdier than a string match; reported to the SDK.
- */
-export function isFundingPreviewUpdatingError(err: unknown): boolean {
-  return err instanceof Error && err.message.includes('funding preview is still being updated');
-}
+import { TxnOutput, isFundingPreviewStaleError, isFundingSelectionChangedError } from 'ordpool-sdk';
 
 /**
  * The two execute-path funding errors the SDK's orchestrator guard raises, each
  * with its own recovery, shared by mint / transfer / create-offer so the money
  * path reads the same on every surface:
  *
- *  - `FundingSelectionChangedError`: the pinned coin is gone or stopped
- *    covering. The SDK refuses the click rather than spend a coin the person
+ *  - `FundingSelectionChangedError`: the pinned coin is gone, stopped
+ *    covering, or now carries assets that were not shown when it was picked
+ *    (`contents-changed`). The SDK refuses the click rather than spend a coin the person
  *    never confirmed. RELEASE the pin (the SDK re-resolves it on every attempt
  *    and would refuse each one), re-read, and keep a sticky "confirm again"
  *    message naming the dropped coin while the panel moves to the coin that
  *    would be spent now.
- *  - the preview-updating `Error` (transfer / offer only): the pin is still
- *    valid, so KEEP it and show a transient retry hint.
+ *  - `FundingPreviewStaleError` (transfer / offer only; mint passes the
+ *    resolved pick, which equals the pin): the execute ran before the preview
+ *    caught up to a still-valid pin, so KEEP it and show a transient retry hint.
  *
  * Returns `true` when it handled the error (the caller returns), `false`
  * otherwise (a sign/broadcast failure already lives in the snapshot).
@@ -47,7 +35,7 @@ export function handleFundingExecuteError(
     handlers.refresh();
     return true;
   }
-  if (handlers.onPreviewRetry && isFundingPreviewUpdatingError(err)) {
+  if (handlers.onPreviewRetry && isFundingPreviewStaleError(err)) {
     handlers.onPreviewRetry('The funding preview is catching up for the coin you picked. Try again in a moment.');
     return true;
   }

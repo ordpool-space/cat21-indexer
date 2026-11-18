@@ -23,15 +23,17 @@
     }
   </p>
 }
-@if (a.catIds.length > 0) {
-  <p>
-    <strong>CAT-21 cat{{ a.catIds.length === 1 ? '' : 's' }}:</strong>&ngsp;
-    @for (id of a.catIds; track id) {
-      <a [href]="inscriptionReviewLink(id)" target="_blank" rel="noopener"
-         [attr.data-testid]="testidPrefix() + '-cat'">{{ id }}</a>
-      @if (!$last) { , }
-    }
-  </p>
+@if (catLinks(); as cats) {
+  @if (cats.length > 0) {
+    <p>
+      <strong>CAT-21 cat{{ a.catIds.length === 1 ? '' : 's' }}:</strong>&ngsp;
+      @for (cat of cats; track cat.key) {
+        <a [href]="cat.href" target="_blank" rel="noopener"
+             [attr.data-testid]="testidPrefix() + '-cat'">{{ cat.label }}</a>
+        @if (!$last) { , }
+      }
+    </p>
+  }
 }
 @if (a.rareSat; as rare) {
   <p>
