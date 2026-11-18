@@ -455,6 +455,21 @@ describe('Mint: cats on a funding coin are named by number', () => {
     expect(catLinks(m.el, 'asset-found-warning-cat')).toEqual([{ label: 'Cat #2', href: '/cat/2' }]);
   });
 
+  // The Genesis Cat's number is 0, which is falsy: a truthiness check on the
+  // number (`cat.number ? ...`) sends it to the unnumbered fallback. Same
+  // captured /inscription answer, number set to 0.
+  it('the Genesis Cat (number 0) is named "Cat #0", linked to /cat/0, not the fallback', async () => {
+    const coin = fundingCoin(30_000, 0x85);
+    const m = await mount({ coins: [coin] });
+    io!.setOutput(outpointKey(coin), catOutputFixture(CAT_ID));
+    io!.setInscription(CAT_ID, { ...cat21OrdCatInscriptionFixture, number: 0 });
+    await m.connect(testWallet(), 'asset-notice');
+    await m.until(() => m.q('mint-asset-notice-cat') !== null, 'notice cat rendered');
+    expect(catLinks(m.el, 'mint-asset-notice-cat')).toEqual([{ label: 'Cat #0', href: '/cat/0' }]);
+    const row = m.q(`utxo-row-${coin.txid}-${coin.vout}`);
+    expect(catLinks(row, 'utxo-asset-cat')).toEqual([{ label: 'Cat #0', href: '/cat/0' }]);
+  });
+
   it('a cat whose number cat21-ord cannot give keeps its inscription id and link', async () => {
     const coin = fundingCoin(30_000, 0x84);
     const m = await mount({ coins: [coin] });
