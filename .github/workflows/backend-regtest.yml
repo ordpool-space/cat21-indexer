@@ -11,6 +11,9 @@ on:
   push:
     paths:
       - 'backend/src/modules/sync/**'
+      - 'backend/src/modules/listings/**'
+      - 'backend/src/modules/bids/**'
+      - 'backend/src/modules/shared/drizzle/**'
       - 'backend/jest.regtest.config.ts'
       - 'backend/*.json'
       - 'scripts/backend-regtest-lane.sh'
