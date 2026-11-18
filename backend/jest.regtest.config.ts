@@ -15,6 +15,12 @@ const config: Config = {
     '^.+\\.ts$': 'ts-jest',
   },
   testEnvironment: 'node',
+  // One worker: every spec shares ONE stack. The DB-backed specs each run the
+  // Drizzle migrations against the same fresh `cat21` database, and two
+  // workers migrating at once collide on `CREATE TABLE` (the loser fails).
+  // They also fund from the same bitcoind wallet, where two workers can pick
+  // the same UTXO and double-spend. Serial is the only correct schedule here.
+  maxWorkers: 1,
   moduleNameMapper: {
     '^sats-connect$': '<rootDir>/../test/mocks/sats-connect.js',
   },
