@@ -67,6 +67,19 @@ import { measuredTextContrast } from './lib/measured-text-contrast';
  */
 
 const FRONTEND_URL = regtestServiceUrls().app;
+
+/**
+ * The number regtest cat21-ord gives the cat `catId` (`GET /inscription/<id>`,
+ * the route the page's scanner reads it from). Fails loudly when cat21-ord
+ * does not know the cat, because then the seed did not produce one.
+ */
+async function seededCatNumber(catId: string): Promise<number> {
+  const res = await fetch(`${regtestServiceUrls().ord}/inscription/${catId}`, { headers: { accept: 'application/json' } });
+  if (!res.ok) throw new Error(`cat21-ord has no cat ${catId}: HTTP ${res.status}`);
+  const body = (await res.json()) as { number?: unknown };
+  if (typeof body.number !== 'number') throw new Error(`cat21-ord answered ${catId} without a number`);
+  return body.number;
+}
 const MINT_PATH = '/dashboard/mint';
 
 const SDK_E2E_DIR = path.resolve(__dirname, '../../node_modules/ordpool-sdk/e2e');
@@ -201,10 +214,19 @@ async function runAssetNoticeCell(asset: DirtyCoinAsset, dirtySats: number): Pro
   // seed (asserted above), so its assets are the seed's. dirty.assetId is the
   // seed's OWN value (inscription id / cat id / rune name / sat number), held here
   // and asserted against the rendered text — never an id read back from the page.
+  // A cat is named by its number ("Cat #N", linked to /cat/N); N comes from the
+  // regtest cat21-ord for the seeded cat id, not from the page.
+  const expectedName = asset === 'cat' ? `Cat #${await seededCatNumber(dirty.assetId)}` : dirty.assetId;
   await expect(
     notice,
-    `asset-notice for ${asset} did not name the seeded asset ${dirty.assetId}`,
-  ).toContainText(dirty.assetId);
+    `asset-notice for ${asset} did not name the seeded asset ${expectedName} (${dirty.assetId})`,
+  ).toContainText(expectedName);
+  if (asset === 'cat') {
+    await expect(
+      notice.getByTestId('mint-asset-notice-cat'),
+      `asset-notice for cat: "${expectedName}" must link to its own page`,
+    ).toHaveAttribute('href', `/cat/${expectedName.slice('Cat #'.length)}`);
+  }
 
   // Proceed is allowed: the CTA is ENABLED (this is the separate-address branch).
   const mintBtn = page.getByTestId('mint-btn');

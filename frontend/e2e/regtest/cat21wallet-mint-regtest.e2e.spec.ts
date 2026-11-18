@@ -47,6 +47,7 @@ import {
 } from 'ordpool-sdk/e2e';
 
 import { catOutputFixture, cleanOutputFixture, Network, recommendedFeesFixture } from 'ordpool-sdk/core';
+import { MOCKED_CAT_ID, routeMockedCatInscription } from './lib/mocked-cat-inscription';
 import { buildCat21SessionMessage } from 'ordpool-sdk/cat21-session';
 import { hex } from '@scure/base';
 import { signTestBip322Message, testTaprootAddress } from 'ordpool-sdk/testing';
@@ -78,7 +79,7 @@ const CLEAN_OUTPUT_BODY = { ...cleanOutputFixture().ord, ...cleanOutputFixture()
 
 // The same merge for a coin carrying a CAT-21 cat (cat21-ord reports the cat,
 // the full ord reports nothing), so the scanner classifies it as an asset coin.
-const CAT_OUTPUT_BODY = { ...catOutputFixture().ord, ...catOutputFixture().cat21Ord };
+const CAT_OUTPUT_BODY = { ...catOutputFixture(MOCKED_CAT_ID).ord, ...catOutputFixture(MOCKED_CAT_ID).cat21Ord };
 
 /**
  * E2E (regtest mint) — cat21.space /dashboard/mint via CAT-21 wallet.
@@ -500,6 +501,8 @@ test('asset scanner: warned cat-bearing UTXO can be burned via "Use anyway" on C
   // NaN vout, wrong txid length). Regex-parse strictly; push any URL
   // that doesn't match the shape into `badOutputCalls` and assert
   // it's empty at the end of the test.
+  // The cat's number lookup for the mocked cat (see routeMockedCatInscription).
+  await routeMockedCatInscription(page);
   const badOutputCalls: string[] = [];
   await page.route('**/output/*', async (route) => {
     const url = route.request().url();
