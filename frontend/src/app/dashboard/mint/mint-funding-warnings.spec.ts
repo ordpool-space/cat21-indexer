@@ -485,3 +485,49 @@ describe('Mint: cats on a funding coin are named by number', () => {
     expect(pick.href).toMatch(/^https:\/\/cat21\.space\/sat\/\d+$/);
   });
 });
+
+/*
+ * A retry scan must reach the orchestrator. The picker's "Retry scan" asks the
+ * shared scanner; without a re-read afterwards the recommendation keeps the
+ * pinned coin as 'failed' and mint() spends it even though the retry just
+ * found an inscription on it. With the re-read the SDK compares the pin's
+ * shown content ('failed') with the new scan ('assets') and drops the pin as
+ * `contents-changed`: the notice names it, and a mint click is refused with a
+ * confirm-again message instead of spending it.
+ */
+describe('Mint: a retry scan on a pinned coin reaches the recommendation', () => {
+  it('a pinned coin whose retry finds an inscription is dropped as contents-changed, and the mint click is refused', async () => {
+    const INSCRIPTION = `${'d'.repeat(64)}i0`;
+    const clean = fundingCoin(100_000, 0x90);
+    const flaky = fundingCoin(60_000, 0x91);
+    const m = await mount({ coins: [clean, flaky] });
+    io!.setOutput(outpointKey(clean), cleanOutputFixture());
+    io!.setOutput(outpointKey(flaky), notIndexedOutputFixture());
+    await m.connect(testWallet(), 'auto');
+    const row = () => m.q(`utxo-row-${flaky.txid}-${flaky.vout}`);
+    await m.until(() => row()?.getAttribute('data-bucket') === 'failed', 'flaky coin shows scan failed');
+
+    // The person pins the coin whose scan failed.
+    (m.el.querySelector(`button[data-testid="utxo-pick-${flaky.txid}"]`) as HTMLButtonElement).click();
+    await m.until(() => m.fixture.componentInstance.resolvedFundingUtxo()?.txid === flaky.txid, 'flaky coin pinned');
+
+    // ord catches up: the coin carries an inscription. The picker's Retry scan.
+    io!.setOutput(outpointKey(flaky), inscribedOutputFixture(INSCRIPTION));
+    (m.q(`utxo-scan-${flaky.txid}`) as HTMLButtonElement).click();
+    await m.until(() => m.fixture.componentInstance.droppedSelection()?.reason === 'contents-changed', 'pin dropped as contents-changed');
+
+    expect(text(m.q('mint-dropped-selection'))).toContain('now carries assets that were not shown when you picked it');
+    expect(m.fixture.componentInstance.resolvedFundingUtxo()?.txid).toBe(clean.txid);
+
+    // The click is refused, not silently moved to another coin: the SDK asks
+    // the person to confirm a coin again, naming the dropped one. Nothing is
+    // signed or broadcast.
+    provider = installFakeCat21Provider();
+    await m.fixture.componentInstance.mint();
+    expect(m.fixture.componentInstance.fundingReconfirm()).toBe(
+      `The selected funding UTXO ${outpointKey(flaky)} now carries assets that were not shown when it was selected. Confirm a funding UTXO again.`,
+    );
+    expect(provider.requests).toEqual([]);
+    expect(io!.broadcasts).toEqual([]);
+  });
+});

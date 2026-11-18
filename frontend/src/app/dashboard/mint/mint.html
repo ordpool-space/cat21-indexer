@@ -248,6 +248,7 @@
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
           [minScanValueSat]="fundingRequirementSats()"
+          [rescan]="rescanCoin"
           (selectionChange)="selectUtxoOutput($event)" />
       </details>
     }

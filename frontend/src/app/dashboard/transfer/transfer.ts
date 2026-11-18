@@ -31,6 +31,7 @@ import { DroppedSelectionNotice } from '../../shared/dropped-selection-notice/dr
 import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-list';
 import { PsbtExportBridgeService } from '../../shared/psbt-export-bridge/psbt-export-bridge.service';
 import { UtxoPicker } from '../../shared/utxo-picker/utxo-picker';
+import { rescanFundingCoin } from '../../shared/rescan-funding-coin';
 import { WalletConnect } from '../../shared/wallet-connect/wallet-connect';
 import { CatUtxoLookupService, MyCatHolding } from '../../shared/cat-utxo-lookup.service';
 import { rxResourceFixed } from '../../shared/rx-resource-fixed';
@@ -73,6 +74,11 @@ export class Transfer {
       // recommendation's any-size force-scan lands in the states$ the picker renders.
       cat21OrchestratorPorts(this.cat21, this.config, this.network, 'derive', this.scanner),
     );
+  /** Scan / retry one funding coin and re-read through the orchestrator (`rescanFundingCoin`). */
+  readonly rescanCoin = (outpoint: string): void => {
+    void rescanFundingCoin(this.scanner, this.orch, outpoint);
+  };
+
   private snap = signal<TransferSnapshot>(this.orch.getSnapshot());
 
   readonly txLinkBase = 'https://ordpool.space/tx/';

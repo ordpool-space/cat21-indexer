@@ -30,6 +30,7 @@ import {
 
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 import { catAssetLinks } from '../../shared/cat-asset-links';
+import { rescanFundingCoin } from '../../shared/rescan-funding-coin';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { resolvedNoticeAssets } from '../../shared/resolved-notice-assets';
@@ -466,22 +467,29 @@ export class Mint {
     this.orch.setSelectedUtxo(utxo);
   }
 
+  /** Scan / retry one coin and re-read through the orchestrator (`rescanFundingCoin`). */
+  readonly rescanCoin = (outpoint: string): void => {
+    void rescanFundingCoin(this.scanner, this.orch, outpoint);
+  };
+
   scanRow(row: ViableUtxoRow): void {
-    this.scanner.scan(`${row.utxo.txid}:${row.utxo.vout}`).subscribe();
+    this.rescanCoin(outpointKey(row.utxo));
   }
 
   /**
    * "Retry scan" on the `unknown-content` warning. The recommendation comes from
    * the orchestrator's own scan port, so the retry re-reads the wallet's coins
    * through the orchestrator (a failed scan is never cached, so the covering
-   * coins are scanned again), and re-scans the recommended coin's row badge.
+   * coins are scanned again), and re-scans the recommended coin's row badge
+   * first when there is one, so the re-read sees that answer.
    */
   retryFundingScan(): void {
     const r = this.fundingRecommendation()?.recommended;
     if (r) {
-      this.scanner.scan(outpointKey(r)).subscribe();
+      this.rescanCoin(outpointKey(r));
+    } else {
+      void this.orch.refreshUtxos();
     }
-    void this.orch.refreshUtxos();
   }
 
   async mint(): Promise<void> {

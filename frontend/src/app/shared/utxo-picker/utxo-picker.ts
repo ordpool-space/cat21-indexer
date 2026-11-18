@@ -130,6 +130,15 @@ export class UtxoPicker {
    */
   readonly minScanValueSat = input<number | null>(null);
 
+  /**
+   * What a row's "Scan" / "Retry scan" does with the outpoint. Required, and
+   * the page passes `rescanFundingCoin` bound to its own orchestrator: a scan
+   * that only updates the badge leaves the orchestrator's recommendation on
+   * the old answer, so a pinned coin whose retry finds an asset would still be
+   * spent. Making it required means a surface cannot forget the re-read.
+   */
+  readonly rescan = input.required<(outpoint: string) => void>();
+
   /** Above this threshold, autoScan does nothing — picker shows "Scan" affordance. */
   readonly autoScanThreshold = AUTO_SCAN_MAX_VALUE_SAT;
 
@@ -228,7 +237,7 @@ export class UtxoPicker {
   }
 
   onScanRow(row: UtxoPickerRow): void {
-    this.scanner.scan(`${row.utxo.txid}:${row.utxo.vout}`).subscribe();
+    this.rescan()(outpointKey(row.utxo));
   }
 
   runeNames(content: UtxoContent): string[] {

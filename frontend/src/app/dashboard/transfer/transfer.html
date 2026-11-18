@@ -205,6 +205,7 @@
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
           [minScanValueSat]="fundingRequirementSats()"
+          [rescan]="rescanCoin"
           (selectionChange)="onFundingUtxoSelectionChange($event)"
           data-testid="transfer-funding-picker" />
       </details>

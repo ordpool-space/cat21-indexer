@@ -339,6 +339,7 @@
           [feeByOutpoint]="feeByOutpoint()"
           [recommendedOutpoint]="recommendedOutpoint()"
           [minScanValueSat]="fundingRequirementSats()"
+          [rescan]="rescanCoin"
           (selectionChange)="onFundingUtxoSelectionChange($event)"
           data-testid="make-offer-funding-picker" />
       </details>

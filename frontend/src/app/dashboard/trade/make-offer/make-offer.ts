@@ -40,6 +40,7 @@ import { FeesPicker } from '../../../shared/fees-picker/fees-picker';
 import { OrdApiService } from '../../../shared/ord-api.service';
 import { SingleAddressNote } from '../../../shared/single-address-note/single-address-note';
 import { UtxoPicker } from '../../../shared/utxo-picker/utxo-picker';
+import { rescanFundingCoin } from '../../../shared/rescan-funding-coin';
 import { WalletCapabilityNotice } from '../../../shared/wallet-capability-notice/wallet-capability-notice';
 import { WalletConnect } from '../../../shared/wallet-connect/wallet-connect';
 
@@ -88,6 +89,13 @@ export class MakeOffer {
         cat21OrchestratorPorts(inject(Cat21Service), cfg, inject(bitcoinNetwork), 'derive', scanner),
       );
     })();
+  private scanner = inject(UtxoContentScanner);
+
+  /** Scan / retry one funding coin and re-read through the orchestrator (`rescanFundingCoin`). */
+  readonly rescanCoin = (outpoint: string): void => {
+    void rescanFundingCoin(this.scanner, this.orch, outpoint);
+  };
+
   private snap = signal<CreateOfferSnapshot>(this.orch.getSnapshot());
 
   // ---------- Deep-link prefill (via router withComponentInputBinding) ----------

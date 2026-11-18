@@ -45,6 +45,9 @@ describe('UtxoPicker (shared funding-coin picker)', () => {
     fixture = TestBed.createComponent(UtxoPicker);
     component = fixture.componentInstance;
     fixture.componentRef.setInput('utxos', []);
+    // The page's rescan; this spec only renders rows, the re-read is pinned in
+    // mint-funding-warnings.spec.ts.
+    fixture.componentRef.setInput('rescan', () => undefined);
     fixture.detectChanges();
   });
 
