@@ -180,22 +180,18 @@ test('funding-safety guard refuses an inscribed coin as a mint fee (real ord, no
   await expect(seededRow).toBeVisible();
   await shot(page, '01-picker');
 
-  // ─── 5. Scan the coin (it is above AUTO_SCAN_MAX_VALUE_SAT = 50k) ──
-  // seedInscribedCoin sizes the coin at 2M sat to be a genuine funding
-  // candidate, which is above the auto-scan threshold — so the mint shows it
-  // 'unscanned' with a manual Scan (large coins are not auto-scanned). Clicking
-  // Scan runs the REAL scan against stock ord; that is the realistic path for a
-  // chunky funding coin, and it is what flips the row to 'assets'.
-  // The bucket state lives in the [data-bucket] attribute (identity stays in the
-  // test-id), so it is directly assertable and stable across the transition.
-  await expect(seededRow).toHaveAttribute('data-bucket', 'unscanned');
-  await seededRow.getByRole('button', { name: 'Scan', exact: true }).click();
+  // ─── 5. The coin is a covering candidate above AUTO_SCAN_MAX_VALUE_SAT = 50k ──
+  // seedInscribedCoin sizes the coin at 2M sat to be a genuine funding candidate.
+  // The recommendation force-scans EVERY covering coin for content (any size, so
+  // the asset-to-miner guard can never auto-spend an unscanned coin), and the
+  // picker reads that one shared scan: this chunky asset coin lands in 'assets'
+  // from a live round-trip to the REAL stock ord, with no manual Scan step. The
+  // bucket state lives in the [data-bucket] attribute (identity stays in the
+  // test-id), so it is directly assertable.
+  await expect(seededRow).toHaveAttribute('data-bucket', 'assets');
 
   // ─── 6. Supporting checks (fire on the rare sat too — NOT the proof) ─
-  // After the scan the row is bucketed 'assets' and offers "Use anyway", not
-  // auto-selected. The scan is a live HTTP round-trip to ord,
-  // passing through a transient 'scanning' bucket first.
-  await expect(seededRow).toHaveAttribute('data-bucket', 'assets');
+  // The row offers "Use anyway", not auto-selected.
   const overrideBtn = seededRow.locator('.utxo-pick-override');
   await expect(overrideBtn).toBeVisible();
 

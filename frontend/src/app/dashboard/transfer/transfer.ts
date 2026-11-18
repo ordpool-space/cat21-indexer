@@ -12,6 +12,7 @@ import {
   TransferSnapshot,
   TxnOutput,
   UtxoAssetDetail,
+  UtxoContentScanner,
   WalletCapability,
   WalletService,
   expertRequiredCause,
@@ -23,6 +24,7 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
+import { resolvedNoticeAssets } from '../../shared/resolved-notice-assets';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { DroppedSelectionNotice } from '../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-list';
@@ -48,6 +50,7 @@ export class Transfer {
   private cat21 = inject(Cat21Service);
   private config = inject(cat21Config);
   private network = inject(bitcoinNetwork);
+  private scanner = inject(UtxoContentScanner);
   private destroyRef = inject(DestroyRef);
 
   /**
@@ -65,7 +68,9 @@ export class Transfer {
       // one-address wallet WARNs and blocks (expert-required); a coin whose
       // assets are unnamed or whose content is unknown blocks on every wallet.
       // The orchestrator resolves the topology from the wallet context it holds.
-      cat21OrchestratorPorts(this.cat21, this.config, this.network, 'derive'),
+      // Share the injected scanner (the DI singleton the picker reads) so the
+      // recommendation's any-size force-scan lands in the states$ the picker renders.
+      cat21OrchestratorPorts(this.cat21, this.config, this.network, 'derive', this.scanner),
     );
   private snap = signal<TransferSnapshot>(this.orch.getSnapshot());
 
@@ -191,10 +196,9 @@ export class Transfer {
    * `asset-notice`, where the SDK guarantees it names at least one asset
    * (`namesAssets`).
    */
-  readonly noticeAssets = computed<UtxoAssetDetail | null>(() => {
-    const rec = this.fundingRecommendation();
-    return rec.status === 'asset-notice' ? (rec.recommended?.assets ?? null) : null;
-  });
+  readonly noticeAssets = computed<UtxoAssetDetail | null>(() =>
+    resolvedNoticeAssets(this.fundingRecommendation(), this.resolvedFundingUtxo()),
+  );
 
   /**
    * Per-coin fee for the picker's fee column, keyed by `outpointKey`, from the

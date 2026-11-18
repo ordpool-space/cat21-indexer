@@ -13,6 +13,7 @@ import {
   CreateOfferSnapshot,
   ExpertRequiredCause,
   UtxoAssetDetail,
+  UtxoContentScanner,
   WalletCapability,
   WalletService,
   capabilityOf,
@@ -27,6 +28,7 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../../shared/cat21-orchestrator-ports';
+import { resolvedNoticeAssets } from '../../../shared/resolved-notice-assets';
 import { parseCatOutpointFromParams } from '../../../shared/cat-outpoint-params';
 import { DroppedSelectionNotice } from '../../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../../shared/funding-asset-list/funding-asset-list';
@@ -73,13 +75,16 @@ export class MakeOffer {
   private orch = inject(Cat21CreateOfferOrchestrator, { optional: true })
     ?? ((): Cat21CreateOfferOrchestrator => {
       const cfg = inject(cat21Config);
+      const scanner = inject(UtxoContentScanner);
       return new Cat21CreateOfferOrchestrator(
         // `'derive'` opts create-offer into the asset-to-miner safeguard, same as
         // mint + transfer: when only a coin with NAMED assets covers, a
         // separate-address wallet NOTICEs and proceeds (asset-notice) and a
         // one-address wallet WARNs and blocks (expert-required); a coin whose
         // assets are unnamed or whose content is unknown blocks on every wallet.
-        cat21OrchestratorPorts(inject(Cat21Service), cfg, inject(bitcoinNetwork), 'derive'),
+        // Share the injected scanner (the DI singleton the picker reads) so the
+        // recommendation's any-size force-scan lands in the states$ the picker renders.
+        cat21OrchestratorPorts(inject(Cat21Service), cfg, inject(bitcoinNetwork), 'derive', scanner),
       );
     })();
   private snap = signal<CreateOfferSnapshot>(this.orch.getSnapshot());
@@ -242,10 +247,9 @@ export class MakeOffer {
    * coin the SDK picked). Null unless `asset-notice`, where the SDK guarantees
    * it names at least one asset (`namesAssets`).
    */
-  readonly buyerNoticeAssets = computed<UtxoAssetDetail | null>(() => {
-    const rec = this.buyerFundingRecommendation();
-    return rec.status === 'asset-notice' ? (rec.recommended?.assets ?? null) : null;
-  });
+  readonly buyerNoticeAssets = computed<UtxoAssetDetail | null>(() =>
+    resolvedNoticeAssets(this.buyerFundingRecommendation(), this.resolvedFundingUtxo()),
+  );
 
   /** Per-coin fee for the picker's fee column, keyed by `outpointKey`, from the
    *  snapshot's `candidateFees`. Present on every status where a picker renders. */

@@ -264,6 +264,35 @@ describe('Mint: the asset notice (separate-address wallet, named assets) stays a
     const row = m.q(`utxo-row-${coin.txid}-${coin.vout}`);
     expect(row?.querySelector('[data-testid="utxo-recommended"]')).not.toBeNull();
   });
+
+  /* jscpd:ignore-start -- the per-consumer B1 seam tests (mint/transfer/make-offer)
+     are intentionally the same shape; each proves its OWN page names the picked
+     coin, so they are not a DRY violation to factor out. */
+  // B1: when no clean coin covers (status asset-notice), picking a DIFFERENT asset
+  // coin must make the notice name the coin the mint WILL spend (the resolved
+  // pick), not the recommended one. Reverting `noticeAssets` to `recommended.assets`
+  // turns this red.
+  it('after picking a different asset coin, the notice names the PICKED coin, not the recommended one', async () => {
+    const INSCRIPTION_A = `${'a'.repeat(64)}i0`; // on the recommended coin
+    const INSCRIPTION_B = `${'b'.repeat(64)}i0`; // on the picked coin
+    const recommended = fundingCoin(30_000, 0x70);
+    const picked = fundingCoin(60_000, 0x71);
+    const m = await mount({ coins: [recommended, picked] });
+    io!.setOutput(outpointKey(recommended), inscribedOutputFixture(INSCRIPTION_A));
+    io!.setOutput(outpointKey(picked), inscribedOutputFixture(INSCRIPTION_B));
+    await m.connect(testWallet(), 'asset-notice');
+    await m.until(() => m.q('mint-asset-notice') !== null, 'notice rendered');
+    expect(text(m.q('mint-asset-notice-inscription'))).toBe(INSCRIPTION_A);
+
+    (m.el.querySelector(`button[data-testid="utxo-pick-override-${picked.txid}"]`) as HTMLButtonElement).click();
+    await m.until(
+      () => m.fixture.componentInstance.resolvedFundingUtxo()?.txid === picked.txid
+        && m.fixture.componentInstance.resolvedFundingStatus() !== 'scanning',
+      'picked coin resolved',
+    );
+    expect(text(m.q('mint-asset-notice-inscription'))).toBe(INSCRIPTION_B);
+  });
+  /* jscpd:ignore-end */
 });
 
 describe('Mint: a blocked mint renders the facts the FundingBlockedError carries', () => {

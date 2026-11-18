@@ -260,6 +260,31 @@ describe('MakeOffer: the asset notice (separate-address wallet, named assets) st
     expect(t.q('make-offer-funding-expert-required')).toBeNull();
   });
 
+  /* jscpd:ignore-start -- per-consumer B1 seam test, same shape as mint/transfer
+     on purpose; each proves its own page names the picked coin. */
+  // B1: after an explicit pick, the notice names the coin the offer WILL spend.
+  it('after picking a different asset coin, the notice names the PICKED coin', async () => {
+    const INSCRIPTION_A = `${'a'.repeat(64)}i0`;
+    const INSCRIPTION_B = `${'b'.repeat(64)}i0`;
+    const recommended = fundingCoin(60_000, 0x8a);
+    const picked = fundingCoin(120_000, 0x8b);
+    const t = await mount({ coins: [recommended, picked] });
+    io!.setOutput(outpointKey(recommended), inscribedOutputFixture(INSCRIPTION_A));
+    io!.setOutput(outpointKey(picked), inscribedOutputFixture(INSCRIPTION_B));
+    await t.connect(testWallet(), 'asset-notice');
+    await t.until(() => t.q('make-offer-asset-notice') !== null, 'notice rendered');
+    expect(text(t.q('make-offer-asset-notice-inscription'))).toBe(INSCRIPTION_A);
+
+    (t.el.querySelector(`button[data-testid="utxo-pick-override-${picked.txid}"]`) as HTMLButtonElement).click();
+    await t.until(
+      () => t.component.resolvedFundingUtxo()?.txid === picked.txid
+        && t.component.resolvedFundingStatus() !== 'scanning',
+      'picked coin resolved',
+    );
+    expect(text(t.q('make-offer-asset-notice-inscription'))).toBe(INSCRIPTION_B);
+  });
+  /* jscpd:ignore-end */
+
   it('keeps the offer CTA enabled and marks the coin as recommended', async () => {
     const coin = fundingCoin(60_000, 0x89);
     const t = await mount({ coins: [coin] });

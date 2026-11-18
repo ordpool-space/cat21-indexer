@@ -31,6 +31,7 @@ import {
 import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
+import { resolvedNoticeAssets } from '../../shared/resolved-notice-assets';
 import { DroppedSelectionNotice } from '../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-list';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
@@ -85,7 +86,9 @@ export class Mint {
       // are unnamed or whose content is unknown blocks on every wallet. The
       // orchestrator resolves the topology from the wallet context it holds
       // (setWallet), so this page never computes it.
-      cat21OrchestratorPorts(inject(Cat21Service), this.config, inject(bitcoinNetwork), 'derive'),
+      // Pass the injected scanner (the DI singleton the picker + summary read) so
+      // the recommendation's any-size force-scan lands in the states$ they render.
+      cat21OrchestratorPorts(inject(Cat21Service), this.config, inject(bitcoinNetwork), 'derive', this.scanner),
     );
 
   /** Reactive mirror of the orchestrator's snapshot; bound once in the constructor. */
@@ -235,16 +238,12 @@ export class Mint {
     };
   });
 
-  /**
-   * The asset detail the notice must name, taken from the RECOMMENDATION itself
-   * (the coin the SDK picked), never from a second scan of the coin. Null unless
-   * the status is `asset-notice`, where the SDK guarantees it names at least one
-   * asset (`namesAssets`).
-   */
-  readonly noticeAssets = computed<UtxoAssetDetail | null>(() => {
-    const rec = this.fundingRecommendation();
-    return rec?.status === 'asset-notice' ? (rec.recommended?.assets ?? null) : null;
-  });
+  /** The asset detail the notice names: the assets of the coin the MINT WILL
+   *  spend, via the shared `resolvedNoticeAssets` (names the resolved pick, not
+   *  the recommended coin, after an explicit override). */
+  readonly noticeAssets = computed<UtxoAssetDetail | null>(() =>
+    resolvedNoticeAssets(this.fundingRecommendation(), this.resolvedFundingUtxo()),
+  );
 
   /**
    * Every viable (sufficient) UTXO annotated with scan state + bucket, sorted
