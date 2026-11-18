@@ -249,6 +249,32 @@ describe('CacheService', () => {
 
   // --- Stats ---
 
+  // /api/health never queries the DB, so right after a restart the totals are
+  // not known yet. A 0 there would read as an empty index on a full one.
+  it('reports the totals and Proof of Cat Work as null on a cold cache, not 0', () => {
+    const stats = cache.getStats();
+    expect(stats.totalCatCount).toBeNull();
+    expect(stats.lastSyncedCatNumber).toBeNull();
+    expect(stats.proofOfCatWork).toBeNull();
+  });
+
+  it('reports the DB totals once primed, and an empty index as a real 0', () => {
+    cache.setTotals(0, -1);
+    cache.setProofOfCatWork(0);
+    const stats = cache.getStats();
+    expect(stats.totalCatCount).toBe(0);
+    expect(stats.lastSyncedCatNumber).toBe(-1);
+    expect(stats.proofOfCatWork).toBe(0);
+  });
+
+  it('reports the totals once the sync has supplied them', () => {
+    cache.onNewCatsSynced(41);
+    const stats = cache.getStats();
+    expect(stats.totalCatCount).toBe(42);
+    expect(stats.lastSyncedCatNumber).toBe(41);
+    expect(stats.proofOfCatWork).toBeNull();
+  });
+
   it('should report cache stats', () => {
     cache.setCachedCat(makeCatDto(1));
     cache.setCachedCat(makeCatDto(2));

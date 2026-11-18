@@ -370,14 +370,14 @@ export class CacheStatsDto {
   @ApiProperty({ description: 'Number of txHash index entries (secondary lookup map)', example: 5000 })
   txHashIndex!: number;
 
-  @ApiProperty({ description: 'Cached total cat count (maintained via auto-bump + sync notifications)', example: 63732 })
-  totalCatCount!: number;
+  @ApiProperty({ description: 'Cached total cat count (maintained via auto-bump + sync notifications). Null until the DB or the sync has supplied it (right after a restart, since this endpoint never queries the DB).', example: 63732, type: Number, nullable: true })
+  totalCatCount!: number | null;
 
-  @ApiProperty({ description: 'Cached last synced cat number. Defines the newest-pinned range: [n-2399 .. n].', example: 63731 })
-  lastSyncedCatNumber!: number;
+  @ApiProperty({ description: 'Cached last synced cat number. Defines the newest-pinned range: [n-2399 .. n]. Null until the DB or the sync has supplied it.', example: 63731, type: Number, nullable: true })
+  lastSyncedCatNumber!: number | null;
 
-  @ApiProperty({ description: 'Cached Proof of Cat Work (sum of all mint fees in sats). Refreshed from DB after each sync cycle.', example: 5234876543 })
-  proofOfCatWork!: number;
+  @ApiProperty({ description: 'Cached Proof of Cat Work (sum of all mint fees in sats). Refreshed from DB after each sync cycle. Null until the DB has supplied it.', example: 5234876543, type: Number, nullable: true })
+  proofOfCatWork!: number | null;
 
   @ApiProperty({ description: 'Detected container memory limit in MB (cgroup v2/v1, Node 20+ constrainedMemory, or fallback)', example: 512 })
   memoryLimitMB!: number;

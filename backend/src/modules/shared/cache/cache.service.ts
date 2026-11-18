@@ -70,10 +70,15 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   // Totals (maintained via auto-bump and sync notifications).
   private totalCatCount = 0;
   private lastSyncedCatNumber = -1;
+  // Whether the totals came from the DB (setTotals) or the sync
+  // (onNewCatsSynced). Until then the 0 / -1 above are placeholders, and
+  // getStats reports null for them instead of a number nobody measured.
+  private totalsKnown = false;
 
   // Proof of Cat Work: sum of all mint transaction fees (sats).
   // Refreshed from DB on cold start and after each sync cycle.
   private proofOfCatWork = 0;
+  private proofOfCatWorkKnown = false;
 
   private memoryCheckTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -182,6 +187,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
   setTotals(total: number, lastSynced: number): void {
     this.totalCatCount = total;
     this.lastSyncedCatNumber = lastSynced;
+    this.totalsKnown = true;
   }
 
   // --- Proof of Cat Work ---
@@ -192,6 +198,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
 
   setProofOfCatWork(sumFromDb: number): void {
     this.proofOfCatWork = sumFromDb;
+    this.proofOfCatWorkKnown = true;
   }
 
   // --- Sync notification ---
@@ -205,6 +212,7 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       this.lastSyncedCatNumber = newMax;
       this.totalCatCount = newMax + 1;
     }
+    this.totalsKnown = true;
   }
 
   // --- Memory monitoring ---
@@ -246,15 +254,21 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
 
   // --- Stats (for logging/debugging) ---
 
+  /**
+   * Cache figures for `/api/health` and `/api/extendedHealth`. The totals and
+   * Proof of Cat Work are `null` until the DB or the sync has supplied them:
+   * `/api/health` never queries the DB, so right after a restart they are not
+   * known yet, and a 0 there would read as an empty index.
+   */
   getStats() {
     const mem = this.getMemoryInfo();
     return {
       cats: this.catsByNumber.size,
       catsMax: this.catsByNumber.getMaxSize(),
       txHashIndex: this.txHashToNumber.size,
-      totalCatCount: this.totalCatCount,
-      lastSyncedCatNumber: this.lastSyncedCatNumber,
-      proofOfCatWork: this.proofOfCatWork,
+      totalCatCount: this.totalsKnown ? this.totalCatCount : null,
+      lastSyncedCatNumber: this.totalsKnown ? this.lastSyncedCatNumber : null,
+      proofOfCatWork: this.proofOfCatWorkKnown ? this.proofOfCatWork : null,
       memoryLimitMB: Math.round(this.memoryLimit / 1024 / 1024),
       memoryTargetMB: Math.round(mem.targetMax / 1024 / 1024),
       memoryHeadroomMB: Math.round(mem.headroom / 1024 / 1024),
