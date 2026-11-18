@@ -103,6 +103,16 @@
             pick a specific source yourself.
           </p>
         }
+        @if (fundingReconfirm(); as reason) {
+          <!-- The pinned coin dropped; the SDK refused the click. The pin is
+               released and the summary + notice below now describe whatever coin
+               would be spent instead, which is what the next click confirms. -->
+          <div class="mint-alert mint-alert-warning" data-testid="mint-funding-reconfirm" role="alert">
+            {{ reason }} Nothing was sent and nothing was signed. What is listed
+            below is what would be spent now; press Mint again to confirm it, or
+            pick another coin.
+          </div>
+        }
         <div class="mint-summary norton-shadow">
           <div class="mint-summary-row">
             <span class="lbl">Source</span>

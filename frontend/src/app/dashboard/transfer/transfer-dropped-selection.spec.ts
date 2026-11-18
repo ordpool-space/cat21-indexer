@@ -259,4 +259,25 @@ describe('Transfer: a replaced pick is named (droppedSelection)', () => {
     await m.until(() => m.spends(SMALL), 'verdict at 3 sat/vB');
     expect(m.cta().disabled).toBe(false);
   });
+
+  // The SDK's guard refuses a transfer click while a dropped pin is still set,
+  // rather than silently spend the fallback. The page releases the pin and keeps
+  // the refusal readable. Mutation: drop `setSelectedFundingUtxo(null)` and the
+  // pin stays, so the release assertion goes red.
+  it('FSCE: clicking Transfer on a dropped pin is refused; the handler releases the pin and names the dropped coin', async () => {
+    const m = await mount([SMALL, LARGE]);
+    await m.connect(testWallet(), SMALL);
+    await m.pick(SMALL);
+    await m.typeRate(50); // SMALL no longer covers -> the pin is dropped
+    await m.until(() => m.spends(LARGE), 'resolves to the large coin');
+    expect(m.orch.getSnapshot().selectedFundingUtxo?.txid).toBe(SMALL.txid);
+
+    await m.component.onTransferClick(); // the SDK refuses (FSCE), nothing signed
+    expect(m.orch.getSnapshot().selectedFundingUtxo).toBeNull(); // pin released at once
+    expect(m.component.fundingReconfirm()).toContain(`${SMALL.txid}:0`);
+    expect(m.component.fundingReconfirm()).toContain('Confirm a funding UTXO again');
+
+    await m.until(() => m.q('transfer-funding-reconfirm') !== null, 'reconfirm banner shown');
+    await m.until(() => m.spends(LARGE), 'resolves to the large coin after release');
+  });
 });

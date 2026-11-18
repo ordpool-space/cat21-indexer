@@ -111,8 +111,13 @@ describe('BidsPruner.runPrune — seller-side (cat UTXO drift)', () => {
     expect(electrs.getOutpointStatus).toHaveBeenCalledTimes(1);
   });
 
-  it('drops on seller-side when the UTXO no longer holds cats (skips buyer-side check)', async () => {
+  it('drops on seller-side when the UTXO no longer holds cats, e.g. after a sale (skips buyer-side check)', async () => {
     const drizzle = drizzleWithRows([row()]);
+    // `null` is exactly what the SDK's `getCatsAtOutput` returns for cat21-ord's
+    // real 200 `{spent:true, indexed:false, sat_ranges:null}` answer on a spent
+    // output (the B9 contract): it no longer THROWS there, so the pruner reads it
+    // as seller-side stale and closes the bid. The real cat21-ord->SDK->null
+    // translation is proven on infra in `bids-pruner-foreign-settle.regtest.spec.ts`.
     const ord = { getCatsAtOutput: jest.fn().mockResolvedValue(null) };
     const electrs = createElectrsMock();
     const bidsSvc = { deleteByOutpointAndBuyer: jest.fn().mockResolvedValue(undefined) };

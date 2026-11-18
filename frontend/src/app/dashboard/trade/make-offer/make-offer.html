@@ -310,6 +310,18 @@
           <app-dropped-selection-notice [dropped]="dropped" [feeRate]="feeRate()" />
         </p>
       }
+      @if (fundingReconfirm(); as reason) {
+        <div class="alert alert-warning small" role="alert" data-testid="make-offer-funding-reconfirm">
+          {{ reason }} Nothing was sent and nothing was signed. What is listed
+          below is what would be spent now; press the button again to confirm
+          it, or pick another coin.
+        </div>
+      }
+      @if (fundingPreviewRetry(); as hint) {
+        <div class="alert alert-info small" role="status" data-testid="make-offer-funding-preview-retry">
+          {{ hint }}
+        </div>
+      }
       <details [open]="buyerFundingExpertRequired() || buyerAssetNotice() || !!droppedSelection()">
         <summary class="make-offer-section-heading" style="cursor: pointer;">
           Funding source <small class="text-muted">— we auto-pick the safest; expand to review or override</small>

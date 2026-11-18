@@ -25,6 +25,7 @@ import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { resolvedNoticeAssets } from '../../shared/resolved-notice-assets';
+import { handlePinnedFundingExecuteError } from '../../shared/funding-execute-errors';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
 import { DroppedSelectionNotice } from '../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-list';
@@ -120,6 +121,13 @@ export class Transfer {
   readonly errorMessage = computed(() => this.snap().errorMessage);
   readonly successTxId = computed(() => this.snap().successTxId);
   readonly feeRate = computed(() => this.snap().feeRate);
+
+  /** Sticky "the coin you picked is gone, confirm again" message on an FSCE
+   *  refusal; held here (not the snapshot) because the handler re-reads. */
+  readonly fundingReconfirm = signal<string | null>(null);
+  /** Transient "the preview is catching up, try again" hint: the pin is still
+   *  valid (execute ran before the simulation resolved the picked coin). */
+  readonly fundingPreviewRetry = signal<string | null>(null);
   readonly catUtxo = computed(() => this.snap().catUtxo);
   readonly recipientAddress = computed(() => this.snap().recipientAddress);
 
@@ -470,6 +478,8 @@ export class Transfer {
   }
 
   async onTransferClick(): Promise<void> {
+    this.fundingReconfirm.set(null);
+    this.fundingPreviewRetry.set(null);
     // Pass the export/paste bridge unconditionally: injected wallets ignore it,
     // a watch-only (xpub) wallet signs through it. The bridge is
     // Observable-based; the orchestrator wants a Promise, so bridge it. The
@@ -477,13 +487,19 @@ export class Transfer {
     // there is nothing to bind here.
     try {
       await this.orch.transfer((unsigned) => firstValueFrom(this.psbtBridge.promptForSignedPsbt(unsigned)));
-    } catch {
-      // A sign failure lands in the snapshot (state 'error', errorMessage),
-      // which the error line renders. A FundingBlockedError is thrown before
-      // the snapshot changes, and only while its fundingRecommendation is
-      // `expert-required`: the expert-required warning already renders that
-      // recommendation's cause and named assets, the same facts the error
-      // carries, and the CTA is disabled.
+    } catch (err) {
+      // The pinned coin dropped (release the pin, re-read, confirm again) or the
+      // preview is still catching up to a valid pin (keep it, retry). Both are
+      // caught before anything is signed.
+      if (handlePinnedFundingExecuteError(err, this.orch, this.fundingReconfirm, this.fundingPreviewRetry)) {
+        return;
+      }
+      // Otherwise a sign failure lands in the snapshot (state 'error',
+      // errorMessage), which the error line renders. A FundingBlockedError is
+      // thrown before the snapshot changes, and only while its
+      // fundingRecommendation is `expert-required`: the expert-required warning
+      // already renders that recommendation's cause and named assets, the same
+      // facts the error carries, and the CTA is disabled.
     }
   }
 
@@ -501,6 +517,8 @@ export class Transfer {
 
   /** UtxoPicker's selectionChange forwarded into the transfer orchestrator. */
   onFundingUtxoSelectionChange(utxo: TxnOutput): void {
+    this.fundingReconfirm.set(null);
+    this.fundingPreviewRetry.set(null);
     this.orch.setSelectedFundingUtxo(utxo);
   }
 }

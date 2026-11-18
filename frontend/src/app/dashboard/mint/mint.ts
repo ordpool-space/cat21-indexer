@@ -32,6 +32,7 @@ import { bitcoinNetwork, cat21Config } from '../../shared/sdk-tokens';
 
 import { cat21OrchestratorPorts } from '../../shared/cat21-orchestrator-ports';
 import { resolvedNoticeAssets } from '../../shared/resolved-notice-assets';
+import { handleFundingExecuteError } from '../../shared/funding-execute-errors';
 import { DroppedSelectionNotice } from '../../shared/dropped-selection-notice/dropped-selection-notice';
 import { FundingAssetList } from '../../shared/funding-asset-list/funding-asset-list';
 import { FeesPicker } from '../../shared/fees-picker/fees-picker';
@@ -380,6 +381,17 @@ export class Mint {
   readonly mintError = computed(() => this.state() === 'error' && this.mintAttempted() ? this.errorMessage() : null);
 
   private mintAttempted = signal(false);
+
+  /**
+   * A sticky "the coin you picked is gone, confirm again" message, set when the
+   * SDK throws a `FundingSelectionChangedError` on mint: the pinned coin left the
+   * wallet or stopped covering, so the SDK refuses the click rather than spend a
+   * coin the person never confirmed. Held HERE, not in the snapshot error,
+   * because the handler releases the pin and re-reads the coins, which clears the
+   * snapshot; the sticky message keeps the refusal readable while the panel moves
+   * to the coin that would be spent now. Nulled on a fresh pick or a new attempt.
+   */
+  readonly fundingReconfirm = signal<string | null>(null);
   private lastWalletAddress: string | null = null;
 
   // ---------- Lifecycle ----------
@@ -457,6 +469,7 @@ export class Mint {
    * rows, so this only ever receives a coin that can fund at the current rate).
    */
   selectUtxoOutput(utxo: TxnOutput): void {
+    this.fundingReconfirm.set(null);
     this.orch.setSelectedUtxo(utxo);
   }
 
@@ -480,6 +493,7 @@ export class Mint {
 
   async mint(): Promise<void> {
     this.mintAttempted.set(true);
+    this.fundingReconfirm.set(null);
     try {
       // Pass the export/paste bridge unconditionally: injected wallets ignore
       // it, a watch-only (xpub) wallet signs through it. The bridge is
@@ -487,10 +501,21 @@ export class Mint {
       // orchestrator signs+broadcasts internally and updates its snapshot
       // (state/errorMessage/successTxId), so there is nothing to bind here.
       await this.orch.mint((unsigned) => firstValueFrom(this.psbtBridge.promptForSignedPsbt(unsigned)));
-    } catch {
-      // A sign or broadcast failure lands in the snapshot (state 'error',
-      // errorMessage), which mintError() surfaces. A FundingBlockedError is
-      // thrown before the snapshot changes, and only while its
+    } catch (err) {
+      // The pinned coin is gone or stopped covering: the SDK refuses the click
+      // (nothing signed). Release the stale pin and re-read so the panel moves to
+      // the coin that would be spent now, keeping a sticky confirm-again message.
+      // Mint cannot reach the preview-updating error, so no retry handler here.
+      if (handleFundingExecuteError(err, {
+        releasePin: () => this.orch.setSelectedUtxo(null),
+        refresh: () => void this.orch.refreshUtxos(),
+        onReconfirm: (m) => this.fundingReconfirm.set(m),
+      })) {
+        return;
+      }
+      // Otherwise a sign or broadcast failure lands in the snapshot (state
+      // 'error', errorMessage), which mintError() surfaces. A FundingBlockedError
+      // is thrown before the snapshot changes, and only while its
       // fundingRecommendation is `expert-required`: the expert-required warning
       // already renders that recommendation's cause and named assets, the same
       // facts the error carries, and the CTA is disabled.
